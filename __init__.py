@@ -6,4 +6,3 @@ __version__ = '0.1.0'
 __email__ = 'bmcguire@nrao.edu'
 __status__ = 'Development'
 
-from .file_handling import test
