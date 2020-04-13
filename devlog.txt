@@ -54,3 +54,47 @@ General Notes:
 
 	- Getting things up and running.  Immediate goal is to get all the file_handling
 	  functions up and running.
+	  
+##########################################################################################
+										04/13/2020
+##########################################################################################
+
+Started the project.  
+
+Files Created:
+	
+	testcat.cat
+	
+	Notes:
+	
+		- Not a real catalog; modified to have a bunch of things in it that could trip up 
+		  the script
+	
+Classes Created:
+	
+	Notes:
+	
+Constants Created:
+	
+	Notes:
+	
+Functions Created:
+
+	file_handling._read_txt(filein)
+	file_handling._read_spcat(filein)
+	file_handling._read_spcat(filein)._fix_spcat
+	tests._test_molsim()
+	tests._val_molsim()
+	tests._ver_molsim()
+	tests._val_read_txt()
+	tests._ver_read_txt()
+	tests._val_read_spcat()
+	tests._ver_read_spcat()
+	
+Functions Modified:
+
+		
+
+General Notes:
+
+	- 
