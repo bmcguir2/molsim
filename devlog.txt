@@ -1,0 +1,56 @@
+##########################################################################################
+										04/06/2020
+##########################################################################################
+
+Started the project.  
+
+Files Created:
+
+	.gitignore
+	classes.py
+	constants.py
+	file_handling.py
+	ipython_quickstart.py
+	tests.py
+	tests/file_handling/freq_int.txt
+	working/
+	devlog.txt
+	
+	Notes:
+	
+		- working is for my scratch work while developing
+		- tests/file_handling/freq_int.txt is just the first few lines of a CO catalog for 
+		  validation and verification
+	
+Classes Created:
+
+	workspace
+	
+	Notes:
+	
+		- This will hold the active information in a 'live' session
+	
+Constants Created:
+
+	ccm
+	cm
+	ckm
+	h
+	k
+	kcm
+	
+	Notes:
+	
+		- These are all based on the scipy fundamental constants, except kcm, which I 
+		  didn't bother finding the conversion for and just typed in manually.
+	
+Functions Created:
+
+	file_handling._read_freq_int(filein)
+	tests._val_read_freq_int()
+	tests._ver_read_freq_int()
+
+General Notes:
+
+	- Getting things up and running.  Immediate goal is to get all the file_handling
+	  functions up and running.
