@@ -1,5 +1,6 @@
 import numpy as np
 from molsim.constants import ccm, cm, ckm, h, k, kcm
+from molsim.classes import workspace, catalog
 
 def _read_txt(filein):
 	'''Reads in any txt file and returns a line by line array'''
@@ -332,19 +333,48 @@ def _read_spcat(filein):
 					'gup'		:	gup,
 					'tag'		:	tag,
 					'qnformat'	:	qnformat,
-					'qn1'		:	qn1,
-					'qn2'		:	qn2,
-					'qn3'		:	qn3,
-					'qn4'		:	qn4,
-					'qn5'		:	qn5,
-					'qn6'		:	qn6,
-					'qn7'		:	qn7,
-					'qn8'		:	qn8,
-					'qn9'		:	qn9,
-					'qn10'		:	qn10,
-					'qn11'		:	qn11,
-					'qn12'		:	qn12,
+					'qn1up'		:	qn1,
+					'qn2up'		:	qn2,
+					'qn3up'		:	qn3,
+					'qn4up'		:	qn4,
+					'qn5up'		:	qn5,
+					'qn6up'		:	qn6,
+					'qn1low'	:	qn7,
+					'qn2low'	:	qn8,
+					'qn3low'	:	qn9,
+					'qn4low'	:	qn10,
+					'qn5low'	:	qn11,
+					'qn6low'	:	qn12,
 				}
 	
 	return split_cat
+
+def _load_catalog(filein,type='SPCAT',catdict=None):
+	'''
+	Reads in a catalog file of the specified type and returns a catalog object.  
+	Optionally accepts a catdict dictionary to preload the catalog object with 
+	additional information. Defaults to loading an spcat catalog.
+	
+	Anything in catdict will overwrite what's loaded in from the read catalog
+	function, so use cautiously.
+	'''
+
+	if type == 'SPCAT':
+		new_dict = _read_spcat(filein) #read in the catalog file and produce the
+									   #dictionary
+				
+	if type == 'freq_int':
+		freq_tmp,int_tmp = 	_read_freq_int(filein) #read in a frequency intensity 
+												   #delimited file
+		new_dict = {}
+		new_dict['frequency'] = freq_tmp
+		new_dict['man_int'] = int_tmp
+	
+	if catdict is not None:
+		for x in catdict:
+			new_dict[x] = catdict[x] #either add it to the new_dict or overwrite it			
 		
+	cat = catalog(catdict=new_dict) #make the catalog and return it
+	
+	return cat
+			
