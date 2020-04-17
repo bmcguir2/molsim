@@ -98,3 +98,43 @@ Functions Modified:
 General Notes:
 
 	- 
+	
+##########################################################################################
+										04/17/2020
+##########################################################################################
+
+Started the project.  
+
+Files Created:
+		
+	Notes:
+	
+	
+Classes Created:
+
+	catalog
+	
+	Notes:
+	
+Constants Created:
+
+	Modified kcm to be purely from scipy constants
+	
+	Notes:
+	
+Functions Created:
+
+	
+Functions Modified:
+
+	file_handling._read_spcat()
+	tests._ver_read_spact()
+	
+	Notes:
+	
+		- Modified _read_spcat so that energies come in in Kelvin not cm-1.  Updated verification script to incorporate this.
+		- Changed elower variable to elow.
+
+General Notes:
+
+	- 
