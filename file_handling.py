@@ -29,7 +29,10 @@ def _read_freq_int(filein):
 	return frequency,intensity		
 	
 def _read_spcat(filein):
-	'''Reads an SPCAT catalog and returns spliced out numpy arrays'''
+	'''
+	Reads an SPCAT catalog and returns spliced out numpy arrays.
+	Catalog energy units for elow are converted to K from cm-1.	
+	'''
 	
 	#read in the catalog
 	raw_arr = _read_txt(filein)
@@ -39,7 +42,7 @@ def _read_spcat(filein):
 	freq_err = []
 	logint = []
 	dof = []
-	elower = []
+	elow = []
 	gup = []
 	tag = []
 	qnformat = []
@@ -62,7 +65,7 @@ def _read_spcat(filein):
 		freq_err.append(x[13:21].strip())
 		logint.append(x[21:29].strip())
 		dof.append(x[29:31].strip())
-		elower.append(x[31:41].strip())
+		elow.append(x[31:41].strip())
 		gup.append(x[41:44].strip())
 		tag.append(x[44:51].strip())
 		qnformat.append(x[51:55].strip())
@@ -90,12 +93,16 @@ def _read_spcat(filein):
 	logint = logint.astype(np.float64)	
 	dof = np.array(dof)
 	dof = dof.astype(np.int)
-	elower = np.array(elower)
-	elower = elower.astype(np.float64)
+	elow = np.array(elow)
+	elow = elow.astype(np.float64)
 	tag = np.array(tag)
 	tag = tag.astype(np.int)
 	qnformat = np.array(qnformat)
-	qnformat = qnformat.astype(np.int)	
+	qnformat = qnformat.astype(np.int)
+	
+	#convert elow to Kelvin
+		
+	elow /= kcm
 	
 	#now we use a sub-function to fix the letters and +/- that show up in gup, and the qns, and returns floats	
 	def _fix_spcat(x):
@@ -321,7 +328,7 @@ def _read_spcat(filein):
 					'freq_err'	:	freq_err,
 					'logint'	:	logint,
 					'dof'		:	dof,
-					'elower'	:	elower,
+					'elow'		:	elow,
 					'gup'		:	gup,
 					'tag'		:	tag,
 					'qnformat'	:	qnformat,
