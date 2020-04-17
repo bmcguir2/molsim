@@ -124,6 +124,13 @@ Constants Created:
 	
 Functions Created:
 
+	_load_catalog
+	
+	Notes:
+	
+		- This is a higher level meta function to read a catalog file, then create a 
+		  catalog object.
+
 	
 Functions Modified:
 
