@@ -1,5 +1,5 @@
 import numpy as np
-import file_handling as fh
+from . import file_handling as fh
 from pkg_resources import resource_filename
 
 filepath = resource_filename(__name__,'tests/')

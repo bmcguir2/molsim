@@ -2,3 +2,4 @@ molsim.pdf
 molsim.drawio
 working/
 .DS_Store
+__pycache__
