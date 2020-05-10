@@ -368,9 +368,9 @@ def _load_catalog(filein,type='SPCAT',catdict=None):
 		new_dict = _read_spcat(filein) #read in the catalog file and produce the
 									   #dictionary
 		#prep a bunch of empty arrays
-		new_arrs = ['glow','eup','sijmu','sij','aij','measured','types']
-		for x in new_arrs:
-			new_dict[x] = np.empty_like(new_dict['frequency'])
+# 		new_arrs = ['glow','eup','sijmu','sij','aij','measured','types']
+# 		for x in new_arrs:
+# 			new_dict[x] = np.ones_like(new_dict['frequency'])
 				
 	if type == 'freq_int':
 		freq_tmp,int_tmp = 	_read_xy(filein) #read in a frequency intensity 
@@ -539,7 +539,11 @@ def load_mol(filein,type='SPCAT',catdict=None,id=None,name=None,formula=None,
 	for x in range(len(cat.frequency)):
 		line_qns_up_str = _make_qnstr(x,qnups)
 		line_qns_low_str = _make_qnstr(x,qnlows)
+		if cat.glow is None:
+			cat.glow = np.empty_like(cat.frequency)
 		cat.glow[x] = levels[np.where(level_ids == line_qns_low_str)[0][0]].g
+		if cat.eup is None:
+			cat.eup = np.empty_like(cat.frequency)
 		cat.eup[x] = levels[np.where(level_ids == line_qns_up_str)[0][0]].energy
 	
 	#now we have to load the transitions in	and make transition objects	
@@ -574,5 +578,8 @@ def load_mol(filein,type='SPCAT',catdict=None,id=None,name=None,formula=None,
 				vib_is_K = partition_dict['vib_is_K'] if 'vib_is_K' in partition_dict else None,
 				notes = partition_dict['notes'] if 'notes' in partition_dict else None,
 							)
+	
+	#set sijmu and aij						
+	mol.catalog._set_sijmu_aij(mol.qpart)						
 	
 	return	mol	
