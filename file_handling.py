@@ -343,12 +343,17 @@ def _read_spcat(filein):
 					'qn4up'		:	qn4,
 					'qn5up'		:	qn5,
 					'qn6up'		:	qn6,
+					'qn7up'		:	np.full(len(frequency),None),
+					'qn8up'		:	np.full(len(frequency),None),
 					'qn1low'	:	qn7,
 					'qn2low'	:	qn8,
 					'qn3low'	:	qn9,
 					'qn4low'	:	qn10,
 					'qn5low'	:	qn11,
 					'qn6low'	:	qn12,
+					'qn7low'	:	np.full(len(frequency),None),
+					'qn8low'	:	np.full(len(frequency),None),
+					'notes'		:	'Loaded from file {}' .format(filein)
 				}
 	
 	return split_cat
@@ -367,10 +372,6 @@ def _load_catalog(filein,type='SPCAT',catdict=None):
 	if type == 'SPCAT':
 		new_dict = _read_spcat(filein) #read in the catalog file and produce the
 									   #dictionary
-		#prep a bunch of empty arrays
-# 		new_arrs = ['glow','eup','sijmu','sij','aij','measured','types']
-# 		for x in new_arrs:
-# 			new_dict[x] = np.ones_like(new_dict['frequency'])
 				
 	if type == 'freq_int':
 		freq_tmp,int_tmp = 	_read_xy(filein) #read in a frequency intensity 
@@ -471,14 +472,21 @@ def load_mol(filein,type='SPCAT',catdict=None,id=None,name=None,formula=None,
 		qn_list_trimmed = [x for x in qnlist if np.all(x) != None]
 		tmp_list = [str(x[y]) for x in qn_list_trimmed]
 		return ''.join(tmp_list)
+		
+	def _make_qnstr_new(qn1,qn2,qn3,qn4,qn5,qn6,qn7,qn8):
+		qn_list = [qn1,qn2,qn3,qn4,qn5,qn6,qn7,qn8]
+		tmp_list = [str(x) for x in qn_list if x != None]
+		return ''.join(tmp_list)		
 	
 	#now we have to make a hash for every entries upper and lower state
 	qnlows = [cat.qn1low,cat.qn2low,cat.qn3low,cat.qn4low,cat.qn5low,cat.qn6low,
 				cat.qn7low,cat.qn8low]
 	qnups = [cat.qn1up,cat.qn2up,cat.qn3up,cat.qn4up,cat.qn5up,cat.qn6up,cat.qn7up,
 				cat.qn8up]
-	qn_list_low = [_make_qnstr(y,qnlows) for y in range(len(cat.frequency))]
-	qn_list_up = [_make_qnstr(y,qnups) for y in range(len(cat.frequency))]
+# 	qn_list_low = [_make_qnstr(y,qnlows) for y in range(len(cat.frequency))]
+# 	qn_list_up = [_make_qnstr(y,qnups) for y in range(len(cat.frequency))]
+	qn_list_low = [_make_qnstr_new(qn1,qn2,qn3,qn4,qn5,qn6,qn7,qn8) for qn1,qn2,qn3,qn4,qn5,qn6,qn7,qn8 in zip(cat.qn1low,cat.qn2low,cat.qn3low,cat.qn4low,cat.qn5low,cat.qn6low,cat.qn7low,cat.qn8low)]
+	qn_list_up = [_make_qnstr_new(qn1,qn2,qn3,qn4,qn5,qn6,qn7,qn8) for qn1,qn2,qn3,qn4,qn5,qn6,qn7,qn8 in zip(cat.qn1up,cat.qn2up,cat.qn3up,cat.qn4up,cat.qn5up,cat.qn6up,cat.qn7up,cat.qn8up)]
 	level_qns = qn_list_low + qn_list_up
 	level_qns = list(set(level_qns)) #get the unique ones
 	level_dict = dict.fromkeys(level_qns)			
@@ -573,7 +581,7 @@ def load_mol(filein,type='SPCAT',catdict=None,id=None,name=None,formula=None,
 				mol = partition_dict['mol'] if 'mol' in partition_dict else None,
 				gs = partition_dict['gs'] if 'gs' in partition_dict else None,
 				energies = partition_dict['energies'] if 'energies' in partition_dict else None,
-				sigma = partition_dict['sigma'] if 'sigma' in partition_dict else None,
+				sigma = partition_dict['sigma'] if 'sigma' in partition_dict else 1.,
 				vib_states = partition_dict['vib_states'] if 'vib_states' in partition_dict else None,
 				vib_is_K = partition_dict['vib_is_K'] if 'vib_is_K' in partition_dict else None,
 				notes = partition_dict['notes'] if 'notes' in partition_dict else None,
