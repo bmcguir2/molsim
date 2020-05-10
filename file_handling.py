@@ -1,7 +1,7 @@
 import numpy as np
 from numba import njit
 from molsim.constants import ccm, cm, ckm, h, k, kcm
-from molsim.classes import Workspace, Catalog, Transition, Level, Molecule
+from molsim.classes import Workspace, Catalog, Transition, Level, Molecule, PartitionFunction
 
 
 def _read_txt(filein):
@@ -16,21 +16,21 @@ def _read_txt(filein):
 	return return_arr
 
 
-def _read_freq_int(filein):
-	'''Reads in a two column frequency intensity file and returns the numpy arrays	'''
+def _read_xy(filein):
+	'''Reads in a two column x y file and returns the numpy arrays	'''
 	
-	frequency = []
-	intensity = []
+	x = []
+	y = []
 	
 	with open(filein, 'r') as input:
 		for line in input:
-			frequency.append(np.float(line.split()[0].strip()))
-			intensity.append(np.float(line.split()[1].strip()))
+			x.append(np.float(line.split()[0].strip()))
+			y.append(np.float(line.split()[1].strip()))
 	
-	frequency = np.asarray(frequency)
-	intensity = np.asarray(intensity)
+	x = np.asarray(x)
+	y = np.asarray(y)
 			
-	return frequency,intensity		
+	return x,y		
 
 
 def _read_spcat(filein):
@@ -373,7 +373,7 @@ def _load_catalog(filein,type='SPCAT',catdict=None):
 			new_dict[x] = np.empty_like(new_dict['frequency'])
 				
 	if type == 'freq_int':
-		freq_tmp,int_tmp = 	_read_freq_int(filein) #read in a frequency intensity 
+		freq_tmp,int_tmp = 	_read_xy(filein) #read in a frequency intensity 
 												   #delimited file
 		new_dict = {}
 		new_dict['frequency'] = freq_tmp
@@ -386,7 +386,6 @@ def _load_catalog(filein,type='SPCAT',catdict=None):
 	cat = Catalog(catdict=new_dict) #make the catalog and return it
 	
 	return cat
-			
 			
 def _make_level_dict(qn1low,qn2low,qn3low,qn4low,qn5low,qn6low,qn7low,qn8low,qn1up,qn2up,
 					qn3up,qn4up,qn5up,qn6up,qn7up,qn8up,frequency,elow,gup,
@@ -453,12 +452,13 @@ def _make_level_dict(qn1low,qn2low,qn3low,qn4low,qn5low,qn6low,qn7low,qn8low,qn1
 
 def load_mol(filein,type='SPCAT',catdict=None,id=None,name=None,formula=None,
 				elements=None,mass=None,A=None,B=None,C=None,muA=None,muB=None,
-				muC=None,mu=None,Q=None,qnstrfmt=None):
+				muC=None,mu=None,Q=None,qnstrfmt=None,partition_dict=None,
+				qpart_file=None):
 
 	'''
 	Loads a molecule in from a catalog file.  Default catalog type is SPCAT.  Override
-	things with catdict.  Generates energy level objects, transition objects, and
-	a molecule object which it returns
+	things with catdict.  Generates energy level objects, transition objects, a partition
+	function object and	a molecule object which it returns.
 	'''
 	
 	#load the catalog in
@@ -535,7 +535,6 @@ def load_mol(filein,type='SPCAT',catdict=None,id=None,name=None,formula=None,
 	
 	#we'll now update the catalog with some of the things we've calculated like eup and
 	#glow
-	
 	level_ids = np.array([x.id for i,x in np.ndenumerate(levels)])
 	for x in range(len(cat.frequency)):
 		line_qns_up_str = _make_qnstr(x,qnups)
@@ -546,7 +545,34 @@ def load_mol(filein,type='SPCAT',catdict=None,id=None,name=None,formula=None,
 	#now we have to load the transitions in	and make transition objects	
 		
 	#make the molecule
-	
 	mol = Molecule(levels=levels,catalog=cat)
+	
+	#make a partition function object and assign it to the molecule
+	#if there's no other info, assume we're state counting
+	if partition_dict is None and qpart_file is None:
+		partition_dict = {}
+		partition_dict['mol'] = mol
+	#if there's a qpart file specified, read that in	
+	elif qpart_file is not None:
+		temps,vals = _read_xy(qpart_file)
+		if partition_dict is None:
+			partition_dict = {}
+		partition_dict['temps'] = temps
+		partition_dict['vals'] = vals		
+		partition_dict['notes'] = 'Loaded values from {}' .format(qpart_file)	
+	#make the partition function object and assign it	
+	mol.qpart = PartitionFunction(	
+				form = partition_dict['form'] if 'form' in partition_dict else None,
+				params = partition_dict['params'] if 'params' in partition_dict else None,
+				temps = partition_dict['temps'] if 'temps' in partition_dict else None,
+				vals = partition_dict['vals'] if 'vals' in partition_dict else None,
+				mol = partition_dict['mol'] if 'mol' in partition_dict else None,
+				gs = partition_dict['gs'] if 'gs' in partition_dict else None,
+				energies = partition_dict['energies'] if 'energies' in partition_dict else None,
+				sigma = partition_dict['sigma'] if 'sigma' in partition_dict else None,
+				vib_states = partition_dict['vib_states'] if 'vib_states' in partition_dict else None,
+				vib_is_K = partition_dict['vib_is_K'] if 'vib_is_K' in partition_dict else None,
+				notes = partition_dict['notes'] if 'notes' in partition_dict else None,
+							)
 	
 	return	mol	
