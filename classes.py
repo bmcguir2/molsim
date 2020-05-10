@@ -128,6 +128,7 @@ class Catalog(object):
 		self.refs = refs
 		
 		self._unpack_catdict()
+		#self._set_nones()
 	
 		return
 		
@@ -230,6 +231,15 @@ class Catalog(object):
 		self.sijmu = eq1/eq2
 		self.aij = 1.16395E-20*self.frequency**3*self.sijmu/self.gup
 
+		return	
+		
+	def _set_nones(self):
+		qnlist = [self.qn1low,self.qn2low,self.qn3low,self.qn4low,self.qn5low,self.qn6low,
+					self.qn7low,self.qn8low,self.qn1up,self.qn2up,self.qn3up,self.qn4up,
+					self.qn5up,self.qn6up,self.qn7up,self.qn8up]
+		for x in qnlist:
+			if x is None:
+				x = np.full(len(self.frequency),None)
 		return	
 	
 class Level(object):
