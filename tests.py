@@ -20,7 +20,7 @@ def _val_molsim():
 	print('Beginning Validation Tests')
 	print('==========================\n')
 	
-	_val_read_freq_int()
+	_val_read_xy()
 	_val_read_txt()	
 	_val_read_spcat()
 	
@@ -33,22 +33,22 @@ def _ver_molsim():
 	print('Beginning Verification Tests')
 	print('============================\n')	
 	
-	_ver_read_freq_int()
+	_ver_read_xy()
 	_ver_read_txt()	
 	_ver_read_spcat()
 	
 	return	
 
-def _val_read_freq_int():
+def _val_read_xy():
 
 	'''Validate the reading in of a frequency intensity delimited file'''
 
-	print('... validating file_handling._read_freq_int')
+	print('... validating file_handling._read_xy')
 
 	try:
-		frequency, intensity = fh._read_freq_int(filepath + 'file_handling/freq_int.txt')
+		frequency, intensity = fh._read_xy(filepath + 'file_handling/freq_int.txt')
 	except:
-		print('\tCRITICAL: file_handling._read_freq_int failed entirely to run.')
+		print('\tCRITICAL: file_handling._read_xy failed entirely to run.')
 		return
 		
 	warnings = 0	
@@ -56,34 +56,34 @@ def _val_read_freq_int():
 	#check that it has returned numpy arrays
 	
 	if isinstance(frequency,np.ndarray) is False:
-		print('\tWARNING: file_handling._read_freq_int returned "frequency" as {}.  Expected np.ndarray.' .format(type(frequency)))
+		print('\tWARNING: file_handling._read_xy returned "frequency" as {}.  Expected np.ndarray.' .format(type(frequency)))
 		warnings += 1
 		
 	if isinstance(intensity,np.ndarray) is False:
-		print('\tWARNING: file_handling._read_freq_int returned "intensity" as {}.  Expected np.ndarray.' .format(type(intensity)))
+		print('\tWARNING: file_handling._read_xy returned "intensity" as {}.  Expected np.ndarray.' .format(type(intensity)))
 		warnings += 1
 		
 	#check the length of the returned arrays
 	
 	if len(frequency) != 22:
-		print('\tWARNING: file_handling._read_freq_int returned "frequency" with a length of {}.  Expected 22.' .format(len(frequency)))
+		print('\tWARNING: file_handling._read_xy returned "frequency" with a length of {}.  Expected 22.' .format(len(frequency)))
 		warnings += 1			
 	
 	if len(intensity) != 22:
-		print('\tWARNING: file_handling._read_freq_int returned "intensity" with a length of {}.  Expected 22.' .format(len(intensity)))
+		print('\tWARNING: file_handling._read_xy returned "intensity" with a length of {}.  Expected 22.' .format(len(intensity)))
 		warnings += 1
 		
 	#check that the values are np.float64
 	
 	if any([isinstance(x,np.float64) for x in frequency]) is False:
-		print('\tWARNING: file_handling._read_freq_int returned "frequency" with values that were not np.float64.')
+		print('\tWARNING: file_handling._read_xy returned "frequency" with values that were not np.float64.')
 		warnings += 1
 		
 	if any([isinstance(x,np.float64) for x in intensity]) is False:
-		print('\tWARNING: file_handling._read_freq_int returned "intensity" with values that were not np.float64.')
+		print('\tWARNING: file_handling._read_xy returned "intensity" with values that were not np.float64.')
 		warnings += 1	
 		
-	print('\tValidation of file_handling._read_freq_int completed with {} warnings.\n' .format(warnings))						
+	print('\tValidation of file_handling._read_xy completed with {} warnings.\n' .format(warnings))						
 	
 	return warnings
 	
@@ -211,16 +211,16 @@ def _val_load_catalog():
 	
 	return warnings
 	
-def _ver_read_freq_int():
+def _ver_read_xy():
 
 	'''Verify the reading in of a frequency intensity delimited file'''
 	
-	print('... verifying file_handling._read_freq_int')
+	print('... verifying file_handling._read_xy')
 	
 	try:
-		frequency, intensity = fh._read_freq_int(filepath + 'file_handling/freq_int.txt')
+		frequency, intensity = fh._read_xy(filepath + 'file_handling/freq_int.txt')
 	except:
-		print('\tCRITICAL: file_handling._read_freq_int failed entirely to run.')
+		print('\tCRITICAL: file_handling._read_xy failed entirely to run.')
 		return
 
 	warnings = 0	
@@ -228,14 +228,14 @@ def _ver_read_freq_int():
 	#check the total values
 	
 	if np.sum(frequency) != 29116838.174399998:
-		print('\tWARNING: file_handling._read_freq_int returned "frequency" with a total value of {}.  Expected 29116838.174399998.' .format(np.sum(frequency)))
+		print('\tWARNING: file_handling._read_xy returned "frequency" with a total value of {}.  Expected 29116838.174399998.' .format(np.sum(frequency)))
 		warnings += 1
 		
 	if np.sum(intensity) != -62.5124:
-		print('\tWARNING: file_handling._read_freq_int returned "intensity" with a total value of {}.  Expected 29116838.174399998.' .format(np.sum(intensity)))
+		print('\tWARNING: file_handling._read_xy returned "intensity" with a total value of {}.  Expected 29116838.174399998.' .format(np.sum(intensity)))
 		warnings += 1
 		
-	print('\tVerification of file_handling._read_freq_int completed with {} warnings.\n' .format(warnings))						
+	print('\tVerification of file_handling._read_xy completed with {} warnings.\n' .format(warnings))						
 	
 	return warnings	
 	

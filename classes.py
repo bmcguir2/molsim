@@ -397,7 +397,7 @@ class Molecule(object):
 					muB = None, #B component of the dipole moment [Debye]
 					muC = None, #C component of the dipole moment [Debye]
 					mu = None, #total dipole moment
-					Q = None, #partition function object
+					qpart = None, #partition function object
 					catalog = None, #catalog object for this molecule
 					trans = None, #list of transition objects for this molecule
 					levels = None, #list of energy level objects for this molecule
@@ -415,13 +415,23 @@ class Molecule(object):
 		self.muB = muB
 		self.muC = muC
 		self.mu = mu
-		self.Q = Q
+		self.qpart = qpart
 		self.catalog = catalog
 		self.trans = trans
 		self.levels = levels
 
 		
-		return		
+		return
+		
+	def qrot(self,T):
+		return self.qpart.qrot(T)
+	
+	def qvib(self,T):
+		return self.qpart.qvib(T)	
+		
+	def q(self,T):
+		return self.qpart.q(T)
+				
 				
 class PartitionFunction(object):		
 		
@@ -714,4 +724,9 @@ class PartitionFunction(object):
 		else:
 			return np.prod(np.sum(np.exp((-self.vib_states[:,np.newaxis]*np.arange(100))/(0.695*T)),axis=1))	
 		
+	def q(self,T):
+		'''
+		Calculate and return the total partition function at a temperature T
+		'''	
 		
+		return self.qrot(T)*self.qvib(T)
