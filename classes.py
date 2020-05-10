@@ -223,6 +223,14 @@ class Catalog(object):
 
 		
 		return
+		
+	def _set_sijmu_aij(self,Q):
+		eq1 = 2.40251E4 * 10**(self.logint) * Q.qrot(300) * self.frequency **-1
+		eq2 = np.exp(-self.elow/300) - np.exp(-self.eup/300)
+		self.sijmu = eq1/eq2
+		self.aij = 1.16395E-20*self.frequency**3*self.sijmu/self.gup
+
+		return	
 	
 class Level(object):
 
