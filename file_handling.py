@@ -1,6 +1,8 @@
 import numpy as np
+from numba import njit
 from molsim.constants import ccm, cm, ckm, h, k, kcm
-from molsim.classes import workspace, catalog
+from molsim.classes import Workspace, Catalog, Transition, Level, Molecule
+
 
 def _read_txt(filein):
 	'''Reads in any txt file and returns a line by line array'''
@@ -12,7 +14,8 @@ def _read_txt(filein):
 			return_arr.append(line)
 
 	return return_arr
-	
+
+
 def _read_freq_int(filein):
 	'''Reads in a two column frequency intensity file and returns the numpy arrays	'''
 	
@@ -28,7 +31,8 @@ def _read_freq_int(filein):
 	intensity = np.asarray(intensity)
 			
 	return frequency,intensity		
-	
+
+
 def _read_spcat(filein):
 	'''
 	Reads an SPCAT catalog and returns spliced out numpy arrays.
@@ -349,6 +353,7 @@ def _read_spcat(filein):
 	
 	return split_cat
 
+
 def _load_catalog(filein,type='SPCAT',catdict=None):
 	'''
 	Reads in a catalog file of the specified type and returns a catalog object.  
@@ -362,6 +367,10 @@ def _load_catalog(filein,type='SPCAT',catdict=None):
 	if type == 'SPCAT':
 		new_dict = _read_spcat(filein) #read in the catalog file and produce the
 									   #dictionary
+		#prep a bunch of empty arrays
+		new_arrs = ['glow','eup','sijmu','sij','aij','measured','types']
+		for x in new_arrs:
+			new_dict[x] = np.empty_like(new_dict['frequency'])
 				
 	if type == 'freq_int':
 		freq_tmp,int_tmp = 	_read_freq_int(filein) #read in a frequency intensity 
@@ -374,7 +383,170 @@ def _load_catalog(filein,type='SPCAT',catdict=None):
 		for x in catdict:
 			new_dict[x] = catdict[x] #either add it to the new_dict or overwrite it			
 		
-	cat = catalog(catdict=new_dict) #make the catalog and return it
+	cat = Catalog(catdict=new_dict) #make the catalog and return it
 	
 	return cat
 			
+			
+def _make_level_dict(qn1low,qn2low,qn3low,qn4low,qn5low,qn6low,qn7low,qn8low,qn1up,qn2up,
+					qn3up,qn4up,qn5up,qn6up,qn7up,qn8up,frequency,elow,gup,
+					qn_list_low,qn_list_up,level_qns,level_dict,qnstrfmt=None):
+
+	#a list to hold levels
+	levels = []
+	
+	#we need to sort out unique levels from our catalog.  Those will have unique quantum
+	#numbers. When we find a match to a lower level, add the info in.
+	for x in range(len(frequency)):
+		qnstr_low = qn_list_low[x]
+		level_dict[qnstr_low] = {'energy'	:	elow[x],
+								 'g'		:	None,
+								 'g_flag'	:	False,
+								 'qn1'		:	qn1low[x] if qn1low is not None else None,
+								 'qn2'		:	qn2low[x] if qn2low is not None else None,
+								 'qn3'		:	qn3low[x] if qn3low is not None else None,
+								 'qn4'		:	qn4low[x] if qn4low is not None else None,
+								 'qn5'		:	qn5low[x] if qn5low is not None else None,
+								 'qn6'		:	qn6low[x] if qn6low is not None else None,
+								 'qn7'		:	qn7low[x] if qn7low is not None else None,
+								 'qn8'		:	qn8low[x] if qn8low is not None else None,
+								 'id'		:	qn_list_low[x],
+								 'qnstrfmt'	:	qnstrfmt,			
+								}
+	
+	#do it again to fill in energy levels that were upper states and didn't get hit
+	for x in range(len(frequency)):
+		qnstr_up = qn_list_up[x]
+		if level_dict[qnstr_up] is None:
+			#calculate the energy.  Move the transition from MHz -> cm-1 -> K
+			freq_cm = (frequency[x]*1E6/ccm)
+			freq_K = freq_cm / kcm
+			level_dict[qnstr_up] = {'energy'	:	elow[x] + freq_K,
+									 'g'		:	gup[x],
+									 'g_flag'	:	False,
+									 'qn1'		:	qn1up[x] if qn1up is not None else None,
+									 'qn2'		:	qn2up[x] if qn2up is not None else None,
+									 'qn3'		:	qn3up[x] if qn3up is not None else None,
+									 'qn4'		:	qn4up[x] if qn4up is not None else None,
+									 'qn5'		:	qn5up[x] if qn5up is not None else None,
+									 'qn6'		:	qn6up[x] if qn6up is not None else None,
+									 'qn7'		:	qn7up[x] if qn7up is not None else None,
+									 'qn8'		:	qn8up[x] if qn8up is not None else None,
+									 'id'		:	qn_list_up[x],
+									 'qnstrfmt'	:	qnstrfmt,			
+									}			
+	
+	#go grab the degeneracies	
+	for x in range(len(frequency)):	
+		qnstr_up = qn_list_up[x]
+		if level_dict[qnstr_up]['g'] is None:
+			level_dict[qnstr_up]['g'] = gup[x]
+			
+	#now go through and fill any degeneracies that didn't get hit (probably ground states)
+	#assume it's just 2J+1.  Set the flag for a calculated degeneracy to True.
+	for x in level_dict:
+		if level_dict[x]['g'] is None:
+			level_dict[x]['g'] = 2*level_dict[x]['qn1'] + 1	
+			level_dict[x]['g_flag'] = True	
+
+	return level_dict
+
+def load_mol(filein,type='SPCAT',catdict=None,id=None,name=None,formula=None,
+				elements=None,mass=None,A=None,B=None,C=None,muA=None,muB=None,
+				muC=None,mu=None,Q=None,qnstrfmt=None):
+
+	'''
+	Loads a molecule in from a catalog file.  Default catalog type is SPCAT.  Override
+	things with catdict.  Generates energy level objects, transition objects, and
+	a molecule object which it returns
+	'''
+	
+	#load the catalog in
+	cat = _load_catalog(filein,type=type,catdict=catdict)
+	
+	#get some qnstrings to use as hashes		
+	#first we make subfunctions to generate qn_strs
+	
+	def _make_qnstr(y,qnlist):
+		qn_list_trimmed = [x for x in qnlist if np.all(x) != None]
+		tmp_list = [str(x[y]) for x in qn_list_trimmed]
+		return ''.join(tmp_list)
+	
+	#now we have to make a hash for every entries upper and lower state
+	qnlows = [cat.qn1low,cat.qn2low,cat.qn3low,cat.qn4low,cat.qn5low,cat.qn6low,
+				cat.qn7low,cat.qn8low]
+	qnups = [cat.qn1up,cat.qn2up,cat.qn3up,cat.qn4up,cat.qn5up,cat.qn6up,cat.qn7up,
+				cat.qn8up]
+	qn_list_low = [_make_qnstr(y,qnlows) for y in range(len(cat.frequency))]
+	qn_list_up = [_make_qnstr(y,qnups) for y in range(len(cat.frequency))]
+	level_qns = qn_list_low + qn_list_up
+	level_qns = list(set(level_qns)) #get the unique ones
+	level_dict = dict.fromkeys(level_qns)			
+	
+	#now we find unique energy levels.  We just get the dictionary of levels, since
+	#that function is computationally intensive and we want to njit it.
+	
+	level_dict = _make_level_dict(
+									cat.qn1low,
+									cat.qn2low,
+									cat.qn3low,
+									cat.qn4low,
+									cat.qn5low,
+									cat.qn6low,
+									cat.qn7low,
+									cat.qn8low,
+									cat.qn1up,
+									cat.qn2up,
+									cat.qn3up,
+									cat.qn4up,
+									cat.qn5up,
+									cat.qn6up,
+									cat.qn7up,
+									cat.qn8up,
+									cat.frequency,
+									cat.elow,
+									cat.gup,									
+									qn_list_low,
+									qn_list_up,
+									level_qns,
+									level_dict,
+									qnstrfmt,
+								)
+								
+	#load those levels into level objects and add to a list
+	levels = []
+	for x in level_dict:
+		levels.append(Level(
+							energy = level_dict[x]['energy'],
+							g = level_dict[x]['g'],
+							g_flag = level_dict[x]['g_flag'],
+							qn1 = level_dict[x]['qn1'],
+							qn2 = level_dict[x]['qn2'],
+							qn3 = level_dict[x]['qn3'],
+							qn4 = level_dict[x]['qn4'],
+							qn5 = level_dict[x]['qn5'],
+							qn6 = level_dict[x]['qn6'],
+							qn7 = level_dict[x]['qn7'],
+							qn8 = level_dict[x]['qn8'],
+							qnstrfmt = level_dict[x]['qnstrfmt'],
+							id = level_dict[x]['id']
+							))
+	levels.sort(key=lambda x: x.energy) #sort them so the lowest energy is first
+	
+	#we'll now update the catalog with some of the things we've calculated like eup and
+	#glow
+	
+	level_ids = np.array([x.id for i,x in np.ndenumerate(levels)])
+	for x in range(len(cat.frequency)):
+		line_qns_up_str = _make_qnstr(x,qnups)
+		line_qns_low_str = _make_qnstr(x,qnlows)
+		cat.glow[x] = levels[np.where(level_ids == line_qns_low_str)[0][0]].g
+		cat.eup[x] = levels[np.where(level_ids == line_qns_up_str)[0][0]].energy
+	
+	#now we have to load the transitions in	and make transition objects	
+		
+	#make the molecule
+	
+	mol = Molecule(levels=levels,catalog=cat)
+	
+	return	mol	

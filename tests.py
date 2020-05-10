@@ -87,34 +87,6 @@ def _val_read_freq_int():
 	
 	return warnings
 	
-def _ver_read_freq_int():
-
-	'''Verify the reading in of a frequency intensity delimited file'''
-	
-	print('... verifying file_handling._read_freq_int')
-	
-	try:
-		frequency, intensity = fh._read_freq_int(filepath + 'file_handling/freq_int.txt')
-	except:
-		print('\tCRITICAL: file_handling._read_freq_int failed entirely to run.')
-		return
-
-	warnings = 0	
-
-	#check the total values
-	
-	if np.sum(frequency) != 29116838.174399998:
-		print('\tWARNING: file_handling._read_freq_int returned "frequency" with a total value of {}.  Expected 29116838.174399998.' .format(np.sum(frequency)))
-		warnings += 1
-		
-	if np.sum(intensity) != -62.5124:
-		print('\tWARNING: file_handling._read_freq_int returned "intensity" with a total value of {}.  Expected 29116838.174399998.' .format(np.sum(intensity)))
-		warnings += 1
-		
-	print('\tVerification of file_handling._read_freq_int completed with {} warnings.\n' .format(warnings))						
-	
-	return warnings
-	
 def _val_read_txt():
 
 	'''Validate the reading in of a generic text file into a line by line array'''
@@ -148,38 +120,6 @@ def _val_read_txt():
 		warnings += 1	
 		
 	print('\tValidation of file_handling._read_txt completed with {} warnings.\n' .format(warnings))						
-	
-	return warnings
-	
-def _ver_read_txt():
-
-	'''Verify the reading in of a generic text file into a line by line array'''
-	
-	print('... verifying file_handling._read_txt')
-	
-	try:
-		return_arr = fh._read_txt(filepath + 'file_handling/freq_int.txt')
-	except:
-		print('\tCRITICAL: file_handling._read_txt failed entirely to run.')
-		return	
-		
-	warnings = 0	
-
-	#check three values (start, middle, and end)
-
-	if return_arr[0].strip() != '115271.2018 -5.0105':
-		print('\tWARNING: file_handling._read_txt returned "return_arr" at index 0 of {}.  Expected 115271.2018 -5.0105' .format(return_arr[0].strip()))
-		warnings += 1
-
-	if return_arr[10].strip() != '1267014.4860 -2.3773':
-		print('\tWARNING: file_handling._read_txt returned "return_arr" at index 0 of {}.  Expected 1267014.4860 -2.3773' .format(return_arr[0].strip()))
-		warnings += 1
-		
-	if return_arr[-1].strip() != '2528172.0600 -2.9584':
-		print('\tWARNING: file_handling._read_txt returned "return_arr" at index 0 of {}.  Expected 2528172.0600 -2.9584' .format(return_arr[0].strip()))
-		warnings += 1		
-		
-	print('\tVerification of file_handling._read_txt completed with {} warnings.\n' .format(warnings))						
 	
 	return warnings
 	
@@ -251,7 +191,86 @@ def _val_read_spcat():
 		
 	print('\tValidation of file_handling._read_spcat completed with {} warnings.\n' .format(warnings))						
 	
+	return warnings		
+	
+def _val_load_catalog():
+
+	'''Validate the reading in of an spcat formatted cat file'''
+	
+	print('... validating file_handling._load_catalog')
+	
+	#We first try to load an spcat catalog
+	
+	try:
+		cat = fh._load_catalog(filepath + 'file_handling/testcat.cat',type='SPCAT')
+	except:
+		print('\tCRITICAL: file_handling._load_cat failed entirely to run.')
+		return			
+		
+	warnings = 0
+	
+	return warnings
+	
+def _ver_read_freq_int():
+
+	'''Verify the reading in of a frequency intensity delimited file'''
+	
+	print('... verifying file_handling._read_freq_int')
+	
+	try:
+		frequency, intensity = fh._read_freq_int(filepath + 'file_handling/freq_int.txt')
+	except:
+		print('\tCRITICAL: file_handling._read_freq_int failed entirely to run.')
+		return
+
+	warnings = 0	
+
+	#check the total values
+	
+	if np.sum(frequency) != 29116838.174399998:
+		print('\tWARNING: file_handling._read_freq_int returned "frequency" with a total value of {}.  Expected 29116838.174399998.' .format(np.sum(frequency)))
+		warnings += 1
+		
+	if np.sum(intensity) != -62.5124:
+		print('\tWARNING: file_handling._read_freq_int returned "intensity" with a total value of {}.  Expected 29116838.174399998.' .format(np.sum(intensity)))
+		warnings += 1
+		
+	print('\tVerification of file_handling._read_freq_int completed with {} warnings.\n' .format(warnings))						
+	
 	return warnings	
+	
+def _ver_read_txt():
+
+	'''Verify the reading in of a generic text file into a line by line array'''
+	
+	print('... verifying file_handling._read_txt')
+	
+	try:
+		return_arr = fh._read_txt(filepath + 'file_handling/freq_int.txt')
+	except:
+		print('\tCRITICAL: file_handling._read_txt failed entirely to run.')
+		return	
+		
+	warnings = 0	
+
+	#check three values (start, middle, and end)
+
+	if return_arr[0].strip() != '115271.2018 -5.0105':
+		print('\tWARNING: file_handling._read_txt returned "return_arr" at index 0 of {}.  Expected 115271.2018 -5.0105' .format(return_arr[0].strip()))
+		warnings += 1
+
+	if return_arr[10].strip() != '1267014.4860 -2.3773':
+		print('\tWARNING: file_handling._read_txt returned "return_arr" at index 0 of {}.  Expected 1267014.4860 -2.3773' .format(return_arr[0].strip()))
+		warnings += 1
+		
+	if return_arr[-1].strip() != '2528172.0600 -2.9584':
+		print('\tWARNING: file_handling._read_txt returned "return_arr" at index 0 of {}.  Expected 2528172.0600 -2.9584' .format(return_arr[0].strip()))
+		warnings += 1		
+		
+	print('\tVerification of file_handling._read_txt completed with {} warnings.\n' .format(warnings))						
+	
+	return warnings
+
 	
 def _ver_read_spcat():
 

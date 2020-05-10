@@ -59,8 +59,6 @@ General Notes:
 										04/13/2020
 ##########################################################################################
 
-Started the project.  
-
 Files Created:
 	
 	testcat.cat
@@ -103,8 +101,6 @@ General Notes:
 										04/17/2020
 ##########################################################################################
 
-Started the project.  
-
 Files Created:
 		
 	Notes:
@@ -135,13 +131,53 @@ Functions Created:
 Functions Modified:
 
 	file_handling._read_spcat()
-	tests._ver_read_spact()
+	tests._ver_read_spcat()
 	
 	Notes:
 	
-		- Modified _read_spcat so that energies come in in Kelvin not cm-1.  Updated verification script to incorporate this.
+		- Modified _read_spcat so that energies come in in Kelvin not cm-1.  Updated 
+		  verification script to incorporate this.
 		- Changed elower variable to elow.
 
 General Notes:
 
-	- 
+	- To do for next time:
+		+ Make sure that if anything is put into a catalog through catdict that it is of 
+		  the appropriate type or is converted to the appropriate type, and if it isn't, 
+		  give a warning!
+		  
+##########################################################################################
+										04/17/2020
+##########################################################################################
+
+Files Created:
+		
+	Notes:
+	
+	
+Classes Created:
+	
+	Notes:
+	
+Constants Created:
+	
+	Notes:
+	
+Functions Created:
+
+	_var_load_catalog
+	
+	Notes:
+	
+		- Putting verification and validation aside for today
+
+	
+Functions Modified:
+	
+	Notes:
+	
+		- 
+General Notes:
+
+	- Adde njit in front of things.
+			  
