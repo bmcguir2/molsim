@@ -1,4 +1,5 @@
 import numpy as np
+import re
 from numba import njit
 from molsim.constants import ccm, cm, ckm, h, k, kcm
 from molsim.classes import Workspace, Catalog, Transition, Level, Molecule, PartitionFunction
@@ -118,173 +119,42 @@ def _read_spcat(filein):
 		if x == '':
 			return None
 			
-		#fix +/-: we'll just turn it into 1 or -1
+		sub_dict = {'a' : 100,
+					'b' : 110,
+					'c' : 120,
+					'd' : 130,
+					'e' : 140,
+					'f' : 150,
+					'g' : 160,
+					'h' : 170,
+					'i' : 180,
+					'j' : 190,
+					'k' : 200,
+					'l' : 210,
+					'm' : 220,
+					'n' : 230,
+					'o' : 240,
+					'p' : 250,
+					'q' : 260,
+					'r' : 270,
+					's' : 280,
+					't' : 290,
+					'u' : 300,
+					'v' : 310,
+					'w' : 320,
+					'x' : 330,
+					'y' : 340,
+					'z' : 350,
+					'+' : 1,
+					'-' : -1,
+					}
+					
+		alpha = re.sub('[^a-zA-Z\+\-]+','',x)
 		
-		if x == '+':
-			return 1
-			
-		if x == '-':
-			return -1
-		
-		#and now the letters bullshit
-			
-		if 'A' in x:		
-			return 100 + int(x[1])
-		
-		if 'B' in x:		
-			return 110 + int(x[1])	
-		
-		if 'C' in x:		
-			return 120 + int(x[1])		
-
-		if 'D' in x:		
-			return 130 + int(x[1])
-		
-		if 'E' in x:		
-			return 140 + int(x[1])
-		
-		if 'F' in x:		
-			return 150 + int(x[1])
-		
-		if 'G' in x:		
-			return 160 + int(x[1])
-		
-		if 'H' in x:		
-			return 170 + int(x[1])				
-		
-		if 'I' in x:		
-			return 180 + int(x[1])	
-		
-		if 'J' in x:		
-			return 190 + int(x[1])
-		
-		if 'K' in x:		
-			return 200 + int(x[1])
-		
-		if 'L' in x:		
-			return 210 + int(x[1])
-		
-		if 'M' in x:		
-			return 220 + int(x[1])	
-		
-		if 'N' in x:		
-			return 230 + int(x[1])	
-		
-		if 'O' in x:		
-			return 240 + int(x[1])
-		
-		if 'P' in x:		
-			return 250 + int(x[1])
-		
-		if 'Q' in x:		
-			return 260 + int(x[1])	
-		
-		if 'R' in x:		
-			return 270 + int(x[1])
-		
-		if 'S' in x:		
-			return 280 + int(x[1])
-		
-		if 'T' in x:		
-			return 290 + int(x[1])	
-		
-		if 'U' in x:		
-			return 300 + int(x[1])	
-		
-		if 'V' in x:		
-			return 310 + int(x[1])
-		
-		if 'W' in x:		
-			return 320 + int(x[1])	
-		
-		if 'X' in x:		
-			return 330 + int(x[1])	
-		
-		if 'Y' in x:		
-			return 340 + int(x[1])	
-		
-		if 'Z' in x:		
-			return 350 + int(x[1])
-		
-		if 'a' in x:		
-			return 100 + int(x[1])
-		
-		if 'b' in x:		
-			return 110 + int(x[1])	
-		
-		if 'c' in x:		
-			return 120 + int(x[1])		
-
-		if 'd' in x:		
-			return 130 + int(x[1])
-		
-		if 'e' in x:		
-			return 140 + int(x[1])
-		
-		if 'f' in x:		
-			return 150 + int(x[1])
-		
-		if 'g' in x:		
-			return 160 + int(x[1])
-		
-		if 'h' in x:		
-			return 170 + int(x[1])				
-		
-		if 'i' in x:		
-			return 180 + int(x[1])	
-		
-		if 'j' in x:		
-			return 190 + int(x[1])
-		
-		if 'k' in x:		
-			return 200 + int(x[1])
-		
-		if 'l' in x:		
-			return 210 + int(x[1])
-		
-		if 'm' in x:		
-			return 220 + int(x[1])	
-		
-		if 'n' in x:		
-			return 230 + int(x[1])	
-		
-		if 'o' in x:		
-			return 240 + int(x[1])
-		
-		if 'p' in x:		
-			return 250 + int(x[1])
-		
-		if 'q' in x:		
-			return 260 + int(x[1])	
-		
-		if 'r' in x:		
-			return 270 + int(x[1])
-		
-		if 's' in x:		
-			return 280 + int(x[1])
-		
-		if 't' in x:		
-			return 290 + int(x[1])	
-		
-		if 'u' in x:		
-			return 300 + int(x[1])	
-		
-		if 'v' in x:		
-			return 310 + int(x[1])
-		
-		if 'w' in x:		
-			return 320 + int(x[1])	
-		
-		if 'x' in x:		
-			return 330 + int(x[1])	
-		
-		if 'y' in x:		
-			return 340 + int(x[1])	
-		
-		if 'z' in x:		
-			return 350 + int(x[1])
-			
-		return int(x)						
+		if alpha == '':
+			return int(x)
+		else:		
+			return sub_dict.get(alpha.lower(), 0) + int(x[1])
 	
 	#run the other arrays through the fixer, then convert them to what they need to be
 	
@@ -545,8 +415,8 @@ def load_mol(filein,type='SPCAT',catdict=None,id=None,name=None,formula=None,
 	#glow
 	level_ids = np.array([x.id for i,x in np.ndenumerate(levels)])
 	for x in range(len(cat.frequency)):
-		line_qns_up_str = _make_qnstr(x,qnups)
-		line_qns_low_str = _make_qnstr(x,qnlows)
+		line_qns_low_str = _make_qnstr_new(cat.qn1low[x],cat.qn2low[x],cat.qn3low[x],cat.qn4low[x],cat.qn5low[x],cat.qn6low[x],cat.qn7low[x],cat.qn8low[x])
+		line_qns_up_str = _make_qnstr_new(cat.qn1up[x],cat.qn2up[x],cat.qn3up[x],cat.qn4up[x],cat.qn5up[x],cat.qn6up[x],cat.qn7up[x],cat.qn8up[x])
 		if cat.glow is None:
 			cat.glow = np.empty_like(cat.frequency)
 		cat.glow[x] = levels[np.where(level_ids == line_qns_low_str)[0][0]].g
