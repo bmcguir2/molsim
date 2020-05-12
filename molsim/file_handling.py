@@ -198,6 +198,11 @@ def _read_spcat(filein):
 	qn12 = np.array(qn12)
 	qn12 = qn12.astype(int) if all(x is not None for x in qn12) is True else qn12	
 	
+	#make the qnstrings
+	qn_list_up = [_make_qnstr(qn1,qn2,qn3,qn4,qn5,qn6,None,None) for qn1,qn2,qn3,qn4,qn5,qn6 in zip(qn1,qn2,qn3,qn4,qn5,qn6)]
+	qn_list_low = [_make_qnstr(qn7,qn8,qn9,qn10,qn11,qn12,None,None) for qn7,qn8,qn9,qn10,qn11,qn12 in zip(qn7,qn8,qn9,qn10,qn11,qn12)]
+	
+	
 	split_cat = {
 					'frequency'	: 	frequency,
 					'freq_err'	:	freq_err,
@@ -215,6 +220,7 @@ def _read_spcat(filein):
 					'qn6up'		:	qn6,
 					'qn7up'		:	np.full(len(frequency),None),
 					'qn8up'		:	np.full(len(frequency),None),
+					'qnup_str'	:	np.array(qn_list_up),
 					'qn1low'	:	qn7,
 					'qn2low'	:	qn8,
 					'qn3low'	:	qn9,
@@ -223,6 +229,7 @@ def _read_spcat(filein):
 					'qn6low'	:	qn12,
 					'qn7low'	:	np.full(len(frequency),None),
 					'qn8low'	:	np.full(len(frequency),None),
+					'qnlow_str'	:	np.array(qn_list_low),
 					'notes'		:	'Loaded from file {}' .format(filein)
 				}
 	
@@ -239,11 +246,17 @@ def _load_catalog(filein,type='SPCAT',catdict=None):
 	function, so use cautiously.
 	'''
 
-	if type == 'SPCAT':
+	if type == 'molsim':
+		npz_dict = np.load(filein,allow_pickle=True)	
+		new_dict = {}
+		for x in npz_dict:
+			new_dict[x] = npz_dict[x]
+
+	elif type == 'SPCAT':
 		new_dict = _read_spcat(filein) #read in the catalog file and produce the
 									   #dictionary
 				
-	if type == 'freq_int':
+	elif type == 'freq_int':
 		freq_tmp,int_tmp = 	_read_xy(filein) #read in a frequency intensity 
 												   #delimited file
 		new_dict = {}
@@ -320,45 +333,44 @@ def _make_level_dict(qn1low,qn2low,qn3low,qn4low,qn5low,qn6low,qn7low,qn8low,qn1
 			level_dict[x]['g_flag'] = True	
 
 	return level_dict
+	
+def _make_qnstr(qn1,qn2,qn3,qn4,qn5,qn6,qn7,qn8):
+	qn_list = [qn1,qn2,qn3,qn4,qn5,qn6,qn7,qn8]
+	tmp_list = [str(x) for x in qn_list if x != None]
+	return ''.join(tmp_list)		
 
-def load_mol(filein,type='SPCAT',catdict=None,id=None,name=None,formula=None,
+def load_mol(filein,type='molsim',catdict=None,id=None,name=None,formula=None,
 				elements=None,mass=None,A=None,B=None,C=None,muA=None,muB=None,
 				muC=None,mu=None,Q=None,qnstrfmt=None,partition_dict=None,
 				qpart_file=None):
 
 	'''
-	Loads a molecule in from a catalog file.  Default catalog type is SPCAT.  Override
+	Loads a molecule in from a catalog file.  Default catalog type is molsim.  Override
 	things with catdict.  Generates energy level objects, transition objects, a partition
 	function object and	a molecule object which it returns.
 	'''
 	
 	#load the catalog in
 	cat = _load_catalog(filein,type=type,catdict=catdict)
-	
-	#get some qnstrings to use as hashes		
-	#first we make subfunctions to generate qn_strs
-	
-	def _make_qnstr(y,qnlist):
-		qn_list_trimmed = [x for x in qnlist if np.all(x) != None]
-		tmp_list = [str(x[y]) for x in qn_list_trimmed]
-		return ''.join(tmp_list)
+
+	#now we have to make a hash for every entries upper and lower state.  If this already
+	#exists in the catalog, great.  If not, we have to make it.
+	if cat.qnup_str is None:
+		qnups = [cat.qn1up,cat.qn2up,cat.qn3up,cat.qn4up,cat.qn5up,cat.qn6up,cat.qn7up,
+					cat.qn8up]	
+		qn_list_up = [_make_qnstr(qn1,qn2,qn3,qn4,qn5,qn6,qn7,qn8) for qn1,qn2,qn3,qn4,qn5,qn6,qn7,qn8 in zip(cat.qn1up,cat.qn2up,cat.qn3up,cat.qn4up,cat.qn5up,cat.qn6up,cat.qn7up,cat.qn8up)]
+	else:
+		qn_list_up = cat.qnup_str
 		
-	def _make_qnstr_new(qn1,qn2,qn3,qn4,qn5,qn6,qn7,qn8):
-		qn_list = [qn1,qn2,qn3,qn4,qn5,qn6,qn7,qn8]
-		tmp_list = [str(x) for x in qn_list if x != None]
-		return ''.join(tmp_list)		
-	
-	#now we have to make a hash for every entries upper and lower state
-	qnlows = [cat.qn1low,cat.qn2low,cat.qn3low,cat.qn4low,cat.qn5low,cat.qn6low,
+	if cat.qnlow_str is None:
+		qnlows = [cat.qn1low,cat.qn2low,cat.qn3low,cat.qn4low,cat.qn5low,cat.qn6low,
 				cat.qn7low,cat.qn8low]
-	qnups = [cat.qn1up,cat.qn2up,cat.qn3up,cat.qn4up,cat.qn5up,cat.qn6up,cat.qn7up,
-				cat.qn8up]
-# 	qn_list_low = [_make_qnstr(y,qnlows) for y in range(len(cat.frequency))]
-# 	qn_list_up = [_make_qnstr(y,qnups) for y in range(len(cat.frequency))]
-	qn_list_low = [_make_qnstr_new(qn1,qn2,qn3,qn4,qn5,qn6,qn7,qn8) for qn1,qn2,qn3,qn4,qn5,qn6,qn7,qn8 in zip(cat.qn1low,cat.qn2low,cat.qn3low,cat.qn4low,cat.qn5low,cat.qn6low,cat.qn7low,cat.qn8low)]
-	qn_list_up = [_make_qnstr_new(qn1,qn2,qn3,qn4,qn5,qn6,qn7,qn8) for qn1,qn2,qn3,qn4,qn5,qn6,qn7,qn8 in zip(cat.qn1up,cat.qn2up,cat.qn3up,cat.qn4up,cat.qn5up,cat.qn6up,cat.qn7up,cat.qn8up)]
-	level_qns = qn_list_low + qn_list_up
-	level_qns = list(set(level_qns)) #get the unique ones
+		qn_list_low = [_make_qnstr(qn1,qn2,qn3,qn4,qn5,qn6,qn7,qn8) for qn1,qn2,qn3,qn4,qn5,qn6,qn7,qn8 in zip(cat.qn1low,cat.qn2low,cat.qn3low,cat.qn4low,cat.qn5low,cat.qn6low,cat.qn7low,cat.qn8low)]
+	else:
+		qn_list_low = cat.qnlow_str
+		
+	level_qns = np.concatenate((qn_list_low,qn_list_up),axis=0)
+	level_qns = list(set(list(level_qns))) #get the unique ones
 	level_dict = dict.fromkeys(level_qns)			
 	
 	#now we find unique energy levels.  We just get the dictionary of levels, since
@@ -412,17 +424,19 @@ def load_mol(filein,type='SPCAT',catdict=None,id=None,name=None,formula=None,
 	levels.sort(key=lambda x: x.energy) #sort them so the lowest energy is first
 	
 	#we'll now update the catalog with some of the things we've calculated like eup and
-	#glow
-	level_ids = np.array([x.id for i,x in np.ndenumerate(levels)])
-	for x in range(len(cat.frequency)):
-		line_qns_low_str = _make_qnstr_new(cat.qn1low[x],cat.qn2low[x],cat.qn3low[x],cat.qn4low[x],cat.qn5low[x],cat.qn6low[x],cat.qn7low[x],cat.qn8low[x])
-		line_qns_up_str = _make_qnstr_new(cat.qn1up[x],cat.qn2up[x],cat.qn3up[x],cat.qn4up[x],cat.qn5up[x],cat.qn6up[x],cat.qn7up[x],cat.qn8up[x])
+	#glow unless they're already present
+	if type != 'molsim':
+		level_ids = np.array([x.id for i,x in np.ndenumerate(levels)])
+		tmp_dict = {}
+		for x in levels:
+			tmp_dict[x.id] = [x.g,x.energy]
 		if cat.glow is None:
-			cat.glow = np.empty_like(cat.frequency)
-		cat.glow[x] = levels[np.where(level_ids == line_qns_low_str)[0][0]].g
+			cat.glow = np.empty_like(cat.frequency)	
 		if cat.eup is None:
-			cat.eup = np.empty_like(cat.frequency)
-		cat.eup[x] = levels[np.where(level_ids == line_qns_up_str)[0][0]].energy
+			cat.eup = np.empty_like(cat.frequency)			
+		for x in range(len(cat.frequency)):
+			cat.glow[x] = tmp_dict[cat.qnlow_str[x]][0]
+			cat.eup[x] = tmp_dict[cat.qnup_str[x]][1]
 	
 	#now we have to load the transitions in	and make transition objects	
 		

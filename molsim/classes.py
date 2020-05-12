@@ -67,6 +67,7 @@ class Catalog(object):
 					qn6up = None, #upper state quantum number 6
 					qn7up = None, #upper state quantum number 7
 					qn8up = None, #upper state quantum number 8
+					qnup_str = None, #upper state quantum number string
 					qn1low = None, #lower state principle quantum number 1
 					qn2low = None, #lower state quantum number 2
 					qn3low = None, #lower state quantum number 3
@@ -74,7 +75,8 @@ class Catalog(object):
 					qn5low = None, #lower state quantum number 5
 					qn6low = None, #lower state quantum number 6
 					qn7low = None, #lower state quantum number 7
-					qn8low = None, #lower state quantum number 8		
+					qn8low = None, #lower state quantum number 8	
+					qnlow_str = None, #lower state quantum number string
 					version = None, #version of this catalog in the database			
 					source = None, #where the catalog came from
 					last_update = None,	#when it was last updated
@@ -111,6 +113,7 @@ class Catalog(object):
 		self.qn6up = qn6up
 		self.qn7up = qn7up
 		self.qn8up = qn8up
+		self.qnup_str = qnup_str
 		self.qn1low = qn1low
 		self.qn2low = qn2low
 		self.qn3low = qn3low
@@ -118,7 +121,8 @@ class Catalog(object):
 		self.qn5low = qn5low
 		self.qn6low = qn6low
 		self.qn7low = qn7low
-		self.qn8low = qn8low		
+		self.qn8low = qn8low	
+		self.qnlow_str = qnlow_str	
 		self.version = version
 		self.source = source
 		self.last_update = last_update
@@ -128,7 +132,6 @@ class Catalog(object):
 		self.refs = refs
 		
 		self._unpack_catdict()
-		#self._set_nones()
 	
 		return
 		
@@ -191,6 +194,8 @@ class Catalog(object):
 				self.qn7up = self.catdict['qn7up']
 			if all(['qn8up' in self.catdict, self.qn8up is None]):
 				self.qn8up = self.catdict['qn8up']
+			if all(['qnup_str' in self.catdict, self.qnup_str is None]):
+				self.qnup_str = self.catdict['qnup_str']			
 			if all(['qn1low' in self.catdict, self.qn1low is None]):
 				self.qn1low = self.catdict['qn1low']
 			if all(['qn2low' in self.catdict, self.qn2low is None]):
@@ -207,6 +212,8 @@ class Catalog(object):
 				self.qn7low = self.catdict['qn7low']
 			if all(['qn8low' in self.catdict, self.qn8low is None]):
 				self.qn8low = self.catdict['qn8low']
+			if all(['qnlow_str' in self.catdict, self.qnlow_str is None]):
+				self.qnlow_str = self.catdict['qnlow_str']				
 			if all(['version' in self.catdict, self.version is None]):
 				self.version = self.catdict['version']
 			if all(['source' in self.catdict, self.source is None]):
@@ -233,13 +240,61 @@ class Catalog(object):
 
 		return	
 		
-	def _set_nones(self):
-		qnlist = [self.qn1low,self.qn2low,self.qn3low,self.qn4low,self.qn5low,self.qn6low,
-					self.qn7low,self.qn8low,self.qn1up,self.qn2up,self.qn3up,self.qn4up,
-					self.qn5up,self.qn6up,self.qn7up,self.qn8up]
-		for x in qnlist:
-			if x is None:
-				x = np.full(len(self.frequency),None)
+	def export_cat(self,fileout,catformat='molsim'):
+		'''
+		Exports a catalog to an output file.  If catformat is set to 'molsim' it outputs a
+		file that will read into molsim much faster in the future.  If it is set to 
+		'spcat' it will output in spcat format.
+		'''
+		
+		if catformat == 'molsim':
+			np.savez_compressed(fileout,
+								catdict = self.catdict,
+								catid = self.catid ,
+								molecule = self.molecule,
+								frequency = self.frequency,
+								freq_err = self.freq_err,
+								measured = self.measured,
+								logint = self.logint,
+								sijmu = self.sijmu,
+								sij = self.sij,
+								aij = self.aij,
+								man_int = self.man_int,
+								types = self.types,
+								dof = self.dof,
+								elow = self.elow,
+								eup = self.eup,
+								glow = self.glow,
+								gup = self.gup,
+								tag = self.tag,
+								qnformat = self.qnformat,
+								qn1up = self.qn1up,
+								qn2up = self.qn2up,
+								qn3up = self.qn3up,
+								qn4up = self.qn4up,
+								qn5up = self.qn5up,
+								qn6up = self.qn6up,
+								qn7up = self.qn7up,
+								qn8up = self.qn8up,
+								qnup_str = self.qnup_str,
+								qn1low = self.qn1low,
+								qn2low = self.qn2low,
+								qn3low = self.qn3low,
+								qn4low = self.qn4low,
+								qn5low = self.qn5low,
+								qn6low = self.qn6low,
+								qn7low = self.qn7low,
+								qn8low = self.qn8low	,
+								qnlow_str = self.qnlow_str	,
+								version = self.version,
+								source = self.source,
+								last_update = self.last_update,
+								contributor_name = self.contributor_name,
+								contributor_email = self.contributor_email,
+								notes = self.notes,
+								refs = self.refs
+							)
+		
 		return	
 	
 class Level(object):
