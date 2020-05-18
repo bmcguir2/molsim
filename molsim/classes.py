@@ -3,7 +3,7 @@ from numba import njit
 import math
 from molsim.constants import ccm, cm, ckm, h, k, kcm 
 from molsim.stats import get_rms
-from molsim.utils import _trim_arr, find_nearest
+from molsim.utils import _trim_arr, find_nearest, _make_gauss
 from scipy.interpolate import interp1d
 from astropy import units
 from astropy.coordinates import SkyCoord
@@ -826,7 +826,14 @@ class Spectrum(object):
 					notes = None, #notes
 				):
 				
-
+		self.frequency = frequency
+		self.Tb = Tb
+		self.Iv = Iv
+		self.Tbg = Tbg
+		self.Ibg = Ibg
+		self.tau = tau
+		self.freq_profile = None
+		self.int_profile = None
 		self.id = id
 		self.notes = notes
 		self.ll = np.amin(frequency) if frequency is not None else None
@@ -934,8 +941,10 @@ class Simulation(object):
 					spectrum = Spectrum(), #Spectrum object associated with this simulation
 					source = Source(), #Source object associated with this simulation
 					continuum = Continuum(), #Continuum object associated with this sim
-					limits = [np.float('-inf'),np.float('inf')], #limits
+					ll = [np.float('-inf')], #lower limits
+					ul = [np.float('-inf')], #lower limits
 					line_profile = None, #simulate a line profile or not
+					sim_width = 10, #fwhms to simulate +/- line center
 					res = 10., #resolution if simulating line profiles [kHz]
 					mol = None, #Molecule object associated with this simulation
 					notes = None, #notes
@@ -945,8 +954,10 @@ class Simulation(object):
 		self.spectrum = spectrum
 		self.source = source
 		self.continuum = continuum
-		self.limits = limits
+		self.ll = ll
+		self.ul = ul
 		self.line_profile = line_profile
+		self.sim_width = sim_width
 		self.res = res
 		self.mol = mol
 		self.notes = notes
@@ -960,24 +971,30 @@ class Simulation(object):
 		self._calc_bg()
 		self._calc_Iv()
 		self._calc_Tb()
+		self._make_lines()
 		
 		return	
 	
 	def _set_arrays(self):
-		self.frequency,idxs = _trim_arr(self.mol.catalog.frequency,self.limits,return_idxs=True)
-		self.aij = _trim_arr(self.mol.catalog.aij,self.limits,idxs=idxs)
-		self.gup = _trim_arr(self.mol.catalog.gup,self.limits,idxs=idxs)
-		self.eup = _trim_arr(self.mol.catalog.eup,self.limits,idxs=idxs)
+		if isinstance(self.ll,list) is False:
+			self.ll = [self.ll]
+		if isinstance(self.ul,list) is False:
+			self.ul = [self.ul]			
+		self.frequency,ll_idxs,ul_idxs = _trim_arr(self.mol.catalog.frequency,self.ll,self.ul,return_idxs=True)
+		self.aij = _trim_arr(self.mol.catalog.aij,self.ll,self.ul,ll_idxs=ll_idxs,ul_idxs=ul_idxs)
+		self.gup = _trim_arr(self.mol.catalog.gup,self.ll,self.ul,ll_idxs=ll_idxs,ul_idxs=ul_idxs)
+		self.eup = _trim_arr(self.mol.catalog.eup,self.ll,self.ul,ll_idxs=ll_idxs,ul_idxs=ul_idxs)
 		return
 		
 	def _calc_tau(self):
-		self.spectrum.tau = ((self.aij * cm**3 * 
-					(self.source.column * 100**2) * self.gup *
-					(np.exp(-self.eup/self.source.Tex)) *
-					(np.exp(h*self.frequency*1E6/(k*self.source.Tex))-1))
-					/
-					(8*np.pi*(self.frequency*1E6)**3 *
-					self.source.dV*1000 * self.mol.q(self.source.Tex))
+		self.spectrum.tau = ((self.aij * cm**3 * (self.source.column * 100**2) * 
+								self.gup * (np.exp(-self.eup/self.source.Tex)) *
+							 	(np.exp(h*self.frequency*1E6/(k*self.source.Tex))-1)
+							 )
+							/
+							(8*np.pi*(self.frequency*1E6)**3 *
+								self.source.dV*1000 * self.mol.q(self.source.Tex)
+							)
 					)
 		return
 		
@@ -1009,10 +1026,37 @@ class Simulation(object):
 			  )			  
 		self.spectrum.Tb = (J_T - J_Tbg)*(1 - np.exp(-self.spectrum.tau))
 		return
+		
+	def _make_lines(self):
+		if self.line_profile is None:
+			return
+		if self.line_profile.lower() in ['gaussian','gauss']:
+			lls_raw = self.frequency - self.sim_width*self.source.dV*self.frequency/ckm
+			uls_raw = self.frequency + self.sim_width*self.source.dV*self.frequency/ckm
+			ll_trim = [lls_raw[0]]
+			ul_trim = [uls_raw[0]]
+			for ll,ul in zip(lls_raw[1:],uls_raw[1:]):
+				if ll < ul_trim[-1]:
+					ul_trim[-1] = ul
+				else:
+					ll_trim.append(ll)
+					ul_trim.append(ul)
+			ll_trim = np.array(ll_trim)
+			ul_trim = np.array(ul_trim)		
+			freq_arr = np.concatenate([np.arange(ll,ul,self.res) for ll,ul in zip(ll_trim,ul_trim)])
+			int_arr = np.zeros_like(freq_arr)
+			l_idxs = [find_nearest(freq_arr,x) for x in lls_raw]
+			u_idxs = [find_nearest(freq_arr,x) for x in uls_raw]		
+			for x,y,ll,ul in zip(self.frequency,self.spectrum.Tb,l_idxs,u_idxs):
+				int_arr[ll:ul] += _make_gauss(x,y,freq_arr[ll:ul],self.source.dV,ckm)
+			self.spectrum.int_profile = int_arr
+			self.spectrum.freq_profile = freq_arr
+			return	
 				
 	def update(self):
 		self._set_arrays()
 		self._calc_tau()
 		self._calc_bg()
 		self._calc_Tb()
+		self._make_lines()
 		return	
