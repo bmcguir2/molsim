@@ -1,7 +1,12 @@
 import numpy as np
 from numba import njit
+import math
 from molsim.constants import ccm, cm, ckm, h, k, kcm 
+from molsim.stats import get_rms
+from molsim.utils import _trim_arr, find_nearest
 from scipy.interpolate import interp1d
+from astropy import units
+from astropy.coordinates import SkyCoord
 
 class Workspace(object):
 
@@ -504,8 +509,7 @@ class Molecule(object):
 		
 	def q(self,T):
 		return self.qpart.q(T)
-				
-				
+		 							
 class PartitionFunction(object):		
 		
 	'''
@@ -803,3 +807,212 @@ class PartitionFunction(object):
 		'''	
 		
 		return self.qrot(T)*self.qvib(T)
+		
+class Spectrum(object):
+
+	'''
+	This class stores the information for a single spectrum
+	'''		
+	
+	def __init__(
+					self,
+					frequency = None, #frequency data
+					Tb = None, #intensity in units of [K]
+					Iv = None, #intensity in units of [Jy/beam] or [Jy/sr]
+					Tbg = None, #intensity of background in [K]
+					Ibg = None, #intensity of background in [Jy/beam] or [Jy/sr]
+					tau = None, #optical depths
+					id = None, #a unique ID for this spectrum
+					notes = None, #notes
+				):
+				
+
+		self.id = id
+		self.notes = notes
+		self.ll = np.amin(frequency) if frequency is not None else None
+		self.ul = np.amax(frequency) if frequency is not None else None
+
+		return
+		
+class Source(object):
+
+	'''
+	This class stores the information for a single source of molecules
+	'''		
+	
+	def __init__(
+					self,
+					name = None, #a name
+					coords = None, #an astropy SkyCoord object
+					velocity = None, #lsr velocity [km/s]
+					size = None, #diameter [arcsec]
+					solid_angle = None, #solid angle on the sky; pi*(size/2)^2 [arcsec^2]
+					continuum = None, #a continuum object
+					column = 1.E13, #column density [cm-2]
+					Tex = 300., #float or numpy array of excitation temperatures [K]
+					Tkin = None, #kinetic temperature of source [K]
+					dV = 3., #fwhm [km/s]
+					notes = None, #notes
+				):
+				
+		self.name = name
+		self.coords = coords
+		self.velocity = velocity
+		self.size = size
+		self.solid_angle = solid_angle
+		self.continuum = continuum
+		self.column = column
+		self.Tex = Tex
+		self.Tkin = Tkin
+		self.dV = dV
+		self.notes = notes
+		
+		return			
+
+class Continuum(object):
+
+	'''
+	This class stores the information needed to provide a continuum value at any point
+	'''		
+	
+	def __init__(
+					self,
+					type = 'thermal', #type of continuum to calculate
+					params = [2.7], #necessary parameters
+					freqs = None, #frequencies [MHz] if interpolating between points
+					temps = None, #values [K] if interpolating T between points
+					fluxes = None, #fluxes [Jy/beam] if interpolating Jy between points
+					notes = None, #notes 
+				):
+				
+		self.type = type
+		self.params = params
+		
+		self._check_type()
+		self._fix_params()
+		
+		return
+		
+	def _check_type(self):
+		types = ['thermal','polynomial','poly','interpolation']
+		if self.type not in types:
+			print('WARNING: Unrecognized type ("{}") specified for continuum generation.' \
+			' Will use 2.7 K CMB instead.' .format(self.type))
+			self.params = [2.7]
+		return
+		
+	def _fix_params(self):
+		if isinstance(self.params,int) or isinstance(self.params,float):
+			self.params = [self.params]	
+		
+	def Tbg(self,freq):
+		'''
+		Takes an input frequency numpy array [MHz] and returns a numpy array of brightness
+		temperatures at those frequencies.
+		'''
+		
+		if self.type == 'thermal':
+			return np.full_like(freq,self.params[0])
+				
+	def Ibg(self,freq):			
+		'''
+		Takes an input frequency numpy array [MHz] and returns a numpy array of flux
+		densities [Jy/sr] at those frequencies.
+		'''
+		
+		if self.type == 'thermal':
+			return 2*h*(freq*1E6)**3 / (cm**2 * np.exp(h*freq*1E6/(k*self.params[0])))*1E26
+
+class Simulation(object):
+
+	'''
+	This class stores the information for a single simulation
+	'''		
+	
+	def __init__(
+					self,
+					spectrum = Spectrum(), #Spectrum object associated with this simulation
+					source = Source(), #Source object associated with this simulation
+					continuum = Continuum(), #Continuum object associated with this sim
+					limits = [np.float('-inf'),np.float('inf')], #limits
+					line_profile = None, #simulate a line profile or not
+					res = 10., #resolution if simulating line profiles [kHz]
+					mol = None, #Molecule object associated with this simulation
+					notes = None, #notes
+					
+				):
+				
+		self.spectrum = spectrum
+		self.source = source
+		self.continuum = continuum
+		self.limits = limits
+		self.line_profile = line_profile
+		self.res = res
+		self.mol = mol
+		self.notes = notes
+		self.frequency = None
+		self.aij = None
+		self.gup = None
+		self.eup = None
+		
+		self._set_arrays()
+		self._calc_tau()
+		self._calc_bg()
+		self._calc_Iv()
+		self._calc_Tb()
+		
+		return	
+	
+	def _set_arrays(self):
+		self.frequency,idxs = _trim_arr(self.mol.catalog.frequency,self.limits,return_idxs=True)
+		self.aij = _trim_arr(self.mol.catalog.aij,self.limits,idxs=idxs)
+		self.gup = _trim_arr(self.mol.catalog.gup,self.limits,idxs=idxs)
+		self.eup = _trim_arr(self.mol.catalog.eup,self.limits,idxs=idxs)
+		return
+		
+	def _calc_tau(self):
+		self.spectrum.tau = ((self.aij * cm**3 * 
+					(self.source.column * 100**2) * self.gup *
+					(np.exp(-self.eup/self.source.Tex)) *
+					(np.exp(h*self.frequency*1E6/(k*self.source.Tex))-1))
+					/
+					(8*np.pi*(self.frequency*1E6)**3 *
+					self.source.dV*1000 * self.mol.q(self.source.Tex))
+					)
+		return
+		
+	def _calc_bg(self):
+		self.spectrum.Ibg = self.continuum.Ibg(self.frequency)
+		self.spectrum.Tbg = self.continuum.Tbg(self.frequency)
+		return
+		
+	def _calc_Iv(self):
+		self.spectrum.Iv = ((2*h*self.spectrum.tau*(self.frequency*1E6)**3)/
+							cm**2 * (np.exp(h*self.frequency*1E6 /
+											(k*self.source.Tex)) -1 )
+							)*1E26
+		return
+
+	def _calc_Tb(self):
+		'''
+		Eq. A1 of Turner 1991.  Inline definition of J_T and J_Tbg have a typo - the extra
+		'-1' at the end should be an exponential.  These should be in Planck.
+		'''
+		
+		J_T = ((h*self.frequency*10**6/k)*
+			  (np.exp(((h*self.frequency*10**6)/
+			  (k*self.source.Tex))) -1)**-1
+			  )
+		J_Tbg = ((h*self.frequency*10**6/k)*
+			  (np.exp(((h*self.frequency*10**6)/
+			  (k*self.spectrum.Tbg))) -1)**-1
+			  )			  
+		self.spectrum.Tb = (J_T - J_Tbg)*(1 - np.exp(-self.spectrum.tau))
+		return
+				
+	def update(self):
+		self._set_arrays()
+		self._calc_tau()
+		self._calc_bg()
+		self._calc_Tb()
+		return	
