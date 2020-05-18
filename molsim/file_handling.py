@@ -3,7 +3,7 @@ import re
 from numba import njit
 from molsim.constants import ccm, cm, ckm, h, k, kcm
 from molsim.classes import Workspace, Catalog, Transition, Level, Molecule, PartitionFunction, Continuum, Simulation, Spectrum
-from molsim.utils import _trim_arr, find_nearest
+from molsim.utils import _trim_arr, find_nearest, _make_gauss
 from molsim.stats import get_rms
 import math
 
