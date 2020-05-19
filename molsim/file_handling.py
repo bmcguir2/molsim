@@ -339,7 +339,7 @@ def _make_level_dict(qn1low,qn2low,qn3low,qn4low,qn5low,qn6low,qn7low,qn8low,qn1
 	
 def _make_qnstr(qn1,qn2,qn3,qn4,qn5,qn6,qn7,qn8):
 	qn_list = [qn1,qn2,qn3,qn4,qn5,qn6,qn7,qn8]
-	tmp_list = [str(x) for x in qn_list if x != None]
+	tmp_list = [str(x).zfill(2) for x in qn_list if x != None]
 	return ''.join(tmp_list)		
 
 def load_mol(filein,type='molsim',catdict=None,id=None,name=None,formula=None,
