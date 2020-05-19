@@ -832,8 +832,10 @@ class Spectrum(object):
 		self.Tbg = Tbg
 		self.Ibg = Ibg
 		self.tau = tau
+		self.tau_profile = None
 		self.freq_profile = None
 		self.int_profile = None
+		self.Tbg_profile = None
 		self.id = id
 		self.notes = notes
 		self.ll = np.amin(frequency) if frequency is not None else None
@@ -970,7 +972,7 @@ class Simulation(object):
 		self._calc_tau()
 		self._calc_bg()
 		self._calc_Iv()
-		self._calc_Tb()
+		self.spectrum.Tb = self._calc_Tb(self.frequency,self.spectrum.tau,self.spectrum.Tbg)
 		self._make_lines()
 		
 		return	
@@ -1010,22 +1012,21 @@ class Simulation(object):
 							)*1E26
 		return
 
-	def _calc_Tb(self):
+	def _calc_Tb(self,freq,tau,Tbg):
 		'''
 		Eq. A1 of Turner 1991.  Inline definition of J_T and J_Tbg have a typo - the extra
 		'-1' at the end should be an exponential.  These should be in Planck.
 		'''
 		
-		J_T = ((h*self.frequency*10**6/k)*
-			  (np.exp(((h*self.frequency*10**6)/
+		J_T = ((h*freq*10**6/k)*
+			  (np.exp(((h*freq*10**6)/
 			  (k*self.source.Tex))) -1)**-1
 			  )
-		J_Tbg = ((h*self.frequency*10**6/k)*
-			  (np.exp(((h*self.frequency*10**6)/
-			  (k*self.spectrum.Tbg))) -1)**-1
+		J_Tbg = ((h*freq*10**6/k)*
+			  (np.exp(((h*freq*10**6)/
+			  (k*Tbg))) -1)**-1
 			  )			  
-		self.spectrum.Tb = (J_T - J_Tbg)*(1 - np.exp(-self.spectrum.tau))
-		return
+		return (J_T - J_Tbg)*(1 - np.exp(-tau))
 		
 	def _make_lines(self):
 		if self.line_profile is None:
@@ -1044,19 +1045,21 @@ class Simulation(object):
 			ll_trim = np.array(ll_trim)
 			ul_trim = np.array(ul_trim)		
 			freq_arr = np.concatenate([np.arange(ll,ul,self.res) for ll,ul in zip(ll_trim,ul_trim)])
-			int_arr = np.zeros_like(freq_arr)
+			tau_arr = np.zeros_like(freq_arr)
 			l_idxs = [find_nearest(freq_arr,x) for x in lls_raw]
 			u_idxs = [find_nearest(freq_arr,x) for x in uls_raw]		
-			for x,y,ll,ul in zip(self.frequency,self.spectrum.Tb,l_idxs,u_idxs):
-				int_arr[ll:ul] += _make_gauss(x,y,freq_arr[ll:ul],self.source.dV,ckm)
-			self.spectrum.int_profile = int_arr
+			for x,y,ll,ul in zip(self.frequency,self.spectrum.tau,l_idxs,u_idxs):
+				tau_arr[ll:ul] += _make_gauss(x,y,freq_arr[ll:ul],self.source.dV,ckm)
+			self.spectrum.tau_profile = tau_arr
 			self.spectrum.freq_profile = freq_arr
+			self.spectrum.Tbg_profile = self.continuum.Tbg(freq_arr)
+			self.spectrum.int_profile = self._calc_Tb(freq_arr,tau_arr,self.spectrum.Tbg_profile)
 			return	
 				
 	def update(self):
 		self._set_arrays()
 		self._calc_tau()
 		self._calc_bg()
-		self._calc_Tb()
+		self.spectrum.Tb = self._calc_Tb(self.frequency,self.spectrum.tau,self.spectrum.Tbg)
 		self._make_lines()
 		return	
