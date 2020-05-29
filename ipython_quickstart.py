@@ -2,11 +2,10 @@ import sys
 sys.path.insert(0, '/Users/Brett/Dropbox/Programs')
 
 import numpy as np
-from molsim import file_handling as fh
 from molsim.file_handling import load_mol
 from molsim.constants import ccm, cm, ckm, h, k, kcm
 from pkg_resources import resource_filename
-from molsim.classes import Workspace, Catalog, Transition, Level, Molecule, PartitionFunction, Spectrum, Simulation, Continuum, Source
+from molsim.classes import Workspace, Catalog, Transition, Level, Molecule, PartitionFunction, Spectrum, Simulation, Continuum, Source, Observatory
 from molsim.stats import get_rms
 from molsim.utils import _trim_arr, find_nearest, _make_gauss
 import matplotlib.pyplot as plt

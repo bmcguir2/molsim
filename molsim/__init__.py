@@ -1,12 +1,14 @@
 '''
-This module fourier transforms a sky brightness image and then interpolates to arbitrary uv points
+A program for simulating observations of molecular rotational spectra
 '''
 __author__ = 'Brett A. McGuire'
 __version__ = '0.1.0'
-__email__ = 'bmcguire@nrao.edu'
+__email__ = 'brettmc@mit.edu'
 __status__ = 'Development'
 
 
 from . import file_handling
+from . import file_io
 from . import constants
 from . import classes
+from . import stats
