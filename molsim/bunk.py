@@ -5,7 +5,6 @@ from molsim.constants import ccm, cm, ckm, h, k, kcm
 from molsim.classes import Workspace, Catalog, Transition, Level, Molecule, PartitionFunction, Continuum, Simulation, Spectrum
 from molsim.utils import _trim_arr, find_nearest, _make_gauss
 from molsim.stats import get_rms
-from molsim.file_io import _read_txt, _read_xy
 import math
 
 

@@ -4,9 +4,11 @@ import math
 from molsim.constants import ccm, cm, ckm, h, k, kcm 
 from molsim.stats import get_rms
 from molsim.utils import _trim_arr, find_nearest, _make_gauss
+from molsim.file_io import _read_txt, _read_xy
 from scipy.interpolate import interp1d
 from astropy import units
-from astropy.coordinates import SkyCoord
+from astropy.coordinates import SkyCoord, EarthLocation
+import astropy.units as u
 
 class Workspace(object):
 
@@ -632,6 +634,7 @@ class PartitionFunction(object):
 	
 	def __init__(
 					self,
+					qpart_file = None, #a file that holds this info externally
 					form = None, #the functional form of the partition function
 					params = None, #the parameters for that functional form
 					temps = None, #a temperature array if we're going to interpolate [K]
@@ -645,7 +648,8 @@ class PartitionFunction(object):
 					vib_is_K = False, #set to true if your vibstates are in Kelvin
 					notes = None, #a way to add notes
 				):
-				
+		
+		self.qpart_file = qpart_file		
 		self.form = form
 		self.params = params
 		self.temps = temps
@@ -659,10 +663,34 @@ class PartitionFunction(object):
 		self.notes = notes
 		self.flag = None
 
-		self._initialize_flag()
+		self._setup()
 		self._check_functional()
 		
 		return				
+		
+	def _setup(self):
+		if self.qpart_file is None:
+			self._initialize_flag()
+		else:
+			qpart_raw = _read_txt(self.qpart_file)
+			for line in qpart_raw:
+				if '#' in line:
+					linesplit = line.split(':')
+					if 'form' in linesplit[0]:
+						self.form = linesplit[1].strip()
+						self.flag = linesplit[1].strip()
+			if self.form == 'interpolation':
+				t_arr = []
+				q_arr = []
+				for line in qpart_raw:
+					if '#' not in line:
+						t_arr.append(float(line.split()[0]))
+						q_arr.append(float(line.split()[1].strip()))
+				self.temps = np.array(t_arr)
+				self.vals = np.array(q_arr)
+		return
+					
+			
 		
 	def _initialize_flag(self):
 	
@@ -783,7 +811,7 @@ class PartitionFunction(object):
 				energies = np.array([level.energy for level in self.mol.levels])
 			else:
 				gs = self.gs
-				energies = self.energies	
+				energies = self.energies
 			return (1/self.sigma)*np.sum(gs*np.exp(-energies/T))
 	
 	def qvib(self,T):
@@ -878,6 +906,44 @@ class Source(object):
 		
 		return			
 
+class Observatory(object):
+
+	'''
+	This class stores the information for a single Observatory
+	'''		
+	
+	def __init__(
+					self,
+					name = None, #telescope name, str
+					id = None, #unique ID
+					sd = True, #is it a single dish?
+					array = False, #is it an array?
+					dish = 100, #dish size in meters if single dish
+					synth_beam = [1,1], #synthesized beam bmaj,bmin in arcseconds
+					loc = None, #astropy EarthLocation object 
+					eta = None, #numpy array of aperture efficiency
+					eta_type = 'constant', #how to calculate eta
+					eta_params = [1], #parameters for calculating eta
+					atmo = None, #numpy array of atmospheric transmission in percent
+				):
+				
+		self.name = name
+		self.id = id
+		self.sd = sd
+		self.array = array
+		self.dish = dish
+		self.synth_beam = synth_beam
+		self.loc = loc
+		self.eta = eta
+		self.eta_type = eta_type
+		self.eta_params = eta_params
+		self.atmo = atmo
+		
+		return
+		
+	def get_beam(self,freq):
+		return 	206265 * 1.22 * ((freq*u.MHz).to(u.m, equivalencies=u.spectral()).value) / self.dish		
+
 class Continuum(object):
 
 	'''
@@ -943,6 +1009,7 @@ class Simulation(object):
 					spectrum = Spectrum(), #Spectrum object associated with this simulation
 					source = Source(), #Source object associated with this simulation
 					continuum = Continuum(), #Continuum object associated with this sim
+					observatory = Observatory(), #Observatory object associated with this sim
 					ll = [np.float('-inf')], #lower limits
 					ul = [np.float('-inf')], #lower limits
 					line_profile = None, #simulate a line profile or not
@@ -950,12 +1017,12 @@ class Simulation(object):
 					res = 10., #resolution if simulating line profiles [kHz]
 					mol = None, #Molecule object associated with this simulation
 					notes = None, #notes
-					
 				):
 				
 		self.spectrum = spectrum
 		self.source = source
 		self.continuum = continuum
+		self.observatory = observatory
 		self.ll = ll
 		self.ul = ul
 		self.line_profile = line_profile
@@ -963,6 +1030,8 @@ class Simulation(object):
 		self.res = res
 		self.mol = mol
 		self.notes = notes
+		self.beam_size = None
+		self.beam_dilution = None
 		self.frequency = None
 		self.aij = None
 		self.gup = None
@@ -973,6 +1042,7 @@ class Simulation(object):
 		self._calc_bg()
 		self._calc_Iv()
 		self.spectrum.Tb = self._calc_Tb(self.frequency,self.spectrum.tau,self.spectrum.Tbg)
+		self._apply_beam()
 		self._make_lines()
 		
 		return	
@@ -1028,6 +1098,12 @@ class Simulation(object):
 			  )			  
 		return (J_T - J_Tbg)*(1 - np.exp(-tau))
 		
+	def _apply_beam(self):
+		if self.observatory.sd is True:
+			self.beam_size = 206265 * 1.22 * ((self.frequency*u.MHz).to(u.m, equivalencies=u.spectral()).value) / self.observatory.dish
+			self.beam_dilution = self.source.size**2 / (self.beam_size**2 + self.source.size**2)	
+		return	
+		
 	def _make_lines(self):
 		if self.line_profile is None:
 			return
@@ -1054,12 +1130,17 @@ class Simulation(object):
 			self.spectrum.freq_profile = freq_arr
 			self.spectrum.Tbg_profile = self.continuum.Tbg(freq_arr)
 			self.spectrum.int_profile = self._calc_Tb(freq_arr,tau_arr,self.spectrum.Tbg_profile)
-			return	
+			return
+			
+	def get_beam(self,freq):
+		return 	206265 * 1.22 * ((freq*u.MHz).to(u.m, equivalencies=u.spectral()).value) / self.observatory.dish		
 				
 	def update(self):
 		self._set_arrays()
 		self._calc_tau()
 		self._calc_bg()
 		self.spectrum.Tb = self._calc_Tb(self.frequency,self.spectrum.tau,self.spectrum.Tbg)
+		self._apply_beam()
 		self._make_lines()
-		return	
+		return
+		
