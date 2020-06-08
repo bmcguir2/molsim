@@ -1029,7 +1029,6 @@ class Observation(object):
 		return		
 
 class Simulation(object):
-
 	'''
 	This class stores the information for a single simulation
 	'''		
@@ -1068,8 +1067,8 @@ class Simulation(object):
 		self._calc_bg()
 		self._calc_Iv()
 		self.spectrum.Tb = self._calc_Tb(self.frequency,self.spectrum.tau,self.spectrum.Tbg)
-		self._apply_beam()
 		self._make_lines()
+		self._apply_beam()
 		
 		return	
 	
@@ -1127,7 +1126,11 @@ class Simulation(object):
 	def _apply_beam(self):
 		if self.observation.observatory.sd is True:
 			self.beam_size = 206265 * 1.22 * ((self.frequency*u.MHz).to(u.m, equivalencies=u.spectral()).value) / self.observation.observatory.dish
-			self.beam_dilution = self.observation.source.size**2 / (self.beam_size**2 + self.observation.source.size**2)	
+			tb_beam_dilution = self.observation.source.size**2 / (self.beam_size**2 + self.observation.source.size**2)
+			self.beam_dilution = tb_beam_dilution
+			self.spectrum.Tb *= tb_beam_dilution
+			profile_beam_size = 206265 * 1.22 * ((self.spectrum.freq_profile*u.MHz).to(u.m, equivalencies=u.spectral()).value) / self.observation.observatory.dish			
+			self.spectrum.int_profile *= self.observation.source.size**2 / (profile_beam_size**2 + self.observation.source.size**2)	
 		return	
 		
 	def _make_lines(self):
@@ -1166,7 +1169,8 @@ class Simulation(object):
 		self._calc_tau()
 		self._calc_bg()
 		self.spectrum.Tb = self._calc_Tb(self.frequency,self.spectrum.tau,self.spectrum.Tbg)
-		self._apply_beam()
 		self._make_lines()
+		self._apply_beam()
 		return
+
 

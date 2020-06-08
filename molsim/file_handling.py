@@ -5,7 +5,7 @@ from molsim.constants import ccm, cm, ckm, h, k, kcm
 from molsim.classes import Workspace, Catalog, Transition, Level, Molecule, PartitionFunction, Continuum, Simulation, Spectrum, Observation
 from molsim.utils import _trim_arr, find_nearest, _make_gauss, _make_qnstr, _make_level_dict
 from molsim.stats import get_rms
-from molsim.file_io import _read_txt, _read_xy
+from molsim.file_io import _read_txt, _read_xy, _write_xy
 import math
 
 
@@ -252,17 +252,17 @@ def _load_catalog(filein,type='SPCAT',catdict=None):
 	function, so use cautiously.
 	'''
 
-	if type == 'molsim':
+	if type.lower() == 'molsim':
 		npz_dict = np.load(filein,allow_pickle=True)	
 		new_dict = {}
 		for x in npz_dict:
 			new_dict[x] = npz_dict[x]
 
-	elif type == 'SPCAT':
+	elif type.lower() == 'spcat':
 		new_dict = _read_spcat(filein) #read in the catalog file and produce the
 									   #dictionary
 				
-	elif type == 'freq_int':
+	elif type.lower() == 'freq_int':
 		freq_tmp,int_tmp = 	_read_xy(filein) #read in a frequency intensity 
 												   #delimited file
 		new_dict = {}

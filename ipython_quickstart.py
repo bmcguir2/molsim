@@ -3,6 +3,7 @@ sys.path.insert(0, '/Users/Brett/Dropbox/Programs')
 
 import numpy as np
 from molsim.file_handling import load_mol, load_obs
+from molsim.file_io import _write_xy
 from molsim.constants import ccm, cm, ckm, h, k, kcm
 from pkg_resources import resource_filename
 from molsim.classes import Workspace, Catalog, Transition, Level, Molecule, PartitionFunction, Spectrum, Simulation, Continuum, Source, Observatory, Observation
