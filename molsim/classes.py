@@ -871,79 +871,6 @@ class Spectrum(object):
 
 		return
 		
-class Source(object):
-
-	'''
-	This class stores the information for a single source of molecules
-	'''		
-	
-	def __init__(
-					self,
-					name = None, #a name
-					coords = None, #an astropy SkyCoord object
-					velocity = None, #lsr velocity [km/s]
-					size = None, #diameter [arcsec]
-					solid_angle = None, #solid angle on the sky; pi*(size/2)^2 [arcsec^2]
-					continuum = None, #a continuum object
-					column = 1.E13, #column density [cm-2]
-					Tex = 300., #float or numpy array of excitation temperatures [K]
-					Tkin = None, #kinetic temperature of source [K]
-					dV = 3., #fwhm [km/s]
-					notes = None, #notes
-				):
-				
-		self.name = name
-		self.coords = coords
-		self.velocity = velocity
-		self.size = size
-		self.solid_angle = solid_angle
-		self.continuum = continuum
-		self.column = column
-		self.Tex = Tex
-		self.Tkin = Tkin
-		self.dV = dV
-		self.notes = notes
-		
-		return			
-
-class Observatory(object):
-
-	'''
-	This class stores the information for a single Observatory
-	'''		
-	
-	def __init__(
-					self,
-					name = None, #telescope name, str
-					id = None, #unique ID
-					sd = True, #is it a single dish?
-					array = False, #is it an array?
-					dish = 100, #dish size in meters if single dish
-					synth_beam = [1,1], #synthesized beam bmaj,bmin in arcseconds
-					loc = None, #astropy EarthLocation object 
-					eta = None, #numpy array of aperture efficiency
-					eta_type = 'constant', #how to calculate eta
-					eta_params = [1], #parameters for calculating eta
-					atmo = None, #numpy array of atmospheric transmission in percent
-				):
-				
-		self.name = name
-		self.id = id
-		self.sd = sd
-		self.array = array
-		self.dish = dish
-		self.synth_beam = synth_beam
-		self.loc = loc
-		self.eta = eta
-		self.eta_type = eta_type
-		self.eta_params = eta_params
-		self.atmo = atmo
-		
-		return
-		
-	def get_beam(self,freq):
-		return 	206265 * 1.22 * ((freq*u.MHz).to(u.m, equivalencies=u.spectral()).value) / self.dish		
-
 class Continuum(object):
 
 	'''
@@ -952,6 +879,7 @@ class Continuum(object):
 	
 	def __init__(
 					self,
+					cont_file = None, #a cont file to read parameters from
 					type = 'thermal', #type of continuum to calculate
 					params = [2.7], #necessary parameters
 					freqs = None, #frequencies [MHz] if interpolating between points
@@ -960,8 +888,13 @@ class Continuum(object):
 					notes = None, #notes 
 				):
 				
+		self.cont_file = cont_file		
 		self.type = type
 		self.params = params
+		self.freqs = freqs
+		self.temps = temps
+		self.fluxes = fluxes
+		self.notes = notes
 		
 		self._check_type()
 		self._fix_params()
@@ -996,7 +929,104 @@ class Continuum(object):
 		'''
 		
 		if self.type == 'thermal':
-			return 2*h*(freq*1E6)**3 / (cm**2 * np.exp(h*freq*1E6/(k*self.params[0])))*1E26
+			return 2*h*(freq*1E6)**3 / (cm**2 * np.exp(h*freq*1E6/(k*self.params[0])))*1E26		
+
+class Source(object):
+
+	'''
+	This class stores the information for a single source of molecules
+	'''		
+	
+	def __init__(
+					self,
+					name = None, #a name
+					coords = None, #an astropy SkyCoord object
+					velocity = 0., #lsr velocity [km/s]
+					size = 1E20, #diameter [arcsec]
+					solid_angle = None, #solid angle on the sky; pi*(size/2)^2 [arcsec^2]
+					continuum = Continuum(), #a continuum object
+					column = 1.E13, #column density [cm-2]
+					Tex = 300., #float or numpy array of excitation temperatures [K]
+					Tkin = None, #kinetic temperature of source [K]
+					dV = 3., #fwhm [km/s]
+					notes = None, #notes
+				):
+				
+		self.name = name
+		self.coords = coords
+		self.velocity = velocity
+		self.size = size
+		self.solid_angle = solid_angle
+		self.continuum = continuum
+		self.column = column
+		self.Tex = Tex
+		self.Tkin = Tkin
+		self.dV = dV
+		self.notes = notes
+		
+		return			
+
+class Observatory(object):
+
+	'''
+	This class stores the information for a single Observatory
+	'''		
+	
+	def __init__(
+					self,
+					name = None, #telescope name, str
+					id = None, #unique ID
+					sd = True, #is it a single dish?
+					array = False, #is it an array?
+					dish = 100., #dish size in meters if single dish
+					synth_beam = [1.,1.], #synthesized beam bmaj,bmin in arcseconds
+					loc = None, #astropy EarthLocation object 
+					eta = None, #numpy array of aperture efficiency
+					eta_type = 'constant', #how to calculate eta
+					eta_params = [1.], #parameters for calculating eta
+					atmo = None, #numpy array of atmospheric transmission in percent
+				):
+				
+		self.name = name
+		self.id = id
+		self.sd = sd
+		self.array = array
+		self.dish = dish
+		self.synth_beam = synth_beam
+		self.loc = loc
+		self.eta = eta
+		self.eta_type = eta_type
+		self.eta_params = eta_params
+		self.atmo = atmo
+		
+		return
+		
+	def get_beam(self,freq):
+		return 	206265 * 1.22 * ((freq*u.MHz).to(u.m, equivalencies=u.spectral()).value) / self.dish		
+
+class Observation(object):
+
+	'''
+	This class stores the information for a observation
+	'''		
+	
+	def __init__(
+					self,
+					spectrum = Spectrum(), #a spectrum object for this observation
+					source = Source(), #a source object for this observation
+					observatory = Observatory(), #an observatory object for this observation
+					id = None, #a unique ID for this observation
+					notes = None, #notes
+				):
+				
+		self.spectrum = spectrum
+		self.source = source
+		self.observatory = observatory
+		self.id = id
+		self.notes = notes
+
+
+		return		
 
 class Simulation(object):
 
@@ -1007,9 +1037,7 @@ class Simulation(object):
 	def __init__(
 					self,
 					spectrum = Spectrum(), #Spectrum object associated with this simulation
-					source = Source(), #Source object associated with this simulation
-					continuum = Continuum(), #Continuum object associated with this sim
-					observatory = Observatory(), #Observatory object associated with this sim
+					observation = Observation(), #Observation object associated with this simulation
 					ll = [np.float('-inf')], #lower limits
 					ul = [np.float('-inf')], #lower limits
 					line_profile = None, #simulate a line profile or not
@@ -1020,9 +1048,7 @@ class Simulation(object):
 				):
 				
 		self.spectrum = spectrum
-		self.source = source
-		self.continuum = continuum
-		self.observatory = observatory
+		self.observation = observation
 		self.ll = ll
 		self.ul = ul
 		self.line_profile = line_profile
@@ -1059,26 +1085,26 @@ class Simulation(object):
 		return
 		
 	def _calc_tau(self):
-		self.spectrum.tau = ((self.aij * cm**3 * (self.source.column * 100**2) * 
-								self.gup * (np.exp(-self.eup/self.source.Tex)) *
-							 	(np.exp(h*self.frequency*1E6/(k*self.source.Tex))-1)
+		self.spectrum.tau = ((self.aij * cm**3 * (self.observation.source.column * 100**2) * 
+								self.gup * (np.exp(-self.eup/self.observation.source.Tex)) *
+							 	(np.exp(h*self.frequency*1E6/(k*self.observation.source.Tex))-1)
 							 )
 							/
 							(8*np.pi*(self.frequency*1E6)**3 *
-								self.source.dV*1000 * self.mol.q(self.source.Tex)
+								self.observation.source.dV*1000 * self.mol.q(self.observation.source.Tex)
 							)
 					)
 		return
 		
 	def _calc_bg(self):
-		self.spectrum.Ibg = self.continuum.Ibg(self.frequency)
-		self.spectrum.Tbg = self.continuum.Tbg(self.frequency)
+		self.spectrum.Ibg = self.observation.source.continuum.Ibg(self.frequency)
+		self.spectrum.Tbg = self.observation.source.continuum.Tbg(self.frequency)
 		return
 		
 	def _calc_Iv(self):
 		self.spectrum.Iv = ((2*h*self.spectrum.tau*(self.frequency*1E6)**3)/
 							cm**2 * (np.exp(h*self.frequency*1E6 /
-											(k*self.source.Tex)) -1 )
+											(k*self.observation.source.Tex)) -1 )
 							)*1E26
 		return
 
@@ -1090,7 +1116,7 @@ class Simulation(object):
 		
 		J_T = ((h*freq*10**6/k)*
 			  (np.exp(((h*freq*10**6)/
-			  (k*self.source.Tex))) -1)**-1
+			  (k*self.observation.source.Tex))) -1)**-1
 			  )
 		J_Tbg = ((h*freq*10**6/k)*
 			  (np.exp(((h*freq*10**6)/
@@ -1099,17 +1125,17 @@ class Simulation(object):
 		return (J_T - J_Tbg)*(1 - np.exp(-tau))
 		
 	def _apply_beam(self):
-		if self.observatory.sd is True:
-			self.beam_size = 206265 * 1.22 * ((self.frequency*u.MHz).to(u.m, equivalencies=u.spectral()).value) / self.observatory.dish
-			self.beam_dilution = self.source.size**2 / (self.beam_size**2 + self.source.size**2)	
+		if self.observation.observatory.sd is True:
+			self.beam_size = 206265 * 1.22 * ((self.frequency*u.MHz).to(u.m, equivalencies=u.spectral()).value) / self.observation.observatory.dish
+			self.beam_dilution = self.observation.source.size**2 / (self.beam_size**2 + self.observation.source.size**2)	
 		return	
 		
 	def _make_lines(self):
 		if self.line_profile is None:
 			return
 		if self.line_profile.lower() in ['gaussian','gauss']:
-			lls_raw = self.frequency - self.sim_width*self.source.dV*self.frequency/ckm
-			uls_raw = self.frequency + self.sim_width*self.source.dV*self.frequency/ckm
+			lls_raw = self.frequency - self.sim_width*self.observation.source.dV*self.frequency/ckm
+			uls_raw = self.frequency + self.sim_width*self.observation.source.dV*self.frequency/ckm
 			ll_trim = [lls_raw[0]]
 			ul_trim = [uls_raw[0]]
 			for ll,ul in zip(lls_raw[1:],uls_raw[1:]):
@@ -1125,15 +1151,15 @@ class Simulation(object):
 			l_idxs = [find_nearest(freq_arr,x) for x in lls_raw]
 			u_idxs = [find_nearest(freq_arr,x) for x in uls_raw]		
 			for x,y,ll,ul in zip(self.frequency,self.spectrum.tau,l_idxs,u_idxs):
-				tau_arr[ll:ul] += _make_gauss(x,y,freq_arr[ll:ul],self.source.dV,ckm)
+				tau_arr[ll:ul] += _make_gauss(x,y,freq_arr[ll:ul],self.observation.source.dV,ckm)
 			self.spectrum.tau_profile = tau_arr
 			self.spectrum.freq_profile = freq_arr
-			self.spectrum.Tbg_profile = self.continuum.Tbg(freq_arr)
+			self.spectrum.Tbg_profile = self.observation.source.continuum.Tbg(freq_arr)
 			self.spectrum.int_profile = self._calc_Tb(freq_arr,tau_arr,self.spectrum.Tbg_profile)
 			return
 			
 	def get_beam(self,freq):
-		return 	206265 * 1.22 * ((freq*u.MHz).to(u.m, equivalencies=u.spectral()).value) / self.observatory.dish		
+		return 	206265 * 1.22 * ((freq*u.MHz).to(u.m, equivalencies=u.spectral()).value) / self.observation.observatory.dish		
 				
 	def update(self):
 		self._set_arrays()
@@ -1143,4 +1169,4 @@ class Simulation(object):
 		self._apply_beam()
 		self._make_lines()
 		return
-		
+
