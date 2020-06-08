@@ -2,8 +2,8 @@ import numpy as np
 import re
 from numba import njit
 from molsim.constants import ccm, cm, ckm, h, k, kcm
-from molsim.classes import Workspace, Catalog, Transition, Level, Molecule, PartitionFunction, Continuum, Simulation, Spectrum
-from molsim.utils import _trim_arr, find_nearest, _make_gauss
+from molsim.classes import Workspace, Catalog, Transition, Level, Molecule, PartitionFunction, Continuum, Simulation, Spectrum, Observation
+from molsim.utils import _trim_arr, find_nearest, _make_gauss, _make_qnstr, _make_level_dict
 from molsim.stats import get_rms
 from molsim.file_io import _read_txt, _read_xy
 import math
@@ -277,74 +277,6 @@ def _load_catalog(filein,type='SPCAT',catdict=None):
 	
 	return cat
 			
-def _make_level_dict(qn1low,qn2low,qn3low,qn4low,qn5low,qn6low,qn7low,qn8low,qn1up,qn2up,
-					qn3up,qn4up,qn5up,qn6up,qn7up,qn8up,frequency,elow,gup,
-					qn_list_low,qn_list_up,level_qns,level_dict,qnstrfmt=None):
-
-	#a list to hold levels
-	levels = []
-	
-	#we need to sort out unique levels from our catalog.  Those will have unique quantum
-	#numbers. When we find a match to a lower level, add the info in.
-	for x in range(len(frequency)):
-		qnstr_low = qn_list_low[x]
-		level_dict[qnstr_low] = {'energy'	:	elow[x],
-								 'g'		:	None,
-								 'g_flag'	:	False,
-								 'qn1'		:	qn1low[x] if qn1low is not None else None,
-								 'qn2'		:	qn2low[x] if qn2low is not None else None,
-								 'qn3'		:	qn3low[x] if qn3low is not None else None,
-								 'qn4'		:	qn4low[x] if qn4low is not None else None,
-								 'qn5'		:	qn5low[x] if qn5low is not None else None,
-								 'qn6'		:	qn6low[x] if qn6low is not None else None,
-								 'qn7'		:	qn7low[x] if qn7low is not None else None,
-								 'qn8'		:	qn8low[x] if qn8low is not None else None,
-								 'id'		:	qn_list_low[x],
-								 'qnstrfmt'	:	qnstrfmt,			
-								}
-	
-	#do it again to fill in energy levels that were upper states and didn't get hit
-	for x in range(len(frequency)):
-		qnstr_up = qn_list_up[x]
-		if level_dict[qnstr_up] is None:
-			#calculate the energy.  Move the transition from MHz -> cm-1 -> K
-			freq_cm = (frequency[x]*1E6/ccm)
-			freq_K = freq_cm / kcm
-			level_dict[qnstr_up] = {'energy'	:	elow[x] + freq_K,
-									 'g'		:	gup[x],
-									 'g_flag'	:	False,
-									 'qn1'		:	qn1up[x] if qn1up is not None else None,
-									 'qn2'		:	qn2up[x] if qn2up is not None else None,
-									 'qn3'		:	qn3up[x] if qn3up is not None else None,
-									 'qn4'		:	qn4up[x] if qn4up is not None else None,
-									 'qn5'		:	qn5up[x] if qn5up is not None else None,
-									 'qn6'		:	qn6up[x] if qn6up is not None else None,
-									 'qn7'		:	qn7up[x] if qn7up is not None else None,
-									 'qn8'		:	qn8up[x] if qn8up is not None else None,
-									 'id'		:	qn_list_up[x],
-									 'qnstrfmt'	:	qnstrfmt,			
-									}			
-	
-	#go grab the degeneracies	
-	for x in range(len(frequency)):	
-		qnstr_up = qn_list_up[x]
-		if level_dict[qnstr_up]['g'] is None:
-			level_dict[qnstr_up]['g'] = gup[x]
-			
-	#now go through and fill any degeneracies that didn't get hit (probably ground states)
-	#assume it's just 2J+1.  Set the flag for a calculated degeneracy to True.
-	for x in level_dict:
-		if level_dict[x]['g'] is None:
-			level_dict[x]['g'] = 2*level_dict[x]['qn1'] + 1	
-			level_dict[x]['g_flag'] = True	
-
-	return level_dict
-	
-def _make_qnstr(qn1,qn2,qn3,qn4,qn5,qn6,qn7,qn8):
-	qn_list = [qn1,qn2,qn3,qn4,qn5,qn6,qn7,qn8]
-	tmp_list = [str(x).zfill(2) for x in qn_list if x != None]
-	return ''.join(tmp_list)		
-
 def load_mol(filein,type='molsim',catdict=None,id=None,name=None,formula=None,
 				elements=None,mass=None,A=None,B=None,C=None,muA=None,muB=None,
 				muC=None,mu=None,Q=None,qnstrfmt=None,partition_dict=None,
@@ -451,19 +383,15 @@ def load_mol(filein,type='molsim',catdict=None,id=None,name=None,formula=None,
 	
 	#make a partition function object and assign it to the molecule
 	#if there's no other info, assume we're state counting
-	if partition_dict is None and qpart_file is None:
+	if partition_dict is None:
 		partition_dict = {}
 		partition_dict['mol'] = mol
 	#if there's a qpart file specified, read that in	
-	elif qpart_file is not None:
-		temps,vals = _read_xy(qpart_file)
-		if partition_dict is None:
-			partition_dict = {}
-		partition_dict['temps'] = temps
-		partition_dict['vals'] = vals		
-		partition_dict['notes'] = 'Loaded values from {}' .format(qpart_file)	
+	if qpart_file is not None:
+		partition_dict['qpart_file'] = qpart_file
 	#make the partition function object and assign it	
 	mol.qpart = PartitionFunction(	
+				qpart_file = partition_dict['qpart_file'] if 'qpart_file' in partition_dict else None,
 				form = partition_dict['form'] if 'form' in partition_dict else None,
 				params = partition_dict['params'] if 'params' in partition_dict else None,
 				temps = partition_dict['temps'] if 'temps' in partition_dict else None,
@@ -481,3 +409,76 @@ def load_mol(filein,type='molsim',catdict=None,id=None,name=None,formula=None,
 	mol.catalog._set_sijmu_aij(mol.qpart)						
 	
 	return	mol	
+	
+def load_obs(filein=None,xunits='MHz',yunits='K',id=None,notes=None,spectrum_id=None,spectrum_notes=None,source_dict=None,continuum_dict=None,observatory_dict=None):
+	
+	'''
+	Reads in an observations file and initializes an observation object with the given attributes.
+	'''
+	
+	#initialize an Observation object
+	obs = Observation()
+	
+	#read in the data if there is any
+	if filein is not None:
+		x,y = _read_xy(filein)
+		if xunits == 'GHz':
+			x*=1000
+			xunits = 'MHz'
+		obs.spectrum.frequency = x
+		if yunits == 'K':
+			obs.spectrum.Tb = y
+		elif yunits.lower() == 'jy/beam':
+			obs.spectrum.Iv = y
+	
+	if id is not None:
+		obs.id = id
+	if spectrum_id is not None:
+		obs.spectrum.id = spectrum_id
+	if notes is not None:
+		obs.notes = notes
+	if spectrum_notes is not None:
+		obs.spectrum.notes = spectrum_notes
+		
+	if source_dict is not None:
+		obs.source = Source(
+								name = source_dict['name'] if 'name' in source_dict else None,
+								coords = source_dict['coords'] if 'coords' in source_dict else None,
+								velocity = source_dict['velocity'] if 'velocity' in source_dict else 0.,
+								size = source_dict['size'] if 'size' in source_dict else 1E20,
+								solid_angle = source_dict['solid_angle'] if 'solid_angle' in source_dict else None,
+								column = source_dict['column'] if 'column' in source_dict else 1.E13,
+								Tex = source_dict['Tex'] if 'Tex' in source_dict else 300,
+								Tkin = source_dict['Tkin'] if 'Tkin' in source_dict else None,
+								dV = source_dict['dV'] if 'dV' in source_dict else 3.,
+								notes = source_dict['notes'] if 'notes' in source_dict else None,	
+							)
+							
+	if continuum_dict is not None:
+		obs.source.continuum = Continuum(
+											cont_file = continuum_dict['cont_file'] if 'cont_file' in continuum_dict else None,
+											type = continuum_dict['type'] if 'type' in continuum_dict else 'thermal',
+											params = continuum_dict['params'] if 'params' in continuum_dict else [2.7],
+											freqs = continuum_dict['freqs'] if 'freqs' in continuum_dict else None,
+											temps = continuum_dict['temps'] if 'temps' in continuum_dict else None,
+											fluxes = continuum_dict['fluxes'] if 'fluxes' in continuum_dict else None,
+											notes = continuum_dict['notes'] if 'notes' in continuum_dict else None,
+										)
+										
+	if observatory_dict is not None:
+		obs.observatory = Observatory(
+										name = observatory_dict['name'] if 'name' in observatory_dict else None,
+										id = observatory_dict['id'] if 'id' in observatory_dict else None,
+										sd = observatory_dict['sd'] if 'sd' in observatory_dict else True,
+										array = observatory_dict['array'] if 'array' in observatory_dict else False,
+										dish = observatory_dict['dish'] if 'dish' in observatory_dict else 100.,
+										synth_beam = observatory_dict['synth_beam'] if 'synth_beam' in observatory_dict else [1.,1.],
+										loc = observatory_dict['loc'] if 'loc' in observatory_dict else None,
+										eta = observatory_dict['eta'] if 'eta' in observatory_dict else None,
+										eta_type = observatory_dict['eta_type'] if 'eta_type' in observatory_dict else 'Constant',
+										eta_params = observatory_dict['eta_params'] if 'eta_params' in observatory_dict else [1.],
+										atmo = observatory_dict['atmo'] if 'atmo' in observatory_dict else None,
+									)															
+
+	return obs		
+
