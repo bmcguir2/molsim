@@ -27,3 +27,12 @@ def _read_xy(filein):
 	y = np.asarray(y)
 			
 	return x,y		
+	
+def _write_xy(x,y,fileout):
+	'''Writes out a two column x y file, tab delimited'''
+	
+	with open(fileout,'w') as output:
+		for x0,y0 in zip(x,y):
+			output.write('{}\t{}\n' .format(x0,y0))
+			
+	return
