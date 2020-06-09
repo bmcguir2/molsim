@@ -3,7 +3,7 @@ from numba import njit
 import math
 from molsim.constants import ccm, cm, ckm, h, k, kcm 
 from molsim.stats import get_rms
-from molsim.utils import _trim_arr, find_nearest, _make_gauss
+from molsim.utils import _trim_arr, find_nearest, _make_gauss, _apply_vlsr
 from molsim.file_io import _read_txt, _read_xy
 from scipy.interpolate import interp1d
 from astropy import units
@@ -1057,16 +1057,18 @@ class Simulation(object):
 		self.notes = notes
 		self.beam_size = None
 		self.beam_dilution = None
-		self.frequency = None
+		self.ll_idxs = None
+		self.ul_idxs = None
 		self.aij = None
 		self.gup = None
 		self.eup = None
 		
 		self._set_arrays()
+		self._apply_voffset()
 		self._calc_tau()
 		self._calc_bg()
 		self._calc_Iv()
-		self.spectrum.Tb = self._calc_Tb(self.frequency,self.spectrum.tau,self.spectrum.Tbg)
+		self.spectrum.Tb = self._calc_Tb(self.spectrum.frequency,self.spectrum.tau,self.spectrum.Tbg)
 		self._make_lines()
 		self._apply_beam()
 		
@@ -1077,32 +1079,36 @@ class Simulation(object):
 			self.ll = [self.ll]
 		if isinstance(self.ul,list) is False:
 			self.ul = [self.ul]			
-		self.frequency,ll_idxs,ul_idxs = _trim_arr(self.mol.catalog.frequency,self.ll,self.ul,return_idxs=True)
-		self.aij = _trim_arr(self.mol.catalog.aij,self.ll,self.ul,ll_idxs=ll_idxs,ul_idxs=ul_idxs)
-		self.gup = _trim_arr(self.mol.catalog.gup,self.ll,self.ul,ll_idxs=ll_idxs,ul_idxs=ul_idxs)
-		self.eup = _trim_arr(self.mol.catalog.eup,self.ll,self.ul,ll_idxs=ll_idxs,ul_idxs=ul_idxs)
+		self.spectrum.frequency,self.ll_idxs,self.ul_idxs = _trim_arr(self.mol.catalog.frequency,self.ll,self.ul,return_idxs=True)
+		self.aij = _trim_arr(self.mol.catalog.aij,self.ll,self.ul,ll_idxs=self.ll_idxs,ul_idxs=self.ul_idxs)
+		self.gup = _trim_arr(self.mol.catalog.gup,self.ll,self.ul,ll_idxs=self.ll_idxs,ul_idxs=self.ul_idxs)
+		self.eup = _trim_arr(self.mol.catalog.eup,self.ll,self.ul,ll_idxs=self.ll_idxs,ul_idxs=self.ul_idxs)
 		return
+		
+	def _apply_voffset(self):
+		self.spectrum.frequency = _apply_vlsr(self.spectrum.frequency,self.observation.source.velocity)
+		return	
 		
 	def _calc_tau(self):
 		self.spectrum.tau = ((self.aij * cm**3 * (self.observation.source.column * 100**2) * 
 								self.gup * (np.exp(-self.eup/self.observation.source.Tex)) *
-							 	(np.exp(h*self.frequency*1E6/(k*self.observation.source.Tex))-1)
+							 	(np.exp(h*self.spectrum.frequency*1E6/(k*self.observation.source.Tex))-1)
 							 )
 							/
-							(8*np.pi*(self.frequency*1E6)**3 *
+							(8*np.pi*(self.spectrum.frequency*1E6)**3 *
 								self.observation.source.dV*1000 * self.mol.q(self.observation.source.Tex)
 							)
 					)
 		return
 		
 	def _calc_bg(self):
-		self.spectrum.Ibg = self.observation.source.continuum.Ibg(self.frequency)
-		self.spectrum.Tbg = self.observation.source.continuum.Tbg(self.frequency)
+		self.spectrum.Ibg = self.observation.source.continuum.Ibg(self.spectrum.frequency)
+		self.spectrum.Tbg = self.observation.source.continuum.Tbg(self.spectrum.frequency)
 		return
 		
 	def _calc_Iv(self):
-		self.spectrum.Iv = ((2*h*self.spectrum.tau*(self.frequency*1E6)**3)/
-							cm**2 * (np.exp(h*self.frequency*1E6 /
+		self.spectrum.Iv = ((2*h*self.spectrum.tau*(self.spectrum.frequency*1E6)**3)/
+							cm**2 * (np.exp(h*self.spectrum.frequency*1E6 /
 											(k*self.observation.source.Tex)) -1 )
 							)*1E26
 		return
@@ -1125,7 +1131,7 @@ class Simulation(object):
 		
 	def _apply_beam(self):
 		if self.observation.observatory.sd is True:
-			self.beam_size = 206265 * 1.22 * ((self.frequency*u.MHz).to(u.m, equivalencies=u.spectral()).value) / self.observation.observatory.dish
+			self.beam_size = 206265 * 1.22 * ((self.spectrum.frequency*u.MHz).to(u.m, equivalencies=u.spectral()).value) / self.observation.observatory.dish
 			tb_beam_dilution = self.observation.source.size**2 / (self.beam_size**2 + self.observation.source.size**2)
 			self.beam_dilution = tb_beam_dilution
 			self.spectrum.Tb *= tb_beam_dilution
@@ -1137,8 +1143,8 @@ class Simulation(object):
 		if self.line_profile is None:
 			return
 		if self.line_profile.lower() in ['gaussian','gauss']:
-			lls_raw = self.frequency - self.sim_width*self.observation.source.dV*self.frequency/ckm
-			uls_raw = self.frequency + self.sim_width*self.observation.source.dV*self.frequency/ckm
+			lls_raw = self.spectrum.frequency - self.sim_width*self.observation.source.dV*self.spectrum.frequency/ckm
+			uls_raw = self.spectrum.frequency + self.sim_width*self.observation.source.dV*self.spectrum.frequency/ckm
 			ll_trim = [lls_raw[0]]
 			ul_trim = [uls_raw[0]]
 			for ll,ul in zip(lls_raw[1:],uls_raw[1:]):
@@ -1153,7 +1159,7 @@ class Simulation(object):
 			tau_arr = np.zeros_like(freq_arr)
 			l_idxs = [find_nearest(freq_arr,x) for x in lls_raw]
 			u_idxs = [find_nearest(freq_arr,x) for x in uls_raw]		
-			for x,y,ll,ul in zip(self.frequency,self.spectrum.tau,l_idxs,u_idxs):
+			for x,y,ll,ul in zip(self.spectrum.frequency,self.spectrum.tau,l_idxs,u_idxs):
 				tau_arr[ll:ul] += _make_gauss(x,y,freq_arr[ll:ul],self.observation.source.dV,ckm)
 			self.spectrum.tau_profile = tau_arr
 			self.spectrum.freq_profile = freq_arr
@@ -1168,7 +1174,7 @@ class Simulation(object):
 		self._set_arrays()
 		self._calc_tau()
 		self._calc_bg()
-		self.spectrum.Tb = self._calc_Tb(self.frequency,self.spectrum.tau,self.spectrum.Tbg)
+		self.spectrum.Tb = self._calc_Tb(self.spectrum.frequency,self.spectrum.tau,self.spectrum.Tbg)
 		self._make_lines()
 		self._apply_beam()
 		return
