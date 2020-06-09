@@ -939,8 +939,7 @@ class Source(object):
 	
 	def __init__(
 					self,
-					name = None, #a name
-					coords = None, #an astropy SkyCoord object
+					name = None, # name
 					velocity = 0., #lsr velocity [km/s]
 					size = 1E20, #diameter [arcsec]
 					solid_angle = None, #solid angle on the sky; pi*(size/2)^2 [arcsec^2]
@@ -949,11 +948,11 @@ class Source(object):
 					Tex = 300., #float or numpy array of excitation temperatures [K]
 					Tkin = None, #kinetic temperature of source [K]
 					dV = 3., #fwhm [km/s]
+					id = None, #unique id
 					notes = None, #notes
 				):
 				
 		self.name = name
-		self.coords = coords
 		self.velocity = velocity
 		self.size = size
 		self.solid_angle = solid_angle
@@ -962,6 +961,7 @@ class Source(object):
 		self.Tex = Tex
 		self.Tkin = Tkin
 		self.dV = dV
+		self.id = id
 		self.notes = notes
 		
 		return			
@@ -1012,15 +1012,19 @@ class Observation(object):
 	
 	def __init__(
 					self,
+					name = None, #a name
+					coords = None, #an astropy SkyCoord object		
+					vlsr = None, #a nominal vlsr for the observed objection [km/s]			
 					spectrum = Spectrum(), #a spectrum object for this observation
-					source = Source(), #a source object for this observation
 					observatory = Observatory(), #an observatory object for this observation
 					id = None, #a unique ID for this observation
 					notes = None, #notes
 				):
 				
+		self.name = name
+		self.coords = coords		
+		self.vlsr = vlsr
 		self.spectrum = spectrum
-		self.source = source
 		self.observatory = observatory
 		self.id = id
 		self.notes = notes
@@ -1036,7 +1040,8 @@ class Simulation(object):
 	def __init__(
 					self,
 					spectrum = Spectrum(), #Spectrum object associated with this simulation
-					observation = Observation(), #Observation object associated with this simulation
+					observation = None, #Observation object associated with this simulation
+					source = Source(), #Source object associated with this simulation
 					ll = [np.float('-inf')], #lower limits
 					ul = [np.float('-inf')], #lower limits
 					line_profile = None, #simulate a line profile or not
@@ -1048,6 +1053,7 @@ class Simulation(object):
 				
 		self.spectrum = spectrum
 		self.observation = observation
+		self.source = source
 		self.ll = ll
 		self.ul = ul
 		self.line_profile = line_profile
@@ -1086,30 +1092,30 @@ class Simulation(object):
 		return
 		
 	def _apply_voffset(self):
-		self.spectrum.frequency = _apply_vlsr(self.spectrum.frequency,self.observation.source.velocity)
+		self.spectrum.frequency = _apply_vlsr(self.spectrum.frequency,self.source.velocity)
 		return	
 		
 	def _calc_tau(self):
-		self.spectrum.tau = ((self.aij * cm**3 * (self.observation.source.column * 100**2) * 
-								self.gup * (np.exp(-self.eup/self.observation.source.Tex)) *
-							 	(np.exp(h*self.spectrum.frequency*1E6/(k*self.observation.source.Tex))-1)
+		self.spectrum.tau = ((self.aij * cm**3 * (self.source.column * 100**2) * 
+								self.gup * (np.exp(-self.eup/self.source.Tex)) *
+							 	(np.exp(h*self.spectrum.frequency*1E6/(k*self.source.Tex))-1)
 							 )
 							/
 							(8*np.pi*(self.spectrum.frequency*1E6)**3 *
-								self.observation.source.dV*1000 * self.mol.q(self.observation.source.Tex)
+								self.source.dV*1000 * self.mol.q(self.source.Tex)
 							)
 					)
 		return
 		
 	def _calc_bg(self):
-		self.spectrum.Ibg = self.observation.source.continuum.Ibg(self.spectrum.frequency)
-		self.spectrum.Tbg = self.observation.source.continuum.Tbg(self.spectrum.frequency)
+		self.spectrum.Ibg = self.source.continuum.Ibg(self.spectrum.frequency)
+		self.spectrum.Tbg = self.source.continuum.Tbg(self.spectrum.frequency)
 		return
 		
 	def _calc_Iv(self):
 		self.spectrum.Iv = ((2*h*self.spectrum.tau*(self.spectrum.frequency*1E6)**3)/
 							cm**2 * (np.exp(h*self.spectrum.frequency*1E6 /
-											(k*self.observation.source.Tex)) -1 )
+											(k*self.source.Tex)) -1 )
 							)*1E26
 		return
 
@@ -1121,7 +1127,7 @@ class Simulation(object):
 		
 		J_T = ((h*freq*10**6/k)*
 			  (np.exp(((h*freq*10**6)/
-			  (k*self.observation.source.Tex))) -1)**-1
+			  (k*self.source.Tex))) -1)**-1
 			  )
 		J_Tbg = ((h*freq*10**6/k)*
 			  (np.exp(((h*freq*10**6)/
@@ -1130,21 +1136,22 @@ class Simulation(object):
 		return (J_T - J_Tbg)*(1 - np.exp(-tau))
 		
 	def _apply_beam(self):
-		if self.observation.observatory.sd is True:
-			self.beam_size = 206265 * 1.22 * ((self.spectrum.frequency*u.MHz).to(u.m, equivalencies=u.spectral()).value) / self.observation.observatory.dish
-			tb_beam_dilution = self.observation.source.size**2 / (self.beam_size**2 + self.observation.source.size**2)
-			self.beam_dilution = tb_beam_dilution
-			self.spectrum.Tb *= tb_beam_dilution
-			profile_beam_size = 206265 * 1.22 * ((self.spectrum.freq_profile*u.MHz).to(u.m, equivalencies=u.spectral()).value) / self.observation.observatory.dish			
-			self.spectrum.int_profile *= self.observation.source.size**2 / (profile_beam_size**2 + self.observation.source.size**2)	
+		if self.observation is not None:
+			if self.observation.observatory.sd is True:
+				self.beam_size = 206265 * 1.22 * ((self.spectrum.frequency*u.MHz).to(u.m, equivalencies=u.spectral()).value) / self.observation.observatory.dish
+				tb_beam_dilution = self.source.size**2 / (self.beam_size**2 + self.source.size**2)
+				self.beam_dilution = tb_beam_dilution
+				self.spectrum.Tb *= tb_beam_dilution
+				profile_beam_size = 206265 * 1.22 * ((self.spectrum.freq_profile*u.MHz).to(u.m, equivalencies=u.spectral()).value) / self.observation.observatory.dish			
+				self.spectrum.int_profile *= self.source.size**2 / (profile_beam_size**2 + self.source.size**2)	
 		return	
 		
 	def _make_lines(self):
 		if self.line_profile is None:
 			return
 		if self.line_profile.lower() in ['gaussian','gauss']:
-			lls_raw = self.spectrum.frequency - self.sim_width*self.observation.source.dV*self.spectrum.frequency/ckm
-			uls_raw = self.spectrum.frequency + self.sim_width*self.observation.source.dV*self.spectrum.frequency/ckm
+			lls_raw = self.spectrum.frequency - self.sim_width*self.source.dV*self.spectrum.frequency/ckm
+			uls_raw = self.spectrum.frequency + self.sim_width*self.source.dV*self.spectrum.frequency/ckm
 			ll_trim = [lls_raw[0]]
 			ul_trim = [uls_raw[0]]
 			for ll,ul in zip(lls_raw[1:],uls_raw[1:]):
@@ -1160,10 +1167,10 @@ class Simulation(object):
 			l_idxs = [find_nearest(freq_arr,x) for x in lls_raw]
 			u_idxs = [find_nearest(freq_arr,x) for x in uls_raw]		
 			for x,y,ll,ul in zip(self.spectrum.frequency,self.spectrum.tau,l_idxs,u_idxs):
-				tau_arr[ll:ul] += _make_gauss(x,y,freq_arr[ll:ul],self.observation.source.dV,ckm)
+				tau_arr[ll:ul] += _make_gauss(x,y,freq_arr[ll:ul],self.source.dV,ckm)
 			self.spectrum.tau_profile = tau_arr
 			self.spectrum.freq_profile = freq_arr
-			self.spectrum.Tbg_profile = self.observation.source.continuum.Tbg(freq_arr)
+			self.spectrum.Tbg_profile = self.source.continuum.Tbg(freq_arr)
 			self.spectrum.int_profile = self._calc_Tb(freq_arr,tau_arr,self.spectrum.Tbg_profile)
 			return
 			
@@ -1172,8 +1179,10 @@ class Simulation(object):
 				
 	def update(self):
 		self._set_arrays()
+		self._apply_voffset()
 		self._calc_tau()
 		self._calc_bg()
+		self._calc_Iv()
 		self.spectrum.Tb = self._calc_Tb(self.spectrum.frequency,self.spectrum.tau,self.spectrum.Tbg)
 		self._make_lines()
 		self._apply_beam()
