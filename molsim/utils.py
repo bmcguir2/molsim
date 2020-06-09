@@ -105,6 +105,8 @@ def _make_qnstr(qn1,qn2,qn3,qn4,qn5,qn6,qn7,qn8):
 	tmp_list = [str(x).zfill(2) for x in qn_list if x != None]
 	return ''.join(tmp_list)	
 
-
+@njit
+def _apply_vlsr(frequency,vlsr):
+	return frequency - vlsr*frequency/ckm
 
 		
