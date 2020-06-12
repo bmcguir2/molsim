@@ -112,6 +112,14 @@ def _apply_vlsr(frequency,vlsr):
 	Applies a vlsr shift to a frequency array.  Frequency in [MHz], vlsr in [km/s]
 	'''
 	return frequency - vlsr*frequency/ckm
+	
+def _apply_beam(freq_arr,int_arr,source_size,dish_size,return_beam=False):
+	beam_size = 206265 * 1.22 * (cm/(freq_arr * 1E6)) / dish_size #get beam size in arcsec
+	beam_dilution = source_size**2 / (beam_size**2 + source_size**2)
+	if return_beam is False:
+		return int_arr*beam_dilution
+	else:
+		return int_arr*beam_dilution,beam_dilution
 
 def find_limits(freq_arr,spacing_tolerance=100,padding=25):
 	'''
@@ -139,14 +147,6 @@ def find_limits(freq_arr,spacing_tolerance=100,padding=25):
 	ul += padding*ul/ckm
 	
 	return ll,ul	
-	
-def sum_spectra(spectra):
-	'''
-	
-	'''
-	sum = Spectrum()
-	
-	
-	return sum	
+
 
 		
