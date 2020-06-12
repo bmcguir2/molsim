@@ -3,6 +3,7 @@ from numba import njit
 from molsim.constants import ccm, cm, ckm, h, k, kcm
 import math
 import warnings
+from scipy import stats
 
 def find_nearest(arr,val):
 	idx = np.searchsorted(arr, val, side="left")
@@ -107,6 +108,45 @@ def _make_qnstr(qn1,qn2,qn3,qn4,qn5,qn6,qn7,qn8):
 
 @njit
 def _apply_vlsr(frequency,vlsr):
+	'''
+	Applies a vlsr shift to a frequency array.  Frequency in [MHz], vlsr in [km/s]
+	'''
 	return frequency - vlsr*frequency/ckm
+
+def find_limits(freq_arr,spacing_tolerance=100,padding=25):
+	'''
+	Finds the limits of a set of data, including gaps over a width, determined by the
+	spacing tolerance.  Adds padding to each side to allow user to change vlsr and get 
+	the simulation within the right area.
+	'''
+	
+	if len(freq_arr) == 0:
+		print('The input array has no data.')
+		return
+
+	#first, calculate the most common data point spacing as the mode of the spacings
+	#this won't be perfect if the data aren't uniformly sampled
+	#get the differences
+	diffs = np.diff(freq_arr)
+	spacing = stats.mode(diffs)[0][0]
+	
+	gaps = np.where(abs(diffs) > spacing*spacing_tolerance)
+	
+	ll = np.concatenate((np.array([freq_arr[0]]),freq_arr[gaps[0][:]+1]))
+	ul = np.concatenate((freq_arr[gaps[0][:]],np.array([freq_arr[-1]])))
+	
+	ll -= padding*ll/ckm
+	ul += padding*ul/ckm
+	
+	return ll,ul	
+	
+def sum_spectra(spectra):
+	'''
+	
+	'''
+	sum = Spectrum()
+	
+	
+	return sum	
 
 		
