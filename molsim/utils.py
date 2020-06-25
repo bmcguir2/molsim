@@ -148,5 +148,3 @@ def find_limits(freq_arr,spacing_tolerance=100,padding=25):
 	
 	return ll,ul	
 
-
-		
