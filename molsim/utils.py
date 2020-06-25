@@ -3,7 +3,7 @@ from numba import njit
 from molsim.constants import ccm, cm, ckm, h, k, kcm
 import math
 import warnings
-from scipy import stats
+from scipy import stats, signal
 
 def find_nearest(arr,val):
 	idx = np.searchsorted(arr, val, side="left")
@@ -146,5 +146,53 @@ def find_limits(freq_arr,spacing_tolerance=100,padding=25):
 	ll -= padding*ll/ckm
 	ul += padding*ul/ckm
 	
-	return ll,ul	
+	return ll,ul
 
+@njit	
+def get_rms(arr):
+
+	#np.seterr(divide='ignore', invalid='ignore')
+
+	tmp_int = np.copy(arr)	
+	x = np.nanmax(tmp_int)	
+	rms = np.sqrt(np.nanmean(np.square(tmp_int)))
+	
+	while x > 3*rms:
+		for chan in np.where(tmp_int > 3*rms)[0]:
+			tmp_int[chan] = np.nan
+		rms = np.sqrt(np.nanmean(np.square(tmp_int)))
+		x = np.nanmax(tmp_int)
+
+	return	rms		
+
+def find_peaks(freq_arr,int_arr,res,min_sep,is_sim=False,sigma=3,kms=True):
+	'''
+	'''
+
+	if kms is True:
+		max_f = np.amax(freq_arr)
+		min_f = np.amin(freq_arr)
+		cfreq = (max_f + min_f)/2
+		v_res = res*ckm/max_f #finest velocity spacing
+		v_span = (max_f - min_f) * ckm/(cfreq) #total velocity range spanned, setting cfreq at v=0.
+		v_samp = np.arange(-v_span/2,v_span/2+v_res,v_res) #create a uniformly spaced velocity array
+		freq_new = v_samp*cfreq/ckm + cfreq #convert it back to frequency
+		int_new = np.interp(freq_new,freq_arr,int_arr,left=0.,right=0.)
+		chan_sep = min_sep/v_res
+	else:
+		freq_new = freq_arr
+		int_new = int_arr
+		chan_sep = min_sep/res
+	
+	indices = signal.find_peaks(int_new,distance=chan_sep)
+
+	if kms is True:
+		indices = [find_nearest(freq_arr,freq_new[x]) for x in indices[0]] #if we had to re-sample things
+		
+	if is_sim is True:
+		return np.asarray(indices)
+		
+	rms = get_rms(int_arr)
+	indices = [x for x in indices if int_arr[x]>sigma*rms ]
+	
+	return np.asarray(indices)
