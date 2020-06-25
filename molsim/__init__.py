@@ -12,3 +12,5 @@ from . import file_io
 from . import constants
 from . import classes
 from . import stats
+from . import functions
+from . import utils

@@ -852,6 +852,7 @@ class Spectrum(object):
 					tau = None, #optical depths
 					id = None, #a unique ID for this spectrum
 					notes = None, #notes
+					name = None, #name
 				):
 				
 		self.frequency = frequency
@@ -1039,9 +1040,9 @@ class Simulation(object):
 	
 	def __init__(
 					self,
-					spectrum = Spectrum(), #Spectrum object associated with this simulation
+					spectrum = None, #Spectrum object associated with this simulation
 					observation = None, #Observation object associated with this simulation
-					source = Source(), #Source object associated with this simulation
+					source = None, #Source object associated with this simulation
 					ll = [np.float('-inf')], #lower limits
 					ul = [np.float('-inf')], #lower limits
 					line_profile = None, #simulate a line profile or not
@@ -1081,6 +1082,10 @@ class Simulation(object):
 		return	
 	
 	def _set_arrays(self):
+		if self.spectrum is None:
+			self.spectrum = Spectrum()
+		if self.source is None:
+			self.source = Source()
 		if isinstance(self.ll,list) is False:
 			if isinstance(self.ll,np.ndarray):
 				self.ll = self.ll.tolist()
