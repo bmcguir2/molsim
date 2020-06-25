@@ -257,6 +257,11 @@ def _load_catalog(filein,type='SPCAT',catdict=None):
 		new_dict = {}
 		for x in npz_dict:
 			new_dict[x] = npz_dict[x]
+		#sort some back to strings from numpy arrays
+		entries = ['version','source','last_update','contributor_name','contributor_email','notes','refs']
+		for entry in entries:
+			if entry in new_dict:
+				new_dict[entry] = str(new_dict[entry])
 
 	elif type.lower() == 'spcat':
 		new_dict = _read_spcat(filein) #read in the catalog file and produce the

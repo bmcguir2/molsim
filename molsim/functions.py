@@ -61,4 +61,20 @@ def sum_spectra(sims,thin=True,Tex=None,Tbg=None,res=None,name='sum'):
 		sum_spectrum.int_profile = int_arr
 
 	return sum_spectrum
-		
+
+def velocity_stack(params,name='stack'):
+	'''
+	Perform a velocity stack.  Requires a params catalog for all the various options.
+	Here they are, noted as required, or otherwise have defaults:
+	
+	selection : 'peaks' or 'lines'. Default: 'lines'
+	
+	'''
+
+	stacked_spectrum = Spectrum(name=name)
+	
+	
+	
+	
+
+	return stacked_spectrum	

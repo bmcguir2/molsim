@@ -8,10 +8,11 @@ from molsim.constants import ccm, cm, ckm, h, k, kcm
 from pkg_resources import resource_filename
 from molsim.classes import Workspace, Catalog, Transition, Level, Molecule, PartitionFunction, Spectrum, Simulation, Continuum, Source, Observatory, Observation
 from molsim.stats import get_rms
-from molsim.utils import _trim_arr, find_nearest, _make_gauss, _apply_vlsr, find_limits
+from molsim.utils import _trim_arr, find_nearest, _make_gauss, _apply_vlsr, find_limits, get_rms
 from molsim.functions import sum_spectra
 import matplotlib.pyplot as plt
 import matplotlib
 import math
+from scipy import signal
 
 filepath = resource_filename(__name__,'tests/')
