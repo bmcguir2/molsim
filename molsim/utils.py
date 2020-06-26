@@ -147,23 +147,56 @@ def find_limits(freq_arr,spacing_tolerance=100,padding=25):
 	ul += padding*ul/ckm
 	
 	return ll,ul
-
-@njit	
-def get_rms(arr):
-
-	#np.seterr(divide='ignore', invalid='ignore')
-
-	tmp_int = np.copy(arr)	
-	x = np.nanmax(tmp_int)	
-	rms = np.sqrt(np.nanmean(np.square(tmp_int)))
 	
-	while x > 3*rms:
-		for chan in np.where(tmp_int > 3*rms)[0]:
-			tmp_int[chan] = np.nan
-		rms = np.sqrt(np.nanmean(np.square(tmp_int)))
-		x = np.nanmax(tmp_int)
+def _find_limit_idx(freq_arr,spacing_tolerance=100,padding=25):		
+	'''
+	Finds the indices of the limits of a set of data, including gaps over a width, 
+	determined by the  spacing tolerance.  Adds padding to each side to allow user to 
+	change vlsr and get the simulation within the right area.
+	'''
+	
+	if len(freq_arr) == 0:
+		print('The input array has no data.')
+		return
 
-	return	rms		
+	#first, calculate the most common data point spacing as the mode of the spacings
+	#this won't be perfect if the data aren't uniformly sampled
+	#get the differences
+	diffs = np.diff(freq_arr)
+	spacing = stats.mode(diffs)[0][0]
+	
+	gaps = np.where(abs(diffs) > spacing*spacing_tolerance)
+	
+	ll = np.concatenate((np.array([freq_arr[0]]),freq_arr[gaps[0][:]+1]))
+	ul = np.concatenate((freq_arr[gaps[0][:]],np.array([freq_arr[-1]])))
+	
+	ll -= padding*ll/ckm
+	ul += padding*ul/ckm
+	
+	ll = [find_nearest(freq_arr,x) for x in ll]
+	ul = [find_nearest(freq_arr,x) for x in ul]
+	
+	return ll,ul
+	
+def _find_nans(arr):
+	'''
+	Find the start,[stop] indices where value is present in arr
+	'''
+
+	# Create an array that is 1 where a is 0, and pad each end with an extra 0.
+	# here .view(np.int8) changes the np.equal output from a bool array to a 1/0 array
+	new_arr = arr
+	new_arr[~np.isnan(new_arr)] = 0
+	new_arr[np.isnan(new_arr)] = 1
+	iszero = np.concatenate(([0], np.equal(arr, 1).view(np.int8), [0]))
+	absdiff = np.abs(np.diff(iszero))
+	# Runs start and end where absdiff is 1.
+	ranges = np.where(absdiff == 1)[0].reshape(-1, 2)
+	
+	lls = [x[0] for x in ranges]
+	uls = [x[1] for x in ranges]
+	
+	return lls,uls	
 
 def find_peaks(freq_arr,int_arr,res,min_sep,is_sim=False,sigma=3,kms=True):
 	'''
@@ -196,3 +229,11 @@ def find_peaks(freq_arr,int_arr,res,min_sep,is_sim=False,sigma=3,kms=True):
 	indices = [x for x in indices if int_arr[x]>sigma*rms ]
 	
 	return np.asarray(indices)
+	
+def _get_res(freq_arr):
+	'''
+	Return the resolution of an array (best guess).
+	'''
+	diffs = np.diff(freq_arr)
+	return stats.mode(diffs)[0][0]
+	
