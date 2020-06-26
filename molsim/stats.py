@@ -1,6 +1,8 @@
 import numpy as np
 import warnings
+from numba import njit
 
+@njit
 def get_rms(y,sigma=3):
 	tmp_y = np.copy(y)
 	i = np.nanmax(tmp_y)
