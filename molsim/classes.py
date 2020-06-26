@@ -869,6 +869,7 @@ class Spectrum(object):
 		self.notes = notes
 		self.ll = np.amin(frequency) if frequency is not None else None
 		self.ul = np.amax(frequency) if frequency is not None else None
+		self.name = name
 
 		return
 		
