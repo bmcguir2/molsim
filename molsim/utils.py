@@ -185,7 +185,7 @@ def _find_nans(arr):
 
 	# Create an array that is 1 where a is 0, and pad each end with an extra 0.
 	# here .view(np.int8) changes the np.equal output from a bool array to a 1/0 array
-	new_arr = arr
+	new_arr = np.copy(arr)
 	new_arr[~np.isnan(new_arr)] = 0
 	new_arr[np.isnan(new_arr)] = 1
 	iszero = np.concatenate(([0], np.equal(arr, 1).view(np.int8), [0]))
