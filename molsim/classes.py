@@ -854,7 +854,8 @@ class Spectrum(object):
 					notes = None, #notes
 					name = None, #name
 				):
-				
+		
+		self.freq0 = None
 		self.frequency = frequency
 		self.Tb = Tb
 		self.Iv = Iv
@@ -1098,13 +1099,14 @@ class Simulation(object):
 			else:
 				self.ul = [self.ul]		
 		self.spectrum.frequency,self.ll_idxs,self.ul_idxs = _trim_arr(self.mol.catalog.frequency,self.ll,self.ul,return_idxs=True)
+		self.spectrum.freq0 = _trim_arr(self.mol.catalog.frequency,self.ll,self.ul,ll_idxs=self.ll_idxs,ul_idxs=self.ul_idxs)
 		self.aij = _trim_arr(self.mol.catalog.aij,self.ll,self.ul,ll_idxs=self.ll_idxs,ul_idxs=self.ul_idxs)
 		self.gup = _trim_arr(self.mol.catalog.gup,self.ll,self.ul,ll_idxs=self.ll_idxs,ul_idxs=self.ul_idxs)
 		self.eup = _trim_arr(self.mol.catalog.eup,self.ll,self.ul,ll_idxs=self.ll_idxs,ul_idxs=self.ul_idxs)
 		return
 		
 	def _apply_voffset(self):
-		self.spectrum.frequency = _apply_vlsr(self.spectrum.frequency,self.source.velocity)
+		self.spectrum.frequency = _apply_vlsr(self.spectrum.freq0,self.source.velocity)
 		return	
 		
 	def _calc_tau(self):

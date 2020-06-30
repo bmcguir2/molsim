@@ -3,6 +3,8 @@ from molsim.constants import h, k, ckm
 from molsim.classes import Spectrum
 from molsim.utils import find_limits, _get_res, _find_nans, find_peaks, find_nearest
 from molsim.stats import get_rms
+import matplotlib.pyplot as plt
+import matplotlib
 
 def sum_spectra(sims,thin=True,Tex=None,Tbg=None,res=None,name='sum'):
 
@@ -102,12 +104,26 @@ def velocity_stack(params,name='stack'):
 			self.rms = None #rms of the chunk
 			self.cfreq = None #center frequency of the chunk
 			self.velocity = None #to hold the velocity array
+			self.test = False
 			
-			self.set_rms()
-			self.set_cfreq()
-			self.set_velocity()
-			self.set_sim_velocity()
+			self.check_data()
+			if self.flag is False:
+				self.set_rms()
+				self.set_cfreq()
+				self.set_velocity()
+				self.set_sim_velocity()
 			
+			return
+			
+		def check_data(self):
+			#check if we have enough data here or if we ended up near an edge or a bunch of nans
+			if len(self.freq_obs) < 2:
+				self.flag = True
+				return
+			#check if we have more nans than not, and if so, skip it
+			if np.count_nonzero(~np.isnan(self.int_obs)) < np.count_nonzero(np.isnan(self.int_obs)):
+				self.flag = True
+				return	
 			return
 			
 		def set_cfreq(self):
@@ -119,30 +135,30 @@ def velocity_stack(params,name='stack'):
 			return	
 			
 		def set_velocity(self):
-			velocity = np.zeros_like(self.freq_obs)
-			velocity += (self.freq_obs - self.cfreq)*ckm/self.cfreq
-			self.velocity = velocity
+			vel = np.zeros_like(self.freq_obs)
+			vel += (self.freq_obs - self.cfreq)*ckm/self.cfreq
+			self.velocity = vel
 			return	
 			
 		def set_sim_velocity(self):
-			sim_velocity = np.zeros_like(self.freq_sim)
-			sim_velocity += (self.freq_sim - self.cfreq)*ckm/self.cfreq
-			self.sim_velocity = sim_velocity
+			sim_vel = np.zeros_like(self.freq_sim)
+			sim_vel += (self.freq_sim - self.cfreq)*ckm/self.cfreq
+			self.sim_velocity = sim_vel
 			return				
 
 
 	#unpacking the dictionary into local variables for ease of use
 	options = params.keys()
-	freq_arr = params['freq_arr']
-	int_arr = params['int_arr']
-	freq_sim = params['freq_sim']
-	int_sim = params['int_sim']
+	freq_arr = np.copy(params['freq_arr'])
+	int_arr = np.copy(params['int_arr'])
+	freq_sim = np.copy(params['freq_sim'])
+	int_sim = np.copy(params['int_sim'])
 	res_inp = params['res_inp'] if 'res_inp' in options else _get_res(freq_arr)
 	dV = params['dV']
 	dV_ext = params['dV_ext'] if 'dV_ext' in options else None
 	vlsr = params['vlsr']
 	vel_width = params['vel_width']
-	v_res = params['v_res'] if 'drops' in options else 0.1*dV
+	v_res = params['v_res'] if 'v_res' in options else 0.1*dV
 	drops = params['drops'] if 'drops' in options else []
 	blank_lines = params['blank_lines'] if 'blank_lines' in options else False
 	blank_keep_range = params['blank_keep_range'] if 'blank_keep_range' in options else [-3*dV,3*dV]
@@ -173,9 +189,8 @@ def velocity_stack(params,name='stack'):
 	lls_sim = np.asarray([find_nearest(freq_sim,x-y) for x,y in zip(peak_freqs,freq_widths)])
 	uls_sim = np.asarray([find_nearest(freq_sim,x+y) for x,y in zip(peak_freqs,freq_widths)])
 
-	obs_chunks = [ObsChunk(freq_arr[x:y],int_arr[x:y],freq_sim[a:b],int_sim[a:b],peak_int,c) for x,y,a,b,peak_int,c in zip(lls_obs,uls_obs,lls_sim,uls_sim,peak_ints,range(len(uls_sim)))]
-
-	print(vlsr)
+	#catch edge cases where there's no actual data because we're near a gap
+	obs_chunks = [ObsChunk(np.copy(freq_arr[x:y]),np.copy(int_arr[x:y]),np.copy(freq_sim[a:b]),np.copy(int_sim[a:b]),peak_int,c) for x,y,a,b,peak_int,c in zip(lls_obs,uls_obs,lls_sim,uls_sim,peak_ints,range(len(uls_sim)))]
 
 	#flagging
 	for obs in obs_chunks:
@@ -191,29 +206,21 @@ def velocity_stack(params,name='stack'):
 			obs.flag = True
 			continue	
 		#blank out lines not in the center to be stacked
-		if blank_lines is True:
+		if blank_lines is True:			
 			#Find the indices corresponding to the safe range
 			ll_obs = find_nearest(obs.freq_obs,obs.cfreq - blank_keep_range[1]*obs.cfreq/ckm)
 			ul_obs = find_nearest(obs.freq_obs,obs.cfreq - blank_keep_range[0]*obs.cfreq/ckm)
-			ll_sim = find_nearest(obs.freq_sim,obs.cfreq - blank_keep_range[1]*obs.cfreq/ckm)
-			ul_sim = find_nearest(obs.freq_sim,obs.cfreq - blank_keep_range[0]*obs.cfreq/ckm)
-			print('{} ({}) {}' .format(obs.cfreq - (blank_keep_range[1])*obs.cfreq/ckm, obs.cfreq, obs.cfreq - (blank_keep_range[0])*obs.cfreq/ckm))
-			#store the data in there somewhere temporarily for safekeeping
-			obs_safe = np.copy(obs.int_obs[ll_obs:ul_obs])
-			sim_safe = np.copy(obs.int_sim[ll_sim:ul_sim])
-			#blank the arrays
-			obs.int_obs[abs(obs.int_obs) > flag_sigma*obs.rms] = np.nan
+			mask = np.concatenate((np.where(abs(obs.int_obs[:ll_obs]) > flag_sigma * obs.rms)[0],np.where(abs(obs.int_obs[ul_obs:]) > flag_sigma * obs.rms)[0]+ul_obs))
+			obs.int_obs[mask] = np.nan
+			obs.set_rms()
 			obs_nans_lls,obs_nans_uls = _find_nans(obs.int_obs)
 			obs_nans_freqs_lls = obs.int_obs[obs_nans_lls]
 			obs_nans_freqs_uls = obs.int_obs[obs_nans_uls]
 			sim_nans_lls = [find_nearest(obs.int_sim,x) for x in obs_nans_freqs_lls]
 			sim_nans_uls = [find_nearest(obs.int_sim,x) for x in obs_nans_freqs_uls]
 			for x,y in zip(sim_nans_lls,sim_nans_uls):
-				obs.int_sim[x:y] = np.nan
-			obs.int_obs[ll_obs:ul_obs] = np.copy(obs_safe)
-			obs.int_sim[ll_sim:ul_sim] = np.copy(sim_safe)	
-			#reset the rms, just in case	
-			obs.set_rms()	
+				obs.int_sim[x:y] = np.nan			
+				
 		#if we're flagging lines in the center, do that now too
 		if flag_lines is True:
 			if np.nanmax(obs.int_obs) > flag_sigma*obs.rms:
