@@ -66,6 +66,7 @@ def sum_spectra(sims,thin=True,Tex=None,Tbg=None,res=None,name='sum'):
 	return sum_spectrum
 
 def velocity_stack(params,name='stack'):
+
 	'''
 	Perform a velocity stack.  Requires a params catalog for all the various options.
 	Here they are, noted as required, or otherwise have defaults:
@@ -287,8 +288,37 @@ def velocity_stack(params,name='stack'):
 	int_sim_avg /= rms_tmp
 	
 	#store everything in the spectrum object and return it
-	stacked_spectrum.velocity = velocity_avg
-	stacked_spectrum.snr = int_avg
-	stacked_spectrum.int_sim = int_sim_avg
+	stacked_spectrum.velocity = np.copy(velocity_avg)
+	stacked_spectrum.snr = np.copy(int_avg)
+	stacked_spectrum.int_sim = np.copy(int_sim_avg)
 						
 	return stacked_spectrum,obs_chunks
+	
+def matched_filter(data_x,data_y,filter_y,name='mf'):
+	'''
+	Perform a matched filter analysis on data_x,data_y using filter_y
+	'''
+	
+	#do the filter and normalization to SNR scale
+	mf_y = np.correlate(data_y,filter_y,mode='valid')
+	mf_y /= get_rms(mf_y)
+	
+	#trim off the edges of the velocity data to match the range of the filter response
+	nchans = round(len(mf_y)/2)
+	c_chan = round(len(data_x)/2)
+	mf_x = np.copy(data_x[c_chan-nchans:c_chan+nchans])
+	#make sure there's no rounding errors
+	if abs(len(mf_x) - len(mf_y)) == 1:
+		if len(mf_x) > len(mf_y):
+			mf_x = mf_x[:-1]
+		else:
+			mf_y = mf_y[:-1]	
+	
+	#load the result into a Spectrum object and return it.
+	mf = Spectrum(name=name)
+	mf.velocity = np.copy(mf_x)
+	mf.snr = np.copy(mf_y)
+	
+	return mf
+	
+
