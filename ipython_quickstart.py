@@ -10,6 +10,7 @@ from molsim.classes import Workspace, Catalog, Transition, Level, Molecule, Part
 from molsim.stats import get_rms
 from molsim.utils import _trim_arr, find_nearest, _make_gauss, _apply_vlsr, find_limits, find_peaks, _get_res, _find_nans, _find_limit_idx
 from molsim.functions import sum_spectra, velocity_stack, matched_filter
+from molsim.plotting import plot_mf
 import matplotlib.pyplot as plt
 import matplotlib
 import math

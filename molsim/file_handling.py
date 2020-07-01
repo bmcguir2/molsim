@@ -451,7 +451,7 @@ def load_mol(filein,type='molsim',catdict=None,id=None,name=None,formula=None,
 	
 	return	mol	
 	
-def load_obs(filein=None,xunits='MHz',yunits='K',id=None,notes=None,spectrum_id=None,spectrum_notes=None,source_dict=None,continuum_dict=None,observatory_dict=None,format='molsim'):
+def load_obs(filein=None,xunits='MHz',yunits='K',id=None,notes=None,spectrum_id=None,spectrum_notes=None,source_dict=None,continuum_dict=None,observatory_dict=None,type='molsim'):
 	
 	'''
 	Reads in an observations file and initializes an observation object with the given attributes.
@@ -462,7 +462,7 @@ def load_obs(filein=None,xunits='MHz',yunits='K',id=None,notes=None,spectrum_id=
 	
 	#read in the data if there is any
 	if filein is not None:
-		if format == 'molsim':
+		if type == 'molsim':
 			obs.spectrum = _read_spectrum(filein)
 		else:
 			x,y = _read_xy(filein)
