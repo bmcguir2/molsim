@@ -672,13 +672,23 @@ class PartitionFunction(object):
 		if self.qpart_file is None:
 			self._initialize_flag()
 		else:
+			form_line = None
+			vibs_read = False
+			vibs_line = None
 			qpart_raw = _read_txt(self.qpart_file)
-			for line in qpart_raw:
-				if '#' in line:
-					linesplit = line.split(':')
+			for i in range(len(qpart_raw)):
+				if '#' in qpart_raw[i]:
+					linesplit = qpart_raw[i].split(':')
 					if 'form' in linesplit[0]:
 						self.form = linesplit[1].strip()
-						self.flag = linesplit[1].strip()
+						if self.form in ['poly','polynomial','power','pow','rotcons']:
+							self.flag = 'functional'
+						else: 
+							self.flag = linesplit[1].strip()
+						form_line = i+1
+					if 'vibs' in linesplit[0]:
+						vibs_read = True
+						vibs_line = i+1
 			if self.form == 'interpolation':
 				t_arr = []
 				q_arr = []
@@ -688,6 +698,14 @@ class PartitionFunction(object):
 						q_arr.append(float(line.split()[1].strip()))
 				self.temps = np.array(t_arr)
 				self.vals = np.array(q_arr)
+			if self.form == 'pow' or 'power':
+				self.params = [float(qpart_raw[form_line].split(',')[0].strip()),float(qpart_raw[form_line].split(',')[1].strip()),float(qpart_raw[form_line].split(',')[2].strip())]
+			if vibs_read is True:
+				vibs = []
+				for x in qpart_raw[vibs_line].split(','):
+					vibs.append(float(x.strip()))
+				self.vib_states = np.asarray(vibs)
+				
 		return
 					
 			
@@ -778,7 +796,7 @@ class PartitionFunction(object):
 					
 			#if it's a power law...
 			if self.form in ['pow','power']:
-				return self.params[0]*T**self.params[1] + self.params[2]
+				return self.params[0]*T**self.params[2] + self.params[1]
 				
 			#if it's rotational constants
 			if self.form == 'rotcons':

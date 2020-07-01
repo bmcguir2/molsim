@@ -15,3 +15,4 @@ from . import stats
 from . import functions
 from . import utils
 from . import plotting
+from . import analysis
