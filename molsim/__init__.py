@@ -14,3 +14,4 @@ from . import classes
 from . import stats
 from . import functions
 from . import utils
+from . import plotting
