@@ -241,6 +241,42 @@ def _read_spcat(filein):
 	
 	return split_cat
 
+def _read_spectrum(filein):
+	'''
+	Reads in an npz saved spectrum.  Returns a spectrum object.
+	'''
+	
+	npz_dict = np.load(filein,allow_pickle=True)
+	new_dict = {}
+	for x in npz_dict:
+		new_dict[x] = npz_dict[x]
+	#sort some back to strings from numpy arrays
+	entries = ['name','notes']
+	for entry in entries:
+		if entry in new_dict:
+			new_dict[entry] = str(new_dict[entry])
+	
+	spectrum = Spectrum(freq0 = new_dict['freq0'],
+						frequency = new_dict['frequency'],
+						Tb = new_dict['Tb'],
+						Iv = new_dict['Iv'],
+						Tbg = new_dict['Tbg'],
+						Ibg = new_dict['Ibg'],
+						tau = new_dict['tau'],
+						tau_profile = new_dict['tau_profile'],
+						freq_profile = new_dict['freq_profile'],
+						int_profile = new_dict['int_profile'],
+						Tbg_profile = new_dict['Tbg_profile'],
+						velocity = new_dict['velocity'],
+						int_sim = new_dict['int_sim'],
+						freq_sim = new_dict['freq_sim'],
+						snr = new_dict['snr'],
+						id = new_dict['id'],
+						notes = new_dict['notes'],
+						name = new_dict['name']
+						)
+						
+	return spectrum								
 
 def _load_catalog(filein,type='SPCAT',catdict=None):
 	'''
@@ -415,7 +451,7 @@ def load_mol(filein,type='molsim',catdict=None,id=None,name=None,formula=None,
 	
 	return	mol	
 	
-def load_obs(filein=None,xunits='MHz',yunits='K',id=None,notes=None,spectrum_id=None,spectrum_notes=None,source_dict=None,continuum_dict=None,observatory_dict=None):
+def load_obs(filein=None,xunits='MHz',yunits='K',id=None,notes=None,spectrum_id=None,spectrum_notes=None,source_dict=None,continuum_dict=None,observatory_dict=None,format='molsim'):
 	
 	'''
 	Reads in an observations file and initializes an observation object with the given attributes.
@@ -426,15 +462,18 @@ def load_obs(filein=None,xunits='MHz',yunits='K',id=None,notes=None,spectrum_id=
 	
 	#read in the data if there is any
 	if filein is not None:
-		x,y = _read_xy(filein)
-		if xunits == 'GHz':
-			x*=1000
-			xunits = 'MHz'
-		obs.spectrum.frequency = x
-		if yunits == 'K':
-			obs.spectrum.Tb = y
-		elif yunits.lower() == 'jy/beam':
-			obs.spectrum.Iv = y
+		if format == 'molsim':
+			obs.spectrum = _read_spectrum(filein)
+		else:
+			x,y = _read_xy(filein)
+			if xunits == 'GHz':
+				x*=1000
+				xunits = 'MHz'
+			obs.spectrum.frequency = x
+			if yunits == 'K':
+				obs.spectrum.Tb = y
+			elif yunits.lower() == 'jy/beam':
+				obs.spectrum.Iv = y
 	
 	if id is not None:
 		obs.id = id

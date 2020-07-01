@@ -839,40 +839,84 @@ class PartitionFunction(object):
 class Spectrum(object):
 
 	'''
-	This class stores the information for a single spectrum
+	This class stores the information for a single spectrum.
 	'''		
 	
 	def __init__(
 					self,
+					freq0 = None, #unshifted frequency data
 					frequency = None, #frequency data
 					Tb = None, #intensity in units of [K]
 					Iv = None, #intensity in units of [Jy/beam] or [Jy/sr]
 					Tbg = None, #intensity of background in [K]
 					Ibg = None, #intensity of background in [Jy/beam] or [Jy/sr]
 					tau = None, #optical depths
+					tau_profile = None, #tau with line profile applied
+					freq_profile = None, #frequency of line profile data
+					int_profile = None, #intensity of line profile data
+					Tbg_profile = None, #background with line profile
+					velocity = None, #velocity space Data
+					int_sim = None, #intensity of a simulation
+					freq_sim = None, #frequency of a simulation
+					snr = None, #data in snr space
 					id = None, #a unique ID for this spectrum
 					notes = None, #notes
 					name = None, #name
 				):
 		
-		self.freq0 = None
+		self.freq0 = freq0
 		self.frequency = frequency
 		self.Tb = Tb
 		self.Iv = Iv
 		self.Tbg = Tbg
 		self.Ibg = Ibg
 		self.tau = tau
-		self.tau_profile = None
-		self.freq_profile = None
-		self.int_profile = None
-		self.Tbg_profile = None
+		self.tau_profile = tau_profile
+		self.freq_profile = freq_profile
+		self.int_profile = int_profile
+		self.Tbg_profile = Tbg_profile
 		self.id = id
 		self.notes = notes
 		self.ll = np.amin(frequency) if frequency is not None else None
 		self.ul = np.amax(frequency) if frequency is not None else None
 		self.name = name
+		self.velocity = velocity
+		self.int_sim = int_sim
+		self.freq_sim = freq_sim
+		self.snr = snr
 
-		return
+		return	
+		
+
+	def export_spectrum(self,fileout,format='molsim'):
+		'''
+		Export a spectrum and all meta data out to a file.  If format='molsim', it will be
+		an npz file that is much faster for restoring later.
+		'''
+		
+		if format == 'molsim':
+			np.savez_compressed(fileout,
+								freq0 = self.freq0,
+								frequency = self.frequency,
+								Tb = self.Tb,
+								Iv = self.Iv,
+								Tbg = self.Tbg,
+								Ibg = self.Ibg,
+								tau = self.tau,
+								tau_profile = self.tau_profile,
+								freq_profile = self.freq_profile,
+								int_profile = self.int_profile,
+								Tbg_profile = self.Tbg_profile,
+								id = self.id,
+								notes = self.notes,
+								name = self.name,
+								velocity = self.velocity,
+								int_sim = self.int_sim,
+								freq_sim = self.freq_sim,
+								snr = self.snr,
+							)
+		
+		return			
 		
 class Continuum(object):
 
@@ -1031,9 +1075,8 @@ class Observation(object):
 		self.observatory = observatory
 		self.id = id
 		self.notes = notes
-
-
-		return		
+		
+		return				
 
 class Simulation(object):
 	'''
