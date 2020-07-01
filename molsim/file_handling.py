@@ -451,7 +451,7 @@ def load_mol(filein,type='molsim',catdict=None,id=None,name=None,formula=None,
 	
 	return	mol	
 	
-def load_obs(filein=None,xunits='MHz',yunits='K',id=None,notes=None,spectrum_id=None,spectrum_notes=None,source_dict=None,continuum_dict=None,observatory_dict=None,type='molsim'):
+def load_obs(filein=None,xunits='MHz',yunits='K',id=None,notes=None,spectrum_id=None,spectrum_notes=None,source_dict=None,source=None,continuum_dict=None,continuum=None,observatory_dict=None,observatory=None,type='molsim'):
 	
 	'''
 	Reads in an observations file and initializes an observation object with the given attributes.
@@ -484,7 +484,9 @@ def load_obs(filein=None,xunits='MHz',yunits='K',id=None,notes=None,spectrum_id=
 	if spectrum_notes is not None:
 		obs.spectrum.notes = spectrum_notes
 		
-	if source_dict is not None:
+	if source is not None:
+		obs.source = source
+	elif source_dict is not None:
 		obs.source = Source(
 								name = source_dict['name'] if 'name' in source_dict else None,
 								coords = source_dict['coords'] if 'coords' in source_dict else None,
@@ -498,7 +500,9 @@ def load_obs(filein=None,xunits='MHz',yunits='K',id=None,notes=None,spectrum_id=
 								notes = source_dict['notes'] if 'notes' in source_dict else None,	
 							)
 							
-	if continuum_dict is not None:
+	if continuum is not None:
+		obs.source.continuum = continuum
+	elif continuum_dict is not None:
 		obs.source.continuum = Continuum(
 											cont_file = continuum_dict['cont_file'] if 'cont_file' in continuum_dict else None,
 											type = continuum_dict['type'] if 'type' in continuum_dict else 'thermal',
@@ -508,8 +512,9 @@ def load_obs(filein=None,xunits='MHz',yunits='K',id=None,notes=None,spectrum_id=
 											fluxes = continuum_dict['fluxes'] if 'fluxes' in continuum_dict else None,
 											notes = continuum_dict['notes'] if 'notes' in continuum_dict else None,
 										)
-										
-	if observatory_dict is not None:
+	if observatory is not None:
+		obs.observatory = observatory									
+	elif observatory_dict is not None:
 		obs.observatory = Observatory(
 										name = observatory_dict['name'] if 'name' in observatory_dict else None,
 										id = observatory_dict['id'] if 'id' in observatory_dict else None,
