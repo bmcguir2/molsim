@@ -235,5 +235,4 @@ def _get_res(freq_arr):
 	Return the resolution of an array (best guess).
 	'''
 	diffs = np.diff(freq_arr)
-	return stats.mode(diffs)[0][0]
-	
+	return stats.mode(diffs)[0][0]	

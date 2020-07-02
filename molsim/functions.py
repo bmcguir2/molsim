@@ -3,6 +3,8 @@ from molsim.constants import h, k, ckm
 from molsim.classes import Spectrum
 from molsim.utils import find_limits, _get_res, _find_nans, find_peaks, find_nearest
 from molsim.stats import get_rms
+from molsim.file_handling import load_mol
+from datetime import date
 import matplotlib.pyplot as plt
 import matplotlib
 
@@ -321,4 +323,36 @@ def matched_filter(data_x,data_y,filter_y,name='mf'):
 	
 	return mf
 	
-
+def convert_spcat(filein,params={}):
+	'''
+	Converts an SPCAT catalog to a molsim catalog and updates the metadata as indicated
+	in params.
+	'''
+	
+	settings = {'fileout'			:	filein[:-1-len(filein.split('.')[-1])],
+				'version'			:	1.0,
+				'source'			:	None,
+				'last_update'		:	date.today().strftime("%B %d, %Y"),
+				'contributor_name'	:	None,
+				'contributor_email'	:	None,
+				'notes'				:	None,
+				'refs'				:	None,
+				}
+				
+	for x in params:
+		if x in settings:
+			settings[x] = params[x]
+			
+	mol = load_mol(filein, type='SPCAT')
+	
+	mol.catalog.version = settings['version']
+	mol.catalog.source = settings['source']
+	mol.catalog.last_update = settings['last_update']
+	mol.catalog.contributor_name = settings['contributor_name']
+	mol.catalog.contributor_email = settings['contributor_email']
+	mol.catalog.notes = settings['notes']
+	mol.catalog.refs = settings['refs']
+	
+	mol.catalog.export_cat(settings['fileout'])			
+	
+	return
