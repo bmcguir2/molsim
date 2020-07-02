@@ -12,6 +12,7 @@ def set_upper_limit(sim,obs,params={}):
 	plot_name = params['plot_name'] if 'plot_name' in params else None
 	vel_widths = params['vel_widths'] if 'vel_widths' in params else 40.
 	tolerance = params['tolerance'] if 'tolerance' in params else 0.01
+	sigma = params['sigma'] if 'sigma' in params else 1.0
 	
 	#find the indices of the peaks in the simulation
 	peak_indices = find_peaks(sim.spectrum.freq_profile,sim.spectrum.int_profile,_get_res(sim.spectrum.freq_profile),sim.source.dV,is_sim=True)
@@ -44,7 +45,7 @@ def set_upper_limit(sim,obs,params={}):
 	#now find the maximum snr value and get the corresponding line frequency, rms, intensity, and index
 	best_idx = np.argmax(peak_snr)
 	best_freq = peak_freqs[best_idx]
-	best_rms = peak_rms[best_idx]
+	best_rms = sigma*peak_rms[best_idx]
 	best_int = peak_ints[best_idx]
 	
 	#now continuously adjust the simulation column density until it matches the rms
