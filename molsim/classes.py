@@ -84,6 +84,7 @@ class Catalog(object):
 					qn7low = None, #lower state quantum number 7
 					qn8low = None, #lower state quantum number 8	
 					qnlow_str = None, #lower state quantum number string
+					qnstr_fmt = None, #commands for formatting this molecule's qns
 					version = None, #version of this catalog in the database			
 					source = None, #where the catalog came from
 					last_update = None,	#when it was last updated
@@ -130,6 +131,7 @@ class Catalog(object):
 		self.qn7low = qn7low
 		self.qn8low = qn8low	
 		self.qnlow_str = qnlow_str	
+		self.qnstr_fmt = qnstr_fmt
 		self.version = version
 		self.source = source
 		self.last_update = last_update
@@ -221,6 +223,8 @@ class Catalog(object):
 				self.qn8low = self.catdict['qn8low']
 			if all(['qnlow_str' in self.catdict, self.qnlow_str is None]):
 				self.qnlow_str = self.catdict['qnlow_str']				
+			if all(['qnstr_fmt' in self.catdict, self.qnstr_fmt is None]):
+				self.qnstr_fmt = self.catdict['qnstr_fmt']				
 			if all(['version' in self.catdict, self.version is None]):
 				self.version = self.catdict['version']
 			if all(['source' in self.catdict, self.source is None]):
@@ -292,7 +296,8 @@ class Catalog(object):
 								qn6low = self.qn6low,
 								qn7low = self.qn7low,
 								qn8low = self.qn8low	,
-								qnlow_str = self.qnlow_str	,
+								qnlow_str = self.qnlow_str,
+								qnstr_fmt = self.qnstr_fmt,
 								version = self.version,
 								source = self.source,
 								last_update = self.last_update,
@@ -382,6 +387,7 @@ class Transition(object):
 					qn6up = None, #upper state quantum number 6
 					qn7up = None, #upper state quantum number 7
 					qn8up = None, #upper state quantum number 8
+					qnup_str = None, #string of upper states smashed together
 					qn1low = None, #lower state principle quantum number 1
 					qn2low = None, #lower state quantum number 2
 					qn3low = None, #lower state quantum number 3
@@ -389,25 +395,20 @@ class Transition(object):
 					qn5low = None, #lower state quantum number 5
 					qn6low = None, #lower state quantum number 6
 					qn7low = None, #lower state quantum number 7
-					qn8low = None, #lower state quantum number 8	
+					qn8low = None, #lower state quantum number 8
+					qnlow_str = None, #string of lower states mashed together
+					qnstr_formatted = None, #formatted quantum number string	
 					nqns = None, #number of quantum numbers
 					id = None, #unique ID for this transition
-					qnstr_low = None, #lower quantum number string
-					qnstr_low_tex = None, #lower quantum number string with LaTeX code
-					qnstr_up = None, #upper quantum number string
-					qnstr_up_tex = None, #upper quantum number string with LaTeX code
-					qnstr = None, #complete quantum number string
-					qnstr_tex = None, #complete quantum number string with LaTeX code
 					sijmu = None, #sijmu2 [debye^2]
 					sij = None, #sij [unitless]
 					aij = None, #aij [s^-1]
 					logint = None, #logarithmic intensity [log10(nm^2 MHz)]
-					man_int = None, #manually entered intensity, not used in calcs.
 					type = None, #transition type
-					elow_id = None, #ID of the lower energy level for this transition
-					eup_id = None, #ID of the upper energy level for this transition
-					molid = None, #ID of the molecule this transition belongs to
-					mol = None, #the actual associated molecule class
+					upper_level = None, #Level object of upper level
+					lower_level = None, #Level object of lower level
+					mol = None, #the molecule object
+					catalog = None, #the catalog object
 				):
 				
 		self.frequency = frequency
@@ -425,6 +426,7 @@ class Transition(object):
 		self.qn6up = qn6up
 		self.qn7up = qn7up
 		self.qn8up = qn8up
+		self.qnup_str = qnup_str
 		self.qn1low = qn1low
 		self.qn2low = qn2low
 		self.qn3low = qn3low
@@ -433,24 +435,19 @@ class Transition(object):
 		self.qn6low = qn6low
 		self.qn7low = qn7low
 		self.qn8low = qn8low
+		self.qnlow_str = qnlow_str
+		self.qnstr_formatted = qnstr_formatted
 		self.nqns = nqns
 		self.id = id
-		self.qnstr_low = qnstr_low
-		self.qnstr_low_tex = qnstr_low_tex
-		self.qnstr_up = qnstr_up
-		self.qnstr_up_tex = qnstr_up_tex
-		self.qnstr = qnstr
-		self.qnstr_tex = qnstr_tex
 		self.sijmu = sijmu
 		self.sij = sij
 		self.aij = aij
 		self.logint = logint
-		self.man_int = man_int
 		self.type = type
-		self.elow_id = elow_id
-		self.eup_id = eup_id
-		self.molid = molid
+		self.upper_level = upper_level
+		self.lower_level = lower_level
 		self.mol = mol		
+		self.catalog = catalog
 		
 		return		
 		
@@ -1262,5 +1259,3 @@ class Simulation(object):
 		self._make_lines()
 		self._beam_correct()
 		return
-
-

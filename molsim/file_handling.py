@@ -294,7 +294,7 @@ def _load_catalog(filein,type='SPCAT',catdict=None):
 		for x in npz_dict:
 			new_dict[x] = npz_dict[x]
 		#sort some back to strings from numpy arrays
-		entries = ['version','source','last_update','contributor_name','contributor_email','notes','refs']
+		entries = ['version','source','last_update','contributor_name','contributor_email','notes','refs','qnstr_fmt']
 		for entry in entries:
 			if entry in new_dict:
 				new_dict[entry] = str(new_dict[entry])

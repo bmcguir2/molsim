@@ -235,4 +235,51 @@ def _get_res(freq_arr):
 	Return the resolution of an array (best guess).
 	'''
 	diffs = np.diff(freq_arr)
-	return stats.mode(diffs)[0][0]	
+	return stats.mode(diffs)[0][0]
+	
+def _make_fmted_qnstr(qns,qnstr_fmt):	
+	'''
+	Given a qnstr_fmt formatter declaration, turns a set of quantum numbers into a
+	human readable output.
+	
+	For example, for methanol with some conditions, we want the final output to look like:
+	
+	1(1)-A vt=0 for the upper state of the 834.28 transition that has catalog qns of "1 1 - 0," we would use:
+	
+	'/#1/(/#2/)/#3[+=+ A,-=- A,= E]/ vt=/#4/'
+	
+	'''
+	
+	#Clean up the formatting input a bit
+	base_str = qnstr_fmt.split('/')
+	
+	if base_str[0] == '':		
+		del base_str[0]			
+	if base_str[-1] == '':
+		del base_str[-1]
+	
+	#apply the formatting
+	for x in range(len(base_str)):		
+		if '#' in base_str[x] and '[' not in base_str[x]:
+			base_str[x] = base_str[x].replace('#','')
+			idx = int(base_str[x])				
+			base_str[x] = str(qns[idx-1])
+			
+		if '#' in base_str[x] and '[' in base_str[x]:		
+			conditions = base_str[x].split('[')[1].replace(']','').split(',')
+			idx = int(base_str[x].split('[')[0].replace('#',''))			
+			
+			for y in range(len(conditions)):
+				conditions[y] = conditions[y].split('=')	
+			value = str(qns[idx-1])
+							
+			for y in range(len(conditions)):
+				if conditions[y][0] == value:
+					base_str[x] = str(conditions[y][1])				
+	
+	#make the string and return it				
+	qnstr = ''		
+	return qnstr.join(base_str)	
+
+		
+		
