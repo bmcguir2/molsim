@@ -4,6 +4,7 @@ from molsim.constants import ccm, cm, ckm, h, k, kcm
 import math
 import warnings
 from scipy import stats, signal
+import sys, os
 
 def find_nearest(arr,val):
 	idx = np.searchsorted(arr, val, side="left")
@@ -282,4 +283,166 @@ def _make_fmted_qnstr(qns,qnstr_fmt):
 	return qnstr.join(base_str)	
 
 		
+def generate_spcat_qrots(basename,fileout=None,add_temps=None,kmax=150):
+	'''
+	Runs SPCAT in the background and generates a bunch of new partition function data
+	points to be used in a qpart file, which it outputs.  Can be quite slow.
+	'''
+	
+	#define all the filenames to be used
+	int_file = f'{basename}.int'
+	int_bak_file = f'{basename}.int.bak'
+	out_file = f'{basename}.out'
+	qpart_file = f'{basename}.qpart'
+	
+	#set up a dictionary to hold the temperatures we want partition function values at
+	#fill it with the default set, some new defaults, plus any additional from add_temps
+	q_values = {}
+	default_temps = [1., 3., 5., 7., 9.375, 12., 15., 18.75, 25., 37.5, 45., 55., 65., 
+						75., 95., 115., 135., 150., 175., 200., 225., 250., 275., 300., 
+						400., 500.,
+					]
+	if add_temps is not None:
+		for temp in add_temps:
+			default_temps.append(temp)
+	for temp in default_temps:
+		q_values[temp] = None
+	
+	#set up a list of the values SPCAT already calculates so we don't do extra work
+	spcat_defaults = [9.375, 18.75, 37.5, 75., 150., 225., 300.]
 		
+	#now we run spcat at each of the temperatures it doesn't already do automatically.
+	#first save a copy of the original int file as backup
+	os.system(f'cp {int_file} {int_bak_file}')
+	
+	for temp in default_temps:
+	
+		#if its one of spcat's defaults, just move on, we'll get those automatically
+		if temp in spcat_defaults:
+			continue
+	
+		#first read in the int file and modify it to a new temperature
+		raw_int = []
+	
+		with open(int_file, 'r') as input:
+			for line in input:
+				raw_int.append(line)
+			
+		'''
+		an example int file second line looks like this:
+		0  123  3103007   0   150   -10. -10.   40 300
+		we need to modify:
+			the 8th index (the temperature) 
+			the 4th index, the max k, to make sure it's high enough for an accurate q
+			the 7th index, max frequency to make sure it's low enough we aren't overloading the computational time
+		'''
+	
+		line_split = raw_int[1].split()
+		line_split[4] = f'{kmax}'
+		line_split[7] = '20'
+		line_split[8] = str(temp)
+		raw_int[1] = '  '.join(line_split) + '\n'
+
+		with open(int_file, 'w') as output:
+			for line in raw_int:
+				output.write(line)
+				
+		#run spcat
+		os.system(f'spcat {int_file}')
+		
+		#open the out file and extract the partition function information
+		raw_out = []
+		
+		with open(out_file, 'r') as input:
+			for line in input:
+				raw_out.append(line)
+				
+		'''
+		The output file is not always formatted the same, depending on how many 
+		quantum numbers and such were used.  So we need to look for a key line that says
+		we're getting to the partition functions.  That line is:
+		
+		TEMPERATURE - Q(SPIN-ROT.) - log Q(SPIN-ROT.)
+		
+		So we'll find that index, then just parse everything in the following lines.
+		Those are of the format
+		
+		    300.000   3103007.2692    6.4918
+		    
+		Where we want to just split it out and get the 0-index (temperature) and 1-index
+		which is Q.    
+		'''				
+		
+		start_i = 0
+		
+		for i in range(len(raw_out)):
+			if 'TEMPERATURE - Q(SPIN-ROT.) - log Q(SPIN-ROT.)' in raw_out[i]:
+				start_i = i+1
+				
+		for line in raw_out[start_i:]:
+			temp = float(line.split()[0])
+			qval = float(line.split()[1])			
+			q_values[temp] = qval
+			
+	#now we reset the int file back to the original and delete the backup
+	os.system(f'mv {int_bak_file} {int_file}')			
+			
+	#make lists from the dictionary so we can sort them
+	temps_l = list(q_values.keys())
+	temps_l.sort()
+	qvals_l = [q_values[i] for i in temps_l]
+	
+	#now we make the output file
+	with open(qpart_file, 'w') as output:
+		output.write('#form : interpolation\n')
+		for t,q in zip(temps_l,qvals_l):
+			output.write(f'{t} {q}\n')
+	
+			
+					
+				
+				
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+				
+			
