@@ -1,4 +1,4 @@
-import sys
+import sys, os
 sys.path.insert(0, '/Users/Brett/Dropbox/Programs')
 
 import numpy as np
@@ -8,7 +8,7 @@ from molsim.constants import ccm, cm, ckm, h, k, kcm
 #from pkg_resources import resource_filename
 from molsim.classes import Workspace, Catalog, Transition, Level, Molecule, PartitionFunction, Spectrum, Simulation, Continuum, Source, Observatory, Observation
 from molsim.stats import get_rms
-from molsim.utils import _trim_arr, find_nearest, _make_gauss, _apply_vlsr, find_limits, find_peaks, _get_res, _find_nans, _find_limit_idx
+from molsim.utils import _trim_arr, find_nearest, _make_gauss, _apply_vlsr, find_limits, find_peaks, _get_res, _find_nans, _find_limit_idx, generate_spcat_qrots
 from molsim.functions import sum_spectra, velocity_stack, matched_filter, convert_spcat
 from molsim.plotting import plot_mf, plot_stack, plot_sim
 from molsim.analysis import set_upper_limit

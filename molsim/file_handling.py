@@ -458,7 +458,7 @@ def load_obs(filein=None,xunits='MHz',yunits='K',id=None,notes=None,spectrum_id=
 	'''
 	
 	#initialize an Observation object
-	obs = Observation()
+	obs = Observation(spectrum=Spectrum())
 	
 	#read in the data if there is any
 	if filein is not None:

@@ -152,7 +152,7 @@ def plot_stack(spectrum,params={}):
 	'sim_linewidth'	:	1.0, #float
 	'sim_drawstyle'	:	'steps', #string: 'default', 'steps', 'steps-pre', 'steps-mid', 'steps-post'
 	'save_plot'		:	False, #True or False
-	'file_out'		:	'matched_filter.pdf', #string	
+	'file_out'		:	'stacked_spectrum.pdf', #string	
 	'''
 
 	#load in options from the params dictionary, and any defaults
@@ -253,6 +253,7 @@ def plot_stack(spectrum,params={}):
 	
 	#save it if desired
 	if save_plot is True:
+		print('Test')
 		plt.savefig(file_out,format='pdf',transparent=True,bbox_inches='tight')
 
 	return		
