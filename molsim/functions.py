@@ -89,6 +89,7 @@ def velocity_stack(params,name='stack'):
 	blank_keep_range: range over which not to blank lines.  List [a,b].  Default: 3*dV
 	flag_lines: True or False. Default: False
 	flag_sigma : number of sigma over which to consider a line an interloper.  Float.  Default: 5.
+	n_strongest: stack the strongest x lines.  Integer.  Default: All lines.
 	'''
 	
 	#define an obs_chunk class to hold chunks of data to stack
@@ -167,6 +168,7 @@ def velocity_stack(params,name='stack'):
 	blank_keep_range = params['blank_keep_range'] if 'blank_keep_range' in options else [-3*dV,3*dV]
 	flag_lines = params['flag_lines'] if 'flag_lines' in options else False
 	flag_sigma = params['flag_sigma'] if 'flag_sigma' in options else 5.	
+	n_strongest = params['n_strongest'] if 'n_strongest' in options else None
 
 	#initialize a spectrum object to hold the stack and name it
 	stacked_spectrum = Spectrum(name=name)
@@ -184,6 +186,15 @@ def velocity_stack(params,name='stack'):
 		lls = np.asarray([find_nearest(freq_sim,(x-y/2)) for x,y in zip(peak_freqs,freq_widths)])
 		uls = np.asarray([find_nearest(freq_sim,(x+y/2)) for x,y in zip(peak_freqs,freq_widths)])
 		peak_ints = np.asarray([np.nansum(int_sim[x:y]) for x,y in zip(lls,uls)])
+		
+	#choose the n strongest lines, if that is specified
+	if n_strongest is not None:
+		sort_idx = np.flip(np.argsort(peak_ints))
+		if n_strongest > len(peak_ints):
+			pass
+		else:
+			peak_ints = peak_ints[sort_idx][:n_strongest]	
+			peak_freqs = peak_freqs[sort_idx][:n_strongest]
 	
 	#split out the data to use, first finding the appropriate indices for the width range we want
 	freq_widths = vel_width*peak_freqs/ckm
