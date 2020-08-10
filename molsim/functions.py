@@ -1,7 +1,7 @@
 import numpy as np
 from molsim.constants import h, k, ckm
 from molsim.classes import Spectrum
-from molsim.utils import find_limits, _get_res, _find_nans, find_peaks, find_nearest
+from molsim.utils import find_limits, _get_res, _find_nans, find_peaks, find_nearest, _find_ones
 from molsim.stats import get_rms
 from molsim.file_handling import load_mol
 from datetime import date
@@ -67,12 +67,13 @@ def sum_spectra(sims,thin=True,Tex=None,Tbg=None,res=None,name='sum'):
 
 	return sum_spectrum
 
-def velocity_stack(params,name='stack'):
+def velocity_stack(params):
 
 	'''
 	Perform a velocity stack.  Requires a params catalog for all the various options.
 	Here they are, noted as required, or otherwise have defaults:
 	
+	name: a name for this spectrum object. String.  Default: 'stack'
 	selection : 'peaks' or 'lines'. Default: 'lines'
 	freq_arr : the array of frequencies. Required
 	int_arr : the array of intensities. Required
@@ -153,6 +154,7 @@ def velocity_stack(params,name='stack'):
 
 	#unpacking the dictionary into local variables for ease of use
 	options = params.keys()
+	name = params['name'] if 'name' in options else 'stack'
 	freq_arr = np.copy(params['freq_arr'])
 	int_arr = np.copy(params['int_arr'])
 	freq_sim = np.copy(params['freq_sim'])
@@ -198,11 +200,18 @@ def velocity_stack(params,name='stack'):
 	
 	#split out the data to use, first finding the appropriate indices for the width range we want
 	freq_widths = vel_width*peak_freqs/ckm
-	lls_obs = np.asarray([find_nearest(freq_arr,x-y) for x,y in zip(peak_freqs,freq_widths)])
-	uls_obs = np.asarray([find_nearest(freq_arr,x+y) for x,y in zip(peak_freqs,freq_widths)])
-	lls_sim = np.asarray([find_nearest(freq_sim,x-y) for x,y in zip(peak_freqs,freq_widths)])
-	uls_sim = np.asarray([find_nearest(freq_sim,x+y) for x,y in zip(peak_freqs,freq_widths)])
-
+	
+	mask_arr_obs = np.ones_like(freq_arr,dtype=int)*False
+	for x,y in zip(peak_freqs,freq_widths):
+		mask_arr_obs[(freq_arr>(x-y)) & (freq_arr<(x+y))] = True
+		lls_obs = _find_ones(mask_arr_obs)[0]
+		uls_obs = _find_ones(mask_arr_obs)[1]
+	mask_arr_sim = np.ones_like(freq_sim,dtype=int)*False
+	for x,y in zip(peak_freqs,freq_widths):
+		mask_arr_sim[(freq_sim>(x-y)) & (freq_sim<(x+y))] = True
+		lls_sim = _find_ones(mask_arr_sim)[0]
+		uls_sim = _find_ones(mask_arr_sim)[1]						
+		
 	#catch edge cases where there's no actual data because we're near a gap
 	obs_chunks = [ObsChunk(np.copy(freq_arr[x:y]),np.copy(int_arr[x:y]),np.copy(freq_sim[a:b]),np.copy(int_sim[a:b]),peak_int,c) for x,y,a,b,peak_int,c in zip(lls_obs,uls_obs,lls_sim,uls_sim,peak_ints,range(len(uls_sim)))]
 
