@@ -21,19 +21,22 @@ def _trim_arr(arr,lls,uls,key_arr=None,return_idxs=False,ll_idxs=None,ul_idxs=No
 	'''
 	
 	if ll_idxs is not None:
-		return np.concatenate([arr[ll_idx:ul_idx+1] for ll_idx,ul_idx in zip(ll_idxs,ul_idxs)])
-	
-	if key_arr is None:
-		ll_idxs = [find_nearest(arr,x) for x in lls]
-		ul_idxs = [find_nearest(arr,x) for x in uls]
+		return np.concatenate([arr[ll_idx:ul_idx] for ll_idx,ul_idx in zip(ll_idxs,ul_idxs)])
+		
+	mask_arr = np.ones_like(arr,dtype=int)*False
+	if key_arr is None:	
+		for x,y in zip(lls,uls):
+			mask_arr[(arr>x) & (arr<y)] = True
 	else:
-		ll_idxs = [find_nearest(key_arr,x) for x in lls]
-		ul_idxs = [find_nearest(key_arr,x) for x in uls]
-
+		for x,y in zip(lls,uls):
+			mask_arr[(key_arr>x) & (key_arr<y)] = True
+			
 	if return_idxs is False:
-		return np.concatenate([arr[ll_idx:ul_idx+1] for ll_idx,ul_idx in zip(ll_idxs,ul_idxs)])
+		return arr[mask_arr == 1]
 	else:
-		return np.concatenate([arr[ll_idx:ul_idx+1] for ll_idx,ul_idx in zip(ll_idxs,ul_idxs)]),ll_idxs,ul_idxs
+		ll_idxs_out = _find_ones(mask_arr)[0]
+		ul_idxs_out = _find_ones(mask_arr)[1]
+		return arr[mask_arr == 1],ll_idxs_out,ul_idxs_out
 		
 @njit
 def _make_gauss(freq0,int0,freq,dV,ckm):
@@ -122,10 +125,10 @@ def _apply_beam(freq_arr,int_arr,source_size,dish_size,return_beam=False):
 	else:
 		return int_arr*beam_dilution,beam_dilution
 
-def find_limits(freq_arr,spacing_tolerance=100,padding=25):
+def find_limits(freq_arr,spacing_tolerance=100,padding=0):
 	'''
 	Finds the limits of a set of data, including gaps over a width, determined by the
-	spacing tolerance.  Adds padding to each side to allow user to change vlsr and get 
+	spacing tolerance.  Optional padding to each side to allow user to change vlsr and get 
 	the simulation within the right area.
 	'''
 	
@@ -198,6 +201,24 @@ def _find_nans(arr):
 	uls = [x[1] for x in ranges]
 	
 	return lls,uls	
+	
+def _find_ones(arr):
+	'''
+	Find the start,[stop] indices where value is present in arr
+	'''
+
+	# Create an array that is 1 where a is 0, and pad each end with an extra 0.
+	# here .view(np.int8) changes the np.equal output from a bool array to a 1/0 array
+	new_arr = np.copy(arr)
+	iszero = np.concatenate(([0], np.equal(arr, 1).view(np.int8), [0]))
+	absdiff = np.abs(np.diff(iszero))
+	# Runs start and end where absdiff is 1.
+	ranges = np.where(absdiff == 1)[0].reshape(-1, 2)
+	
+	lls = [x[0] for x in ranges]
+	uls = [x[1] for x in ranges]
+	
+	return lls,uls		
 
 def find_peaks(freq_arr,int_arr,res,min_sep,is_sim=False,sigma=3,kms=True):
 	'''
