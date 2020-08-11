@@ -324,7 +324,7 @@ def velocity_stack(params):
 	stacked_spectrum.snr = np.copy(int_avg)
 	stacked_spectrum.int_sim = np.copy(int_sim_avg)
 						
-	return stacked_spectrum,obs_chunks[0]
+	return stacked_spectrum
 	
 def matched_filter(data_x,data_y,filter_y,name='mf'):
 	'''
