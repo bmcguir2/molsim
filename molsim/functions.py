@@ -91,6 +91,7 @@ def velocity_stack(params):
 	flag_lines: True or False. Default: False
 	flag_sigma : number of sigma over which to consider a line an interloper.  Float.  Default: 5.
 	n_strongest: stack the strongest x lines.  Integer.  Default: All lines.
+	n_snr: stack the x highest snr lines.  Integer.  Default: All lines.  Warning: Slow
 	'''
 	
 	#define an obs_chunk class to hold chunks of data to stack
@@ -166,6 +167,7 @@ def velocity_stack(params):
 	flag_lines = params['flag_lines'] if 'flag_lines' in options else False
 	flag_sigma = params['flag_sigma'] if 'flag_sigma' in options else 5.	
 	n_strongest = params['n_strongest'] if 'n_strongest' in options else None
+	n_snr = params['n_snr'] if 'n_snr' in options else None
 
 	#initialize a spectrum object to hold the stack and name it
 	stacked_spectrum = Spectrum(name=name)
@@ -191,10 +193,28 @@ def velocity_stack(params):
 			pass
 		else:
 			peak_ints = peak_ints[sort_idx][:n_strongest]	
-			peak_freqs = peak_freqs[sort_idx][:n_strongest]	
+			peak_freqs = peak_freqs[sort_idx][:n_strongest]
+			for x,y in zip(peak_freqs,peak_ints):
+				print(x,y)	
+			
+	#choose the n highest snr lines, if that is instead specified
+	if n_snr is not None:
+		if n_snr > len(peak_ints):
+			pass
+		else:		
+			freq_widths = vel_width*peak_freqs/ckm
+			lls_obs = np.asarray([find_nearest(freq_arr,x-y) for x,y in zip(peak_freqs,freq_widths)])
+			uls_obs = np.asarray([find_nearest(freq_arr,x+y) for x,y in zip(peak_freqs,freq_widths)])		
+			line_noise = np.asarray([get_rms(int_arr[x:y]) for x,y in zip(lls_obs,uls_obs)])
+			line_snr = peak_ints/line_noise
+			sort_idx = np.flip(np.argsort(line_snr))
+			peak_ints = peak_ints[sort_idx][:n_snr]	
+			peak_freqs = peak_freqs[sort_idx][:n_snr]
+			for x,y,z in zip(peak_freqs,peak_ints,line_snr[sort_idx][:n_snr]):
+				print(x,y,z)		
+	
 	
 	#split out the data to use, first finding the appropriate indices for the width range we want
-	freq_widths = vel_width*peak_freqs/ckm
 	freq_widths = vel_width*peak_freqs/ckm
 	lls_obs = np.asarray([find_nearest(freq_arr,x-y) for x,y in zip(peak_freqs,freq_widths)])
 	uls_obs = np.asarray([find_nearest(freq_arr,x+y) for x,y in zip(peak_freqs,freq_widths)])
@@ -247,6 +267,7 @@ def velocity_stack(params):
 			obs.int_weighted = obs.int_obs * obs.weight
 			obs.int_sim_weighted = obs.int_sim * obs.weight	
 			
+			
 	#Generate a velocity array to interpolate everything onto				
 	velocity_avg = np.arange(-vel_width,vel_width,v_res)	
 	
@@ -282,6 +303,7 @@ def velocity_stack(params):
 				rms_sum += interped_rms[y]**2
 		rms_arr.append(rms_sum)
 	rms_arr	= np.asarray(rms_arr)
+	rms_arr[rms_arr==0] = np.nan
 	
 	#add up the interped intensities, then divide that by the rms_array
 	int_avg = np.nansum(interped_ints,axis=0)/rms_arr
