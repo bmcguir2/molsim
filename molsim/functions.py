@@ -82,7 +82,7 @@ def velocity_stack(params):
 	res_inp : resolution of input data [MHz].  Calculates if not given
 	dV : FWHM of lines [km/s]. Required.
 	dV_ext : How many dV to integrate over.  Required if 'lines' selected.
-	vlsr: vlsr [km/s]. Required.
+	vlsr: vlsr [km/s]. Default: 0.0 
 	vel_width : how many km/s of spectra on either side of a line to stack [km/s].  Required.
 	v_res: desired velocity resolution [km/s].  Default: 0.1*dV
 	drops: id's of any chunks to exclude.  List.  Default: []
@@ -97,7 +97,7 @@ def velocity_stack(params):
 	
 	class ObsChunk(object):
 
-		def __init__(self,freq_obs,int_obs,freq_sim,int_sim,peak_int,id):
+		def __init__(self,freq_obs,int_obs,freq_sim,int_sim,peak_int,id,cfreq):
 	
 			self.freq_obs = freq_obs #frequency array to be stacked
 			self.int_obs = int_obs #intensity array to be stacked
@@ -105,16 +105,15 @@ def velocity_stack(params):
 			self.int_sim = int_sim #simulated intensity array to be stacked
 			self.peak_int = peak_int #peak intensity for this chunk
 			self.id = id #id of this chunk
+			self.cfreq = cfreq #center frequency of the chunk
 			self.flag = False #flagged as not to be used
 			self.rms = None #rms of the chunk
-			self.cfreq = None #center frequency of the chunk
 			self.velocity = None #to hold the velocity array
 			self.test = False
 			
 			self.check_data()
 			if self.flag is False:
 				self.set_rms()
-				self.set_cfreq()
 				self.set_velocity()
 				self.set_sim_velocity()
 			
@@ -129,10 +128,6 @@ def velocity_stack(params):
 			if np.count_nonzero(~np.isnan(self.int_obs)) < np.count_nonzero(np.isnan(self.int_obs)):
 				self.flag = True
 				return	
-			return
-			
-		def set_cfreq(self):
-			self.cfreq = self.freq_obs[int(round(len(self.freq_obs)/2))]
 			return
 			
 		def set_rms(self):
@@ -162,7 +157,7 @@ def velocity_stack(params):
 	res_inp = params['res_inp'] if 'res_inp' in options else _get_res(freq_arr)
 	dV = params['dV']
 	dV_ext = params['dV_ext'] if 'dV_ext' in options else None
-	vlsr = params['vlsr']
+	vlsr = params['vlsr'] if 'vlsr' in options else 0.0
 	vel_width = params['vel_width']
 	v_res = params['v_res'] if 'v_res' in options else 0.1*dV
 	drops = params['drops'] if 'drops' in options else []
@@ -196,24 +191,17 @@ def velocity_stack(params):
 			pass
 		else:
 			peak_ints = peak_ints[sort_idx][:n_strongest]	
-			peak_freqs = peak_freqs[sort_idx][:n_strongest]
+			peak_freqs = peak_freqs[sort_idx][:n_strongest]	
 	
 	#split out the data to use, first finding the appropriate indices for the width range we want
 	freq_widths = vel_width*peak_freqs/ckm
-	
-	mask_arr_obs = np.ones_like(freq_arr,dtype=int)*False
-	for x,y in zip(peak_freqs,freq_widths):
-		mask_arr_obs[(freq_arr>(x-y)) & (freq_arr<(x+y))] = True
-		lls_obs = _find_ones(mask_arr_obs)[0]
-		uls_obs = _find_ones(mask_arr_obs)[1]
-	mask_arr_sim = np.ones_like(freq_sim,dtype=int)*False
-	for x,y in zip(peak_freqs,freq_widths):
-		mask_arr_sim[(freq_sim>(x-y)) & (freq_sim<(x+y))] = True
-		lls_sim = _find_ones(mask_arr_sim)[0]
-		uls_sim = _find_ones(mask_arr_sim)[1]						
+	freq_widths = vel_width*peak_freqs/ckm
+	lls_obs = np.asarray([find_nearest(freq_arr,x-y) for x,y in zip(peak_freqs,freq_widths)])
+	uls_obs = np.asarray([find_nearest(freq_arr,x+y) for x,y in zip(peak_freqs,freq_widths)])
+	lls_sim = np.asarray([find_nearest(freq_sim,x-y) for x,y in zip(peak_freqs,freq_widths)])
+	uls_sim = np.asarray([find_nearest(freq_sim,x+y) for x,y in zip(peak_freqs,freq_widths)])						
 		
-	#catch edge cases where there's no actual data because we're near a gap
-	obs_chunks = [ObsChunk(np.copy(freq_arr[x:y]),np.copy(int_arr[x:y]),np.copy(freq_sim[a:b]),np.copy(int_sim[a:b]),peak_int,c) for x,y,a,b,peak_int,c in zip(lls_obs,uls_obs,lls_sim,uls_sim,peak_ints,range(len(uls_sim)))]
+	obs_chunks = [ObsChunk(np.copy(freq_arr[x:y]),np.copy(int_arr[x:y]),np.copy(freq_sim[a:b]),np.copy(int_sim[a:b]),peak_int,c,d) for x,y,a,b,peak_int,c,d in zip(lls_obs,uls_obs,lls_sim,uls_sim,peak_ints,range(len(uls_sim)),peak_freqs)]
 
 	#flagging
 	for obs in obs_chunks:
@@ -257,7 +245,7 @@ def velocity_stack(params):
 			obs.weight = obs.peak_int/max_int
 			obs.weight /= obs.rms**2
 			obs.int_weighted = obs.int_obs * obs.weight
-			obs.int_sim_weighted = obs.int_sim * obs.weight		
+			obs.int_sim_weighted = obs.int_sim * obs.weight	
 			
 	#Generate a velocity array to interpolate everything onto				
 	velocity_avg = np.arange(-vel_width,vel_width,v_res)	
@@ -314,7 +302,7 @@ def velocity_stack(params):
 	stacked_spectrum.snr = np.copy(int_avg)
 	stacked_spectrum.int_sim = np.copy(int_sim_avg)
 						
-	return stacked_spectrum
+	return stacked_spectrum,obs_chunks[0]
 	
 def matched_filter(data_x,data_y,filter_y,name='mf'):
 	'''
