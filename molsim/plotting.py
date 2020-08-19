@@ -146,13 +146,18 @@ def plot_stack(spectrum,params={}):
 	'linewidth'		:	1.0, #float
 	'label'			:	None, #string
 	'label_xy'		:	(0.95,0.75), #tuple, (vertical axis fraction, horizontal axis fraction)
-	'label_color'	:	'black', #matplotlib color
+	'label_color'	:	'black', #matplotlib color.
+	'stack_alpha'	:	1.0, #float
 	'plot_sim'		:	True, #True or False
 	'sim_color'		:	'red', #matplotlib color
 	'sim_linewidth'	:	1.0, #float
 	'sim_drawstyle'	:	'steps', #string: 'default', 'steps', 'steps-pre', 'steps-mid', 'steps-post'
+	'sim_alpha'		:	0.1, #float
 	'save_plot'		:	False, #True or False
 	'file_out'		:	'stacked_spectrum.pdf', #string	
+	'save_format'	:	'pdf', #string: 'pdf', 'png', 'svg', 'jpg'
+	'save_dpi'		:	300, #int
+	'show_plot'		:	True, #True or False
 	'''
 
 	#load in options from the params dictionary, and any defaults
@@ -169,12 +174,17 @@ def plot_stack(spectrum,params={}):
 				'label'			:	None,
 				'label_xy'		:	(0.95,0.75),
 				'label_color'	:	'black',
+				'stack_alpha'	:	1.0,
 				'plot_sim'		:	True,
 				'sim_color'		:	'red',
 				'sim_linewidth'	:	1.0,
 				'sim_drawstyle'	:	'steps',
+				'sim_alpha'		:	1.0,
 				'save_plot'		:	False,
-				'file_out'		:	'stacked_spectrum.pdf'
+				'file_out'		:	'stacked_spectrum.pdf',
+				'save_format'	:	'pdf',
+				'save_dpi'		:	300,
+				'show_plot'		:	True,
 				}
 				
 	for x in params:
@@ -194,12 +204,17 @@ def plot_stack(spectrum,params={}):
 	label = settings['label']
 	label_xy = settings['label_xy']
 	label_color = settings['label_color']
+	stack_alpha = settings['stack_alpha']
 	plot_sim = settings['plot_sim']
 	sim_color = settings['sim_color']
 	sim_linewidth = settings['sim_linewidth']
 	sim_drawstyle = settings['sim_drawstyle']
+	sim_alpha = settings['sim_alpha']
 	save_plot = settings['save_plot']
 	file_out = settings['file_out']
+	save_format = settings['save_format']
+	save_dpi = settings['save_dpi']
+	show_plot = settings['show_plot']
 
 	#plot shell making
 	plt.ion()
@@ -222,9 +237,9 @@ def plot_stack(spectrum,params={}):
 	ax.xaxis.set_ticks_position('both')	
 	
 	#plot
-	plt.plot(spectrum.velocity,spectrum.snr,color=plot_color,drawstyle=drawstyle,linewidth=linewidth)
+	plt.plot(spectrum.velocity,spectrum.snr,color=plot_color,drawstyle=drawstyle,linewidth=linewidth,alpha=stack_alpha)
 	if plot_sim is True:
-		plt.plot(spectrum.velocity,spectrum.int_sim,color=sim_color,drawstyle=sim_drawstyle,linewidth=sim_linewidth)
+		plt.plot(spectrum.velocity,spectrum.int_sim,color=sim_color,drawstyle=sim_drawstyle,linewidth=sim_linewidth,alpha=sim_alpha)
 	
 	#xlimits
 	if xlimits is not None:
@@ -249,12 +264,15 @@ def plot_stack(spectrum,params={}):
 		plt.annotate(label, xy = label_xy, xycoords = 'axes fraction', color = label_color, ha = 'right')
 		
 	#show it
-	fig.canvas.draw()
+	if show_plot is True:
+		fig.canvas.draw()
 	
 	#save it if desired
 	if save_plot is True:
-		print('Test')
-		plt.savefig(file_out,format='pdf',transparent=True,bbox_inches='tight')
+		if save_format != 'pdf':
+			plt.savefig(file_out,format=save_format,dpi=save_dpi,transparent=True,bbox_inches='tight')
+		else:
+			plt.savefig(file_out,format=save_format,transparent=True,bbox_inches='tight')
 
 	return		
 	
@@ -275,10 +293,12 @@ def plot_sim(spectra,params={}):
 	'sim_drawstyles':	['steps'], #list of drawstyles; string: 'default', 'steps', 'steps-pre', 'steps-mid', 'steps-post'
 	'sim_linewidths':	[1.0], #list of floats
 	'sim_orders'	:	[2], #list of integers
+	'sim_alphas'	:	[1.0], #list of floats
 	'obs_colors'	:	['black'], #list of matplotlib colors
 	'obs_drawstyles':	['steps'], #list of drawstyles; string: 'default', 'steps', 'steps-pre', 'steps-mid', 'steps-post'
 	'obs_linewidths':	[1.0], #list of floats
-	'obs_orders'	:	[1], #list of strings
+	'obs_orders'	:	[1], #list of integers
+	'obs_alphas'	:	[1.0], #list of floats
 	'save_plot'		:	False, #True or False
 	'file_out'		:	'simulated_spectrum.pdf' #string
 		
@@ -296,11 +316,13 @@ def plot_sim(spectra,params={}):
 				'sim_drawstyles':	['steps'] * len(spectra),
 				'sim_linewidths':	[1.0] * len(spectra),
 				'sim_orders'	:	[2] * len(spectra),
+				'sim_alphas'	:	[1.0] * len(spectra),
 				'obs'			:	None,
 				'obs_colors'	:	['black'],
 				'obs_drawstyles':	['steps'],
 				'obs_linewidths':	[1.0],
-				'obs_orders'	:	[1],				
+				'obs_orders'	:	[1],			
+				'obs_alphas'	:	[1.0],	
 				'save_plot'		:	False,
 				'file_out'		:	'simulated_spectrum.pdf'
 				}
@@ -320,11 +342,13 @@ def plot_sim(spectra,params={}):
 	sim_drawstyles = settings['sim_drawstyles']
 	sim_linewidths = settings['sim_linewidths']
 	sim_orders = settings['sim_orders']
+	sim_alphas = settings['sim_alphas']
 	obs = settings['obs']
 	obs_colors = settings['obs_colors']
 	obs_drawstyles = settings['obs_drawstyles']
 	obs_linewidths = settings['obs_linewidths']
 	obs_orders = settings['obs_orders']
+	obs_alphas = settings['obs_alphas']
 	save_plot = settings['save_plot']
 	file_out = settings['file_out']	
 	
@@ -349,11 +373,11 @@ def plot_sim(spectra,params={}):
 	ax.xaxis.set_ticks_position('both')	
 	
 	#plot
-	for spectrum,color,drawstyle,linewidth,order in zip(spectra,sim_colors,sim_drawstyles,sim_linewidths,sim_orders):
-		plt.plot(spectrum.freq_profile,spectrum.int_profile,color=color,drawstyle=drawstyle,linewidth=linewidth,zorder=order)
+	for spectrum,color,drawstyle,linewidth,order,alpha in zip(spectra,sim_colors,sim_drawstyles,sim_linewidths,sim_orders,sim_alphas):
+		plt.plot(spectrum.freq_profile,spectrum.int_profile,color=color,drawstyle=drawstyle,linewidth=linewidth,alpha=alpha,zorder=order)
 	if obs is not None:
-		for spectrum,color,drawstyle,linewidth,order in zip(obs,obs_colors,obs_drawstyles,obs_linewidths,obs_orders):
-			plt.plot(spectrum.frequency,spectrum.Tb,color=color,drawstyle=drawstyle,linewidth=linewidth,zorder=order)	
+		for spectrum,color,drawstyle,linewidth,order,alpha in zip(obs,obs_colors,obs_drawstyles,obs_linewidths,obs_orders,obs_alphas):
+			plt.plot(spectrum.frequency,spectrum.Tb,color=color,drawstyle=drawstyle,linewidth=linewidth,alpha=alpha,zorder=order)	
 	
 	#xlimits
 	ax.get_xaxis().get_major_formatter().set_scientific(False) #Don't let the x-axis go into scientific notation

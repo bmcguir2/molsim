@@ -935,7 +935,7 @@ class Spectrum(object):
 								snr = self.snr,
 							)
 		
-		return			
+		return				
 		
 class Continuum(object):
 

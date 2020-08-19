@@ -66,6 +66,26 @@ def sum_spectra(sims,thin=True,Tex=None,Tbg=None,res=None,name='sum'):
 		sum_spectrum.int_profile = int_arr
 
 	return sum_spectrum
+	
+def resample_obs(x_arr,y_arr,res,return_spectrum=False):
+	'''
+	Resamples x_arr and y_arr to a resolution of 'res' in whatever units x_arr is and returns
+	them as numpy arrays if return_spectrum is False or as a Spectrum object if return_spectrum
+	is True.
+	'''	
+	
+	lls,uls = find_limits(x_arr)
+	new_x = np.array([])
+	
+	for x,y in zip(lls,uls):
+		new_x = np.concatenate((new_x,np.arange(x,y,res)))
+		
+	new_y = np.interp(new_x,x_arr,y_arr,left=np.nan,right=np.nan)
+	
+	if return_spectrum is False:
+		return new_x,new_y
+	else:
+		return Spectrum(frequency=new_x,Tb=new_y)	
 
 def velocity_stack(params):
 
@@ -91,7 +111,8 @@ def velocity_stack(params):
 	flag_lines: True or False. Default: False
 	flag_sigma : number of sigma over which to consider a line an interloper.  Float.  Default: 5.
 	n_strongest: stack the strongest x lines.  Integer.  Default: All lines.
-	n_snr: stack the x highest snr lines.  Integer.  Default: All lines.  Warning: Slow
+	n_snr: stack the x highest snr lines.  Integer.  Default: All lines.
+	return_snr: output arrays of the snrs stacked plus the snr of the stack itself. True or False. Default: False 
 	'''
 	
 	#define an obs_chunk class to hold chunks of data to stack
@@ -168,6 +189,7 @@ def velocity_stack(params):
 	flag_sigma = params['flag_sigma'] if 'flag_sigma' in options else 5.	
 	n_strongest = params['n_strongest'] if 'n_strongest' in options else None
 	n_snr = params['n_snr'] if 'n_snr' in options else None
+	return_snr = params['return_snr'] if 'return_snr' in options else False
 
 	#initialize a spectrum object to hold the stack and name it
 	stacked_spectrum = Spectrum(name=name)
@@ -194,8 +216,6 @@ def velocity_stack(params):
 		else:
 			peak_ints = peak_ints[sort_idx][:n_strongest]	
 			peak_freqs = peak_freqs[sort_idx][:n_strongest]
-			for x,y in zip(peak_freqs,peak_ints):
-				print(x,y)	
 			
 	#choose the n highest snr lines, if that is instead specified
 	if n_snr is not None:
@@ -210,8 +230,6 @@ def velocity_stack(params):
 			sort_idx = np.flip(np.argsort(line_snr))
 			peak_ints = peak_ints[sort_idx][:n_snr]	
 			peak_freqs = peak_freqs[sort_idx][:n_snr]
-			for x,y,z in zip(peak_freqs,peak_ints,line_snr[sort_idx][:n_snr]):
-				print(x,y,z)		
 	
 	
 	#split out the data to use, first finding the appropriate indices for the width range we want
@@ -324,7 +342,15 @@ def velocity_stack(params):
 	stacked_spectrum.snr = np.copy(int_avg)
 	stacked_spectrum.int_sim = np.copy(int_sim_avg)
 						
-	return stacked_spectrum
+	if return_snr is False:
+		return stacked_spectrum
+	if return_snr is True:	
+		ll = find_nearest(velocity_avg,-dV*dV_ext)
+		ul = find_nearest(velocity_avg,dV*dV_ext)
+		stack_int = np.nansum(int_avg[ll:ul])
+		stack_rms = get_rms(int_avg[ll:ul])
+		stack_snr = stack_int*1E5
+		return stacked_spectrum,line_snr[sort_idx][:n_snr],stack_snr
 	
 def matched_filter(data_x,data_y,filter_y,name='mf'):
 	'''
