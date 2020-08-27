@@ -1,11 +1,13 @@
-from typing import Type, Any, List, Union
+from typing import Type, Any, List, Union, Tuple
 
 import numpy as np
 from loguru import logger
-from numba import jit, njit
+from numba import jit, njit, prange, config
+from tqdm.auto import tqdm
 
 from molsim.classes import Catalog
 from molsim.constants import cm, kcm, ccm, h, k, ckm
+from molsim import utils
 
 
 def calculate_dopplerwidth_frequency(
@@ -29,62 +31,181 @@ def calculate_dopplerwidth_frequency(
     return np.abs(frequencies * delta_v / (ckm * 2.0 * np.log(2.0)))
 
 
-@njit(fastmath=True)
-def apply_beam(
-    frequencies: np.ndarray,
-    intensities: np.ndarray,
-    source_size: float,
-    dish_size: float,
-):
+def calculate_tau(
+    catalog: Type["Catalog"], Ncol: float, Q: float, Tex: float, dV: float,
+) -> np.ndarray:
     """
-    Compute beam corrections to the intensity. This offsets the "effective"
-    observed intensity based on the size of the telescope beam and the source.
+    Compute the optical depth based on theoretical intensities, the partition
+    function, excitation temperature, and radial velocity.
 
     Parameters
     ----------
+    catalog : Type[
+        Molsim `Catalog` object instance, containing the intrinsic linestrength,
+        the upper state degeneracy and energy, and the frequency of each line.
+    Ncol : float
+        Column density in cm^-2 of the molecule
+    Q : float
+        Partition function at Tex
+    Tex : float
+        Excitation temperature in K
+    dV : float
+        Radial velocity in km/s
+
+    Returns
+    -------
+    np.ndarray
+        Optical depth tau predicted for each catalog entry
+    """
+    gup, eup, linestrength, frequency = (
+        catalog.gup,
+        catalog.eup,
+        catalog.aij,
+        catalog.frequency,
+    )
+    mask = catalog.mask
+    tau = (
+        linestrength[mask] * cm ** 3 * (Ncol * 100**2) * gup[mask]
+        * (np.exp(-eup[mask] / Tex))
+        * (np.exp(h * frequency[mask] * 1e6 / (k * Tex)) - 1)
+    ) / (8 * np.pi * (frequency[mask] * 1e6) ** 3 * dV * 1000 * Q)
+    return tau
+
+
+def calculate_background(
+    temperature: float, frequency: np.ndarray
+) -> Tuple[np.ndarray, np.ndarray]:
+    Tbg = np.full_like(frequency, temperature)
+    return Tbg
+
+
+def calculate_Iv(tau: np.ndarray, frequency: np.ndarray, Tex: float) -> np.ndarray:
+    """
+    Calculate the flux/brightness of a given line; the `frequency` array should
+    correspond to catalog entries, and the `tau` array should be the optical
+    depth at each frequency.
+
+    Parameters
+    ----------
+    tau : np.ndarray
+        [description]
     frequency : np.ndarray
-        NumPy 1D 
-    intensity : np.ndarray
         [description]
-    source_size : float
-        [description]
-    dish_size : float
+    Tex : float
         [description]
 
     Returns
     -------
     np.ndarray
-        Corrected intensities
+        [description]
     """
-    # create a wave to hold wavelengths, fill it to start w/ frequencies
-    wavelength = cm / (frequencies * 1e6)
-    # fill it with beamsizes
-    beam_size = wavelength * 206265 * 1.22 / dish_size
-    # create an array to hold beam dilution factors
-    dilution_factor = source_size ** 2 / (beam_size ** 2 + source_size ** 2)
-    # perform an inplace modification to the intensities
-    intensities *= dilution_factor
-    return None
+    Iv = (
+        (2 * h * tau * (frequency * 1e6) ** 3)
+        / cm ** 2
+        * (np.exp(h * frequency * 1e6 / (k * Tex)) - 1)
+    ) * 1e26
+    return Iv
 
 
-def predict_spectrum(
-    data: np.ndarray,
-    source_size: float,
-    Ncol: float,
-    Tex: float,
-    dV: float,
-    Q: float,
-    mol_cat: Type[Catalog],
-    obs,
+def continuum_tau_correction(
+    frequency: np.ndarray, tau: np.ndarray, Tbg: np.ndarray, Tex: float
 ):
     """
-    TODO - make this work lol
+    Performs inplace correction of the calculated optical depth with the
+    background continuum.
 
     Parameters
     ----------
-    data : np.ndarray
+    frequency : np.ndarray
+        [description]
+    tau : np.ndarray
+        [description]
+    Tbg : np.ndarray
+        [description]
+    Tex : float
+        [description]
+    """
+    J_T = (h * frequency * 1e6 / k) * (
+        np.exp(((h * frequency * 1e6) / (k * Tex))) - 1
+    ) ** -1
+    J_Tbg = (h * frequency * 1e6 / k) * (
+        np.exp(((h * frequency * 1e6) / (k * Tbg))) - 1
+    ) ** -1
+    return (J_T - J_Tbg) * (1 - np.exp(-tau))
+
+
+# @njit(fastmath=True, parallel=False)
+def atomic_gaussian(
+    obs_frequency: np.ndarray, centers: np.ndarray, tau: np.ndarray, dV: float,
+):
+    n_catalog = centers.size
+    intensities = np.zeros_like(obs_frequency)
+    for index in range(n_catalog):
+        intensities += neu_gaussian(
+            obs_frequency, centers[index], tau[index], dV
+        )
+    return intensities
+
+
+def neu_gaussian(x, x0, A, dV):
+    return A * np.exp(-(x - x0)**2. / (2*((dV*x0/ckm)/2.35482)**2))
+
+
+def beam_correction(
+    frequency: np.ndarray, intensity: np.ndarray, source_size: float, dish_size: float
+):
+    """
+    Correct the simulated lineprofiles inplace for discrepancy between the
+    telescope beam and the source size.
+
+    Parameters
+    ----------
+    frequency : np.ndarray
+        Frequency values of each obs channel
+    intensity : np.ndarray
+        Line profile values of each obs channel
+    source_size : float
+        Size of the source
+    dish_size : float
+        Size of the dish
+    """
+    # convert beam size to arcsec
+    beam_size = 206265 * 1.22 * (cm / (frequency * 1e6)) / dish_size
+    intensity *= source_size ** 2 / (beam_size ** 2 + source_size ** 2)
+
+
+def build_synthetic_spectrum(
+    spectrum: Type["DataChunk"],
+    catalog: Type["Catalog"],
+    vlsr: float,
+    source_size: float,
+    dish_size: float,
+    Ncol: float,
+    Q: float,
+    Tex: float,
+    dV: float,
+    background_temperature: float,
+    max_threads=1
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    1. Velocity offset
+    2. Calculate optical depth
+    3. Calculate background
+    4. Calculate optical depth correction
+    5. Simulate line profiles
+    6. Apply beam dilution correction
+
+    Parameters
+    ----------
+    spectrum : Type[
+        [description]
+    catalog : Type[
+        [description]
+    vlsr : float
         [description]
     source_size : float
+        [description]
+    dish_size : float
         [description]
     Ncol : float
         [description]
@@ -92,73 +213,35 @@ def predict_spectrum(
         [description]
     dV : float
         [description]
-    Q : float
+    background_temperature : float
         [description]
-    mol_cat : Type[Catalog]
-        [description]
-    obs : [type]
-        [description]
-    """
-    spec_frequency = data[:, 0].view()
-    spec_int = data[:, 1].view()
-    # update the Einstein A coefficients with given partition function
-    mol_cat._set_sijmu_aij(Q)
-    Nl = Ncol * mol_cat.glow * np.exp(-mol_cat.elow / (kcm * Tex)) / Q
-    # calculate the optical depth
-    tau = (
-        (ccm / (mol_cat.frequency * 10 ** 6)) ** 2
-        * mol_cat.aij
-        * mol_cat.gup
-        * Nl
-        * (1 - np.exp(-(h * mol_cat.frequency * 10 ** 6) / (k * T)))
-    )
-    # no re-allocation needed
-    tau /= 8 * np.pi * (dV * mol_cat.frequency * 10 ** 6 / ckm) * mol_cat.glow
-    # calculate the simulated spectrum
-    int_sim = lineshapes.simulate_gaussians(
-        spec_frequency,
-        mol_cat.intensity,
-        mol_cat.frequency,
-        [dV for _ in range(mol_cat.frequency.size)],
-    )
-    # apply beam dilution correction to intensities inplace
-    apply_beam(
-        spec_frequency, int_sim, source_size,
-    )
-
-
-def simulate_gaussians(
-    frequencies: np.ndarray,
-    amplitudes: np.ndarray,
-    centers: np.ndarray,
-    linewidths: np.ndarray,
-) -> np.ndarray:
-    """
-    Calculate the flattened spectrum for a mixture of Gaussian
-    lineshapes. This function takes heavy advantage of broadcasting,
-    which makes the code pretty optimized. 
-
-    Parameters
-    ----------
-    frequencies : np.ndarray
-        [description]
-    amplitudes : np.ndarray
-        [description]
-    centers : np.ndarray
-        [description]
-    linewidths : np.ndarray
-        [description]
+    n_chunks : int, optional
+        [description], by default 200
 
     Returns
     -------
-    np.ndarray
-        A NumPy 1D array containing the composite spectrum
+    Tuple[np.ndarray, np.ndarray]
+        [description]
     """
-    assert amplitudes.size == centers.size == linewidths.size
-    intensities = np.exp(
-        -((centers[:, np.newaxis] - frequencies) ** 2.0)
-        / (2.0 * linewidths[:, np.newaxis] ** 2.0)
-    )
-    # add amplitudes in place
-    intensities *= amplitudes[:, np.newaxis]
-    return intensities.sum(axis=0)
+    # set the numba threads for parallelism, used mainly for the
+    # lineshape calculation
+    # config.set_num_threads(max_threads)
+    if not hasattr(catalog, "mask") or spectrum.mask is not None:
+        catalog.mask = spectrum.mask
+    else:
+        catalog.mask = np.ones_like(catalog.frequency, dtype=bool)
+    offset_freq = utils._apply_vlsr(spectrum.frequency, vlsr)
+    masked_freqs = catalog.frequency[catalog.mask]
+    # calculate continuum background as just a flat array of temperature
+    Tbg = np.full_like(masked_freqs, background_temperature)
+    Tbg_full = np.full_like(spectrum.frequency, background_temperature)
+    tau = calculate_tau(catalog, Ncol, Q, Tex, dV)
+    # this corrects tau inplace
+    # continuum_tau_correction(masked_freqs, tau, Tbg, Tex)
+    # compute line shapes
+    sim_int = atomic_gaussian(spectrum.frequency, masked_freqs, tau, dV)
+    continuum_tau_correction(offset_freq, sim_int, Tbg_full, Tex)
+    # apply beam dilution
+    sim_int = utils._apply_beam(offset_freq, sim_int, source_size, dish_size)
+    # beam_correction(offset_freq, sim_int, source_size, dish_size)
+    return offset_freq, sim_int, masked_freqs, tau
