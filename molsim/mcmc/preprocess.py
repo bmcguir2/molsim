@@ -6,6 +6,7 @@ from itertools import repeat
 
 import numpy as np
 import h5py
+import numba
 from dask import array as da
 from loguru import logger
 from sklearn.gaussian_process import GaussianProcessRegressor
@@ -27,26 +28,41 @@ class DataChunk:
     # technically we could instantiate with a NumPy array,
     # but None is probably faster
     noise: Any = None
-    
+    mask: Any = None
+
+    def __len__(self):
+        return self.frequency.size
+
+    def __repr__(self):
+        return f"DataChunk with {len(self)} elements. Noise: {self.noise is not None}, Mask: {self.mask is not None}"
+
     def to_hdf5(self, filename: str, **kwargs):
-        with h5py.File(filename, **kwargs) as h5_file:
+        with h5py.File(filename, mode="a", **kwargs) as h5_file:
             h5_file.create_dataset("frequency", data=self.frequency)
             h5_file.create_dataset("intensity", data=self.intensity)
             h5_file.create_dataset("catalog_index", data=self.catalog_index)
             if self.noise is not None:
                 h5_file.create_dataset("noise", data=self.noise)
+            if self.mask is not None:
+                h5_file.create_dataset("mask", data=self.mask)
 
     @classmethod
-    def from_hdf5(cls, filename: str, **kwargs):
+    def from_hdf5(cls, filename: str, dask=False, **kwargs):
         h5_file = h5py.File(filename, **kwargs)
-        frequency = da.from_array(h5_file["frequency"])
-        intensity = da.from_array(h5_file["intensity"])
-        catalog_index = da.from_array(h5_file["catalog_index"])
+        if dask:
+            load_func = da.from_array
+        else:
+            load_func = np.array
+        frequency = load_func(h5_file["frequency"])
+        intensity = load_func(h5_file["intensity"])
+        catalog_index = load_func(h5_file["catalog_index"])
         if "noise" in h5_file:
-            noise = da.from_array(h5_file["noise"])
+            noise = load_func(h5_file["noise"])
         else:
             noise = None
-        return cls(frequency, intensity, catalog_index, noise)
+        if "mask" in h5_file:
+            mask = load_func(h5_file["mask"])
+        return cls(frequency, intensity, catalog_index, noise, mask)
 
 
 def extract_frequency_slice(
@@ -77,6 +93,23 @@ def extract_frequency_slice(
     return data[mask, :]
 
 
+@numba.njit(parallel=True)
+def filter_catalog(
+    spectrum_frequencies: np.ndarray, catalog_frequencies: np.ndarray, max_dist=1.0
+) -> np.ndarray:
+    mask = np.zeros_like(catalog_frequencies, dtype=np.uint8)
+    n_catalog = catalog_frequencies.size
+    # parallelize loop over the catalog frequencies
+    for index in numba.prange(n_catalog):
+        distance = np.sum(
+            np.abs(catalog_frequencies[index] - spectrum_frequencies) <= max_dist
+        )
+        # if we have overlap in the spectrum, take it out
+        if distance != 0:
+            mask[index] = 1
+    return mask
+
+
 def extract_chunks(
     data: np.ndarray,
     catalog: Type[Catalog],
@@ -102,27 +135,31 @@ def extract_chunks(
     # Extract only frequencies within band of the observations
     logger.info("Extracting inband chunks.")
     min_freq, max_freq = data[:, 0].min(), data[:, 0].max()
-    # vectorized finding overlap regions in the spectrum
-    mask = np.logical_and(min_freq <= catalog.frequency, catalog.frequency <= max_freq)
+    # njit'd function to find regions of significant overlap between the spectrum
+    # and the catalog entries
+    mask = filter_catalog(data[:, 0], catalog.frequency).astype(bool)
+    logger.info("Calculated mask.")
     # get indices to track which catalog entry is used
     indices = np.arange(catalog.frequency.size)[mask]
     # vectorized computation of the frequency offsets based on a doppler velocity
-    offsets = compute.calculate_dopplerwidth_frequency(catalog.frequency[mask], delta_v)
-    inband_freqs = np.vstack([indices, catalog.frequency[mask], offsets]).T
-    logger.info(f"Expecting {len(inband_freqs)} chunks.")
-    # parallelize the chunking and GP noise estimation; the latter does not have
-    # native parallelization support, so we do a subprocess manually here
-    # with ThreadPoolExecutor(n_workers) as executor:
-    #     chunks = list(tqdm(executor.map(_compute_chunks, inband_freqs, [data] * len(inband_freqs)), total=len(inband_freqs)))
+    offsets = compute.calculate_dopplerwidth_frequency(
+        catalog.frequency[indices], delta_v
+    )
+    inband_freqs = np.vstack([indices, catalog.frequency[indices], offsets]).T
+    logger.info(f"There are {mask.sum()} catalog hits.")
     chunks = list()
+    last_freq = 0.
     for inband_data in tqdm(inband_freqs):
-        try:
+        # check to make sure the last frequency doesn't overlap
+        if abs(inband_data[1] - last_freq) > compute.calculate_dopplerwidth_frequency(inband_data[1], delta_v):
             chunks.append(
                 _compute_chunks(inband_data, data, rbf_params, noise_params, verbose)
             )
-        except ValueError:
+            last_freq = inband_data[1]
+        else:
             pass
-    return chunks
+    logger.info(f"Created {len(chunks)} chunks.")
+    return chunks, indices
 
 
 def _compute_chunks(
@@ -277,11 +314,14 @@ def load_spectrum(
     assert data.shape[-1] == 2
     logger.info(f"Number of elements: {data.size}")
     logger.info(f"Min/max frequency: {data[:,0].min():.4f}/{data[:,0].max():.4f}")
-    chunks = extract_chunks(data, catalog, delta_v, rbf_params, noise_params, n_workers)
+    chunks, catalog_mask = extract_chunks(
+        data, catalog, delta_v, rbf_params, noise_params, n_workers
+    )
     frequency, intensity, noise, cat_indices = unroll_chunks(chunks)
     return DataChunk(
         frequency=frequency,
         intensity=intensity,
         catalog_index=cat_indices,
         noise=noise,
+        mask=catalog_mask,
     )
