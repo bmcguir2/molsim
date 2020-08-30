@@ -4,7 +4,7 @@ import numpy as np
 
 def plot_mf(spectrum,params={}):
 	'''
-	Plots a matched filter spectrum, with optional annotations and other parameters
+	Plots a matched filter spectrum or spectra, with optional annotations and other parameters
 	as defined in the parameters dictionary.  The keywords that can be specified,
 	and their defaults, are as follows:	
 	
@@ -15,9 +15,11 @@ def plot_mf(spectrum,params={}):
 	'ylabel'		: 	'Impulse Response (' + r'$\sigma$' + ')', #string
 	'xlimits'		: 	None, #list [lowerlimit,upperlimit]
 	'ylimits'		:	None, #list [lowerlimit,upperlimit]
-	'plot_color'	:	'black', #matplotlib color
-	'drawstyle'		:	'steps', #string: 'default', 'steps', 'steps-pre', 'steps-mid', 'steps-post'
-	'linewidth'		:	1.0, #float
+	'colors'		:	['black'], #list of matplotlib colors
+	'drawstyles'	:	['steps'], #list of strings: 'default', 'steps', 'steps-pre', 'steps-mid', 'steps-post'
+	'linewidths'	:	[1.0], #list of floats
+	'alphas'		:	[1.0], #list of floats
+	'orders'		:	[1], #list of integers
 	'label'			:	None, #string
 	'label_xy'		:	(0.95,0.75), #tuple, (vertical axis fraction, horizontal axis fraction)
 	'label_color'	:	'black', #matplotlib color
@@ -36,9 +38,11 @@ def plot_mf(spectrum,params={}):
 				'ylabel'		: 	'Impulse Response (' + r'$\sigma$' + ')',
 				'xlimits'		: 	None,
 				'ylimits'		:	None,
-				'plot_color'	:	'black',
-				'drawstyle'		:	'steps',
-				'linewidth'		:	1.0,
+				'colors'		:	['black'],
+				'drawstyles'	:	['steps'],
+				'linewidths'	:	[1.0],
+				'alphas'		:	[1.0], 
+				'orders'		:	[1],
 				'label'			:	None,
 				'label_xy'		:	(0.95,0.75),
 				'label_color'	:	'black',
@@ -52,6 +56,9 @@ def plot_mf(spectrum,params={}):
 	for x in params:
 		if x in settings:
 			settings[x] = params[x]			
+	
+	if isinstance(spectrum,list) is False:
+		spectrum = [spectrum]
 		
 	name = settings['name']			
 	figsize	= settings['figsize']
@@ -60,9 +67,11 @@ def plot_mf(spectrum,params={}):
 	ylabel = settings['ylabel']		
 	xlimits = settings['xlimits']	
 	ylimits	= settings['ylimits']		
-	plot_color = settings['plot_color']
-	drawstyle = settings['drawstyle']	
-	linewidth = settings['linewidth']
+	colors = settings['colors']
+	drawstyles = settings['drawstyles']	
+	linewidths = settings['linewidths']
+	alphas = settings['alphas']
+	orders = settings['orders']
 	label = settings['label']
 	label_xy = settings['label_xy']
 	label_color = settings['label_color']
@@ -93,7 +102,8 @@ def plot_mf(spectrum,params={}):
 	ax.xaxis.set_ticks_position('both')	
 	
 	#plot
-	plt.plot(spectrum.velocity,spectrum.snr,color=plot_color,drawstyle=drawstyle,linewidth=linewidth)
+	for spectrum,color,drawstyle,linewidth,alpha,zorder in zip(spectrum,colors,drawstyles,linewidths,alphas,orders):
+		plt.plot(spectrum.velocity,spectrum.snr,color=color,drawstyle=drawstyle,linewidth=linewidth,alpha=alpha,zorder=zorder)
 	
 	#xlimits
 	if xlimits is not None:
