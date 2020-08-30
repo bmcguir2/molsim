@@ -150,6 +150,10 @@ def velocity_stack(params):
 			if np.count_nonzero(~np.isnan(self.int_obs)) < np.count_nonzero(np.isnan(self.int_obs)):
 				self.flag = True
 				return	
+			#check if peak_int is 0.0, in which case skip it
+			if self.peak_int == 0:
+				self.flag = True
+				return
 			return
 			
 		def set_rms(self):
