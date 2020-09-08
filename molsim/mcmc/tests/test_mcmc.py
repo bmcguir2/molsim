@@ -18,7 +18,7 @@ def test_likelihoods():
     assert np.round(
         np.abs(-0.23559135 - normal_test), 4
     ) == 0.
-    
+
     fail_test = dV.ln_likelihood(-5.)
     assert not np.isfinite(fail_test)
 
@@ -61,3 +61,13 @@ def test_multi_component():
         100.,
         2.725
         )
+
+    # should be 14 parameters total; 3 * 4 components + 2
+    assert len(model) == 14
+
+    model._get_components()
+
+    # make sure the combined likelihood looks reasonable
+    parameters = [100., 96, 20, 45, 5., 5.6, 6.44, 4.3, 1e10, 1e11, 1e9, 1e11, 5.87, 0.09216]
+    likelihood = model.compute_prior_likelihood(parameters)
+    assert np.round(abs(likelihood - 4.579927708578582)) == 0.
