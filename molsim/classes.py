@@ -1095,7 +1095,7 @@ class Observation(object):
 		self.id = id
 		self.notes = notes
 		
-		return				
+		return
 
 class Simulation(object):
 	'''

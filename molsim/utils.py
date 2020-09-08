@@ -110,12 +110,14 @@ def _make_qnstr(qn1,qn2,qn3,qn4,qn5,qn6,qn7,qn8):
 	tmp_list = [str(x).zfill(2) for x in qn_list if x != None]
 	return ''.join(tmp_list)	
 
-@njit
 def _apply_vlsr(frequency,vlsr):
 	'''
 	Applies a vlsr shift to a frequency array.  Frequency in [MHz], vlsr in [km/s]
 	'''
 	return frequency - vlsr*frequency/ckm
+
+# JIT'd version of the above function; PyMC3 no like Numba
+_njit_apply_vlsr = njit(_apply_vlsr)
 	
 def _apply_beam(freq_arr,int_arr,source_size,dish_size,return_beam=False):
 	beam_size = 206265 * 1.22 * (cm/(freq_arr * 1E6)) / dish_size #get beam size in arcsec

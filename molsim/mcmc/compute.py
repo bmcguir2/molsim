@@ -1,6 +1,7 @@
-from typing import Type, Any, List, Union, Tuple
+from typing import Type, Any, List, Union, Tuple, Callable
 
 import numpy as np
+import numexpr as ne
 from loguru import logger
 from numba import jit, njit, prange, config
 from tqdm.auto import tqdm
@@ -134,7 +135,6 @@ def continuum_tau_correction(
     return (J_T - J_Tbg) * (1 - np.exp(-tau))
 
 
-# @njit(fastmath=True, parallel=False)
 def atomic_gaussian(
     obs_frequency: np.ndarray, centers: np.ndarray, tau: np.ndarray, dV: float,
 ):
@@ -181,7 +181,7 @@ def build_synthetic_spectrum(
     source_size: float,
     dish_size: float,
     Ncol: float,
-    Q: float,
+    calc_Q: Union[Callable, str],
     Tex: float,
     dV: float,
     background_temperature: float,
@@ -230,6 +230,11 @@ def build_synthetic_spectrum(
         catalog.mask = spectrum.mask
     else:
         catalog.mask = np.ones_like(catalog.frequency, dtype=bool)
+    # calculate Q
+    if type(calc_Q) == str:
+        Q = ne.evaluate(calc_Q, local_dict={"Tex": Tex})
+    elif callable(calc_Q):
+        Q = calc_Q(Tex)
     offset_freq = utils._apply_vlsr(spectrum.frequency, vlsr)
     masked_freqs = catalog.frequency[catalog.mask]
     # calculate continuum background as just a flat array of temperature
