@@ -147,6 +147,7 @@ def atomic_gaussian(
     return intensities
 
 
+@njit
 def neu_gaussian(x, x0, A, dV):
     return A * np.exp(-(x - x0)**2. / (2*((dV*x0/ckm)/2.35482)**2))
 
@@ -175,17 +176,16 @@ def beam_correction(
 
 
 def build_synthetic_spectrum(
-    spectrum: Type["DataChunk"],
-    catalog: Type["Catalog"],
-    vlsr: float,
     source_size: float,
-    dish_size: float,
+    vlsr: float,
     Ncol: float,
-    calc_Q: Union[Callable, str],
     Tex: float,
     dV: float,
+    spectrum: Type["DataChunk"],
+    catalog: Type["Catalog"],
+    dish_size: float,
+    calc_Q: Union[Callable, str],
     background_temperature: float,
-    max_threads=1
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     1. Velocity offset
@@ -235,6 +235,8 @@ def build_synthetic_spectrum(
         Q = ne.evaluate(calc_Q, local_dict={"Tex": Tex})
     elif callable(calc_Q):
         Q = calc_Q(Tex)
+    else:
+        raise NotImplementedError("`calc_Q` arg is invalid; must be callable function or string.")
     offset_freq = utils._apply_vlsr(spectrum.frequency, vlsr)
     masked_freqs = catalog.frequency[catalog.mask]
     # calculate continuum background as just a flat array of temperature
@@ -249,4 +251,4 @@ def build_synthetic_spectrum(
     # apply beam dilution
     sim_int = utils._apply_beam(offset_freq, sim_int, source_size, dish_size)
     # beam_correction(offset_freq, sim_int, source_size, dish_size)
-    return offset_freq, sim_int, masked_freqs, tau
+    return offset_freq, sim_int#, masked_freqs, tau
