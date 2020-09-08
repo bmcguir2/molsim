@@ -55,7 +55,7 @@ class AbstractDistribution(ABC):
 
     def initial_value(self) -> float:
         param = self.param()
-        return (param.min + param.max) / 2.
+        return (param.min + param.max) / 2.0
 
 
 class UniformLikelihood(AbstractDistribution):
@@ -131,21 +131,24 @@ class GaussianLikelihood(AbstractDistribution):
     def ln_likelihood(self, value: float) -> float:
         if self._param.min <= value <= self._param.max:
             mu, var = self._param.mu, self._param.var
-            lnlikelihood = np.log(1.0 / (np.sqrt(2.0 * np.pi) * var)) - 0.5 * ((value - mu)**2. / var**2.)
+            lnlikelihood = (
+                np.log(1.0 / (np.sqrt(2 * np.pi) * var))
+                - 0.5 * (value - mu) ** 2 / var ** 2
+            )
             return lnlikelihood
         else:
             return -np.inf
 
     @classmethod
-    def from_npy_chain(cls, name: str, chain: np.ndarray, min=0., max=np.inf):
-        percentiles = np.percentile(chain, [16., 50., 84.])
+    def from_npy_chain(cls, name: str, chain: np.ndarray, min=0.0, max=np.inf):
+        percentiles = np.percentile(chain, [16.0, 50.0, 84.0])
         var = np.mean([percentiles[0], percentiles[-1]])
         mu = percentiles[1]
         param = GaussianParameter(mu, var, min, max)
         return cls(name, param)
 
     @classmethod
-    def from_values(cls, name: str, mu: float, var: float, min=0., max=np.inf):
+    def from_values(cls, name: str, mu: float, var: float, min=0.0, max=np.inf):
         param = GaussianParameter(mu, var, min, max)
         return cls(name, param)
 
@@ -196,7 +199,7 @@ class SingleComponent(AbstractModel):
 
     def __len__(self) -> int:
         return len(self._distributions)
-    
+
     def _get_components(self):
         return self._distributions
 
@@ -213,7 +216,10 @@ class SingleComponent(AbstractModel):
 
     def compute_prior_likelihood(self, parameters: np.ndarray) -> float:
         lnlikelihood = sum(
-            [dist.ln_likelihood(value) for dist, value in zip(self._distributions, parameters)]
+            [
+                dist.ln_likelihood(value)
+                for dist, value in zip(self._distributions, parameters)
+            ]
         )
         return lnlikelihood
 
@@ -237,6 +243,7 @@ class MultiComponent(AbstractModel):
     So that there is an arbitrary number of components, providing each
     component has a source size, radial velocity, and column density.
     """
+
     def __init__(
         self,
         source_sizes: List[AbstractDistribution],
@@ -284,7 +291,7 @@ class MultiComponent(AbstractModel):
     def _get_component_parameters(
         self, parameters: np.ndarray, component: int
     ) -> np.ndarray:
-        subparams = parameters[component:-2:3]
+        subparams = parameters[component:-2:4]
         # tack on the excitation temperature and linewidth, which are global
         subparams = np.append(subparams, [parameters[-2], parameters[-1]])
         return subparams
@@ -332,7 +339,14 @@ class EmceeHelper(object):
         self.chain = None
         self.positions = None
 
-    def sample(self, model: AbstractModel, walkers: int = 100, iterations: int = 1000, workers: int = 4, scale: float = 1e-3):
+    def sample(
+        self,
+        model: AbstractModel,
+        walkers: int = 100,
+        iterations: int = 1000,
+        workers: int = 4,
+        scale: float = 1e-3,
+    ):
         positions = np.tile(self.initial, (walkers, 1))
         scrambler = np.ones_like(positions)
         scrambler += np.random.uniform(-scale, scale, (walkers, self.ndim))
@@ -340,8 +354,12 @@ class EmceeHelper(object):
         # run the MCMC sampling
         with Pool(workers) as pool:
             sampler = emcee.EnsembleSampler(
-                walkers, self.ndim, compute_model_likelihoods, args=tuple(model), pool=pool
-                )
+                walkers,
+                self.ndim,
+                compute_model_likelihoods,
+                args=tuple(model),
+                pool=pool,
+            )
             sampler.run_mcmc(positions, iterations, progress=True)
         self.chain = sampler.chain
         self.positions = sampler.get_last_sample()
