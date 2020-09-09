@@ -5,6 +5,15 @@ import math
 import warnings
 from scipy import stats, signal
 import sys, os
+from ruamel.yaml import YAML
+
+
+def load_yaml(yml_path: str) -> dict:
+    with open(yml_path, "r") as read_file:
+        yaml = YAML(typ="safe")
+        input_dict = yaml.load(read_file)
+    return input_dict
+
 
 def find_nearest(arr,val):
 	idx = np.searchsorted(arr, val, side="left")
