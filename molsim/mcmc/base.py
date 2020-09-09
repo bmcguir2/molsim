@@ -24,14 +24,6 @@ GaussianParameter = namedtuple(
 )
 
 
-def str2class(classname: str):
-    obj = getattr(sys.modules[__name__], classname, None)
-    if not obj:
-        raise NameError("Invalid name for class!")
-    else:
-        return obj
-
-
 class AbstractDistribution(ABC):
     def __init__(self, name: str):
         super().__init__()
@@ -110,7 +102,7 @@ class UniformLikelihood(AbstractDistribution):
         float
             [description]
         """
-        if self._param.min <= value <= self._param.max:
+        if self.param.min <= value <= self.param.max:
             return 0.0
         else:
             return -np.inf
@@ -202,6 +194,10 @@ class AbstractModel(ABC):
     def compute_log_likelihood(self, parameters: np.ndarray) -> float:
         raise NotImplementedError
 
+    @abstractmethod
+    def prior_constraint(self, parameters: np.ndarray):
+        pass
+
 
 class EmceeHelper(object):
     def __init__(self, initial: np.ndarray):
@@ -257,8 +253,9 @@ def compute_model_likelihoods(parameters: np.ndarray, model: AbstractModel) -> f
         [description]
     """
     prior = model.compute_prior_likelihood(parameters)
-    if np.isfinite(prior):
-        return prior + model.compute_log_likelihood(parameters)
-    else:
+    # if we're out of bounds for the prior, don't bother
+    # performing the simulation
+    if not np.isfinite(prior):
         return -np.inf
-
+    ln = prior + model.compute_log_likelihood(parameters)
+    return ln

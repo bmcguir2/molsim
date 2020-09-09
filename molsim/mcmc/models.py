@@ -8,7 +8,12 @@ import numexpr as ne
 from loguru import logger
 from joblib import load
 
-from molsim.mcmc.base import AbstractModel, AbstractDistribution, UniformLikelihood, GaussianLikelihood
+from molsim.mcmc.base import (
+    AbstractModel,
+    AbstractDistribution,
+    UniformLikelihood,
+    GaussianLikelihood,
+)
 from molsim.mcmc import compute
 from molsim.utils import load_yaml, find_limits
 from molsim.classes import Source, Molecule, Simulation, Observation, Spectrum
@@ -45,10 +50,7 @@ class SingleComponent(AbstractModel):
         initial = [param.initial_value() for param in self._distributions]
         return initial
 
-    def simulate_spectrum(
-        self,
-        parameters: np.ndarray,
-    ) -> np.ndarray:
+    def simulate_spectrum(self, parameters: np.ndarray,) -> np.ndarray:
         size, vlsr, ncol, Tex, dV = parameters
         source = Source("", vlsr, size, column=ncol, Tex=Tex, dV=dV)
         min_freq, max_freq = find_limits(self.observation.spectrum.frequency)
@@ -59,9 +61,12 @@ class SingleComponent(AbstractModel):
             observation=self.observation,
             source=source,
             line_profile="gaussian",
-            use_obs=True
+            use_obs=True,
         )
         return simulation.spectrum.int_profile
+
+    def prior_constraint(self, parameters: np.ndarray):
+        pass
 
     def compute_prior_likelihood(self, parameters: np.ndarray) -> float:
         lnlikelihood = sum(
@@ -90,11 +95,10 @@ class SingleComponent(AbstractModel):
         obs = self.observation.spectrum
         simulation = self.simulate_spectrum(parameters)
         inv_sigmasq = 1.0 / (obs.noise ** 2.0)
-        tot_lnlike = np.sum(
-            (obs.Tb - simulation) ** 2 * inv_sigmasq
-            - np.log(inv_sigmasq)
+        tot_lnlike = -0.5 * np.sum(
+            (obs.Tb - simulation) ** 2 * inv_sigmasq - np.log(inv_sigmasq)
         )
-        return -0.5 * tot_lnlike
+        return tot_lnlike
 
     @classmethod
     def from_yml(cls, yml_path: str):
@@ -133,7 +137,7 @@ class MultiComponent(SingleComponent):
         Tex: AbstractDistribution,
         dV: AbstractDistribution,
         observation: Observation,
-        molecule: Molecule
+        molecule: Molecule,
     ):
         super().__init__(source_sizes, vlsrs, Ncols, Tex, dV, observation, molecule)
         assert len(source_sizes) == len(vlsrs) == len(Ncols)
@@ -142,15 +146,7 @@ class MultiComponent(SingleComponent):
         self.source_size = self.vlsr = self.Ncol = self._distributions = None
         for ss, vlsr, Ncol in zip(source_sizes, vlsrs, Ncols):
             self.components.append(
-                SingleComponent(
-                    ss,
-                    vlsr,
-                    Ncol,
-                    Tex,
-                    dV,
-                    observation,
-                    molecule
-                )
+                SingleComponent(ss, vlsr, Ncol, Tex, dV, observation, molecule)
             )
 
     @classmethod
@@ -159,10 +155,16 @@ class MultiComponent(SingleComponent):
         cls_dict = dict()
         source_sizes, vlsrs, Ncols = list(), list(), list()
         # make sure the number of components is the same
-        assert len(input_dict["source_sizes"]) == len(input_dict["vlsrs"]) == len(input_dict["Ncols"])
+        assert (
+            len(input_dict["source_sizes"])
+            == len(input_dict["vlsrs"])
+            == len(input_dict["Ncols"])
+        )
         n_components = len(input_dict["source_sizes"])
         # parse in all the different parameters
-        for param_list, parameter in zip([source_sizes, vlsrs, Ncols], ["source_sizes", "vlsrs", "Ncols"]):
+        for param_list, parameter in zip(
+            [source_sizes, vlsrs, Ncols], ["source_sizes", "vlsrs", "Ncols"]
+        ):
             for index in range(n_components):
                 size_params = input_dict[parameter][index]
                 size_params["name"] = f"{parameter}_{index}"
@@ -170,9 +172,7 @@ class MultiComponent(SingleComponent):
                     dist = GaussianLikelihood
                 else:
                     dist = UniformLikelihood
-                param_list.append(
-                    dist.from_values(**size_params)
-                )
+                param_list.append(dist.from_values(**size_params))
             cls_dict[parameter] = param_list
         # the two stragglers
         for key in ["Tex", "dV"]:
@@ -223,10 +223,7 @@ class MultiComponent(SingleComponent):
         subparams = np.append(subparams, [parameters[-2], parameters[-1]])
         return subparams
 
-    def simulate_spectrum(
-        self,
-        parameters: np.ndarray,
-    ) -> np.ndarray:
+    def simulate_spectrum(self, parameters: np.ndarray,) -> np.ndarray:
         combined_intensity = np.zeros_like(self.observation.spectrum.frequency)
         for index, component in enumerate(self.components):
             # take every third element, corresponding to a parameter for
@@ -236,6 +233,40 @@ class MultiComponent(SingleComponent):
         return combined_intensity
 
     def compute_prior_likelihood(self, parameters: np.ndarray) -> float:
+        for index, component in enumerate(self.components):
+            subparams = self._get_component_parameters(parameters, index)
+            if index == 0:
+                lnlikelihood = component.compute_prior_likelihood(subparams)
+            else:
+                lnlikelihood += component.compute_prior_likelihood(subparams)
+        return lnlikelihood
+
+
+class TMC1FourComponent(MultiComponent):
+    def __init__(
+        self,
+        source_sizes: List[AbstractDistribution],
+        vlsrs: List[AbstractDistribution],
+        Ncols: List[AbstractDistribution],
+        Tex: AbstractDistribution,
+        dV: AbstractDistribution,
+        observation: Observation,
+        molecule: Molecule,
+    ):
+        super().__init__(source_sizes, vlsrs, Ncols, Tex, dV, observation, molecule)
+
+    def compute_prior_likelihood(self, parameters: np.ndarray) -> float:
+        vlsr1, vlsr2, vlsr3, vlsr4 = parameters[[4, 5, 6, 7]]
+        if (
+            vlsr1 < 0.0
+            or vlsr1 > (vlsr2 - 0.05)
+            or vlsr2 > (vlsr3 - 0.05)
+            or vlsr3 > (vlsr4 - 0.05)
+            or vlsr2 > (vlsr1 + 0.3)
+            or vlsr3 > (vlsr2 + 0.2)
+            or vlsr4 > (vlsr3 + 0.2)
+        ):
+            return -np.inf
         for index, component in enumerate(self.components):
             subparams = self._get_component_parameters(parameters, index)
             if index == 0:
