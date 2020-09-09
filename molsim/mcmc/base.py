@@ -39,7 +39,7 @@ class AbstractDistribution(ABC):
         self._param = UniformParameter()
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__} for {self.name()}, limits {self.limits()}"
+        return f"{self.__class__.__name__} for {self.name}, {self.param}"
 
     @property
     @abstractmethod
@@ -204,12 +204,12 @@ class AbstractModel(ABC):
 
 
 class EmceeHelper(object):
-    def __init__(self, num_parameters: int, initial: np.ndarray):
+    def __init__(self, initial: np.ndarray):
         super().__init__()
-        self.ndim = num_parameters
+        self.initial = initial
+        self.ndim = len(initial)
         self.chain = None
         self.positions = None
-        self.initial = initial
 
     def sample(
         self,
@@ -229,7 +229,7 @@ class EmceeHelper(object):
                 walkers,
                 self.ndim,
                 compute_model_likelihoods,
-                args=tuple(model),
+                args=[model,],
                 pool=pool,
             )
             sampler.run_mcmc(positions, iterations, progress=True)
@@ -258,7 +258,7 @@ def compute_model_likelihoods(parameters: np.ndarray, model: AbstractModel) -> f
     """
     prior = model.compute_prior_likelihood(parameters)
     if np.isfinite(prior):
-        return prior + model.compute_loglikelihood(parameters)
+        return prior + model.compute_log_likelihood(parameters)
     else:
         return -np.inf
 

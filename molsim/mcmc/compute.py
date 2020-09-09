@@ -32,6 +32,37 @@ def calculate_dopplerwidth_frequency(
     return np.abs(frequencies * delta_v / (ckm * 2.0 * np.log(2.0)))
 
 
+def calc_noise_std(intensity, threshold=3.5) -> Tuple[np.ndarray, np.ndarray]:
+    dummy_ints = np.copy(intensity)
+    noise = np.copy(intensity)
+    dummy_mean = np.nanmean(dummy_ints)
+    dummy_std = np.nanstd(dummy_ints)
+
+    # repeats 3 times to make sure to avoid any interloping lines
+    for chan in np.where(dummy_ints < (-dummy_std*threshold))[0]:
+        noise[chan-10:chan+10] = np.nan
+    for chan in np.where(dummy_ints > (dummy_std*threshold))[0]:
+        noise[chan-10:chan+10] = np.nan
+    noise_mean = np.nanmean(noise)
+    noise_std = np.nanstd(np.real(noise))
+
+    for chan in np.where(dummy_ints < (-noise_std*threshold))[0]:
+        noise[chan-10:chan+10] = np.nan
+    for chan in np.where(dummy_ints > (noise_std*threshold))[0]:
+        noise[chan-10:chan+10] = np.nan
+    noise_mean = np.nanmean(noise)
+    noise_std = np.nanstd(np.real(noise))
+
+    for chan in np.where(dummy_ints < (-dummy_std*threshold))[0]:
+        noise[chan-10:chan+10] = np.nan
+    for chan in np.where(dummy_ints > (dummy_std*threshold))[0]:
+        noise[chan-10:chan+10] = np.nan
+    noise_mean = np.nanmean(noise)
+    noise_std = np.nanstd(np.real(noise))
+
+    return noise_mean, noise_std
+
+
 def calculate_tau(
     catalog: Type["Catalog"], Ncol: float, Q: float, Tex: float, dV: float,
 ) -> np.ndarray:
@@ -252,3 +283,4 @@ def build_synthetic_spectrum(
     sim_int = utils._apply_beam(offset_freq, sim_int, source_size, dish_size)
     # beam_correction(offset_freq, sim_int, source_size, dish_size)
     return offset_freq, sim_int#, masked_freqs, tau
+
