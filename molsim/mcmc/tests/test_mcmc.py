@@ -1,5 +1,6 @@
 
-from molsim.mcmc.base import GaussianLikelihood, UniformLikelihood, SingleComponent, MultiComponent
+from molsim.mcmc.base import GaussianLikelihood, UniformLikelihood
+from molsim.mcmc.models import SingleComponent, MultiComponent
 
 import numpy as np
 
@@ -37,10 +38,9 @@ def test_single_component():
         Tex,
         dV,
         None,
-        None,
-        100.,
-        2.725
         )
+    initial = model.initialize_values()
+    assert initial == [200., 5., 5e15, 5.8, 0.1]
 
 
 def test_multi_component():
@@ -57,9 +57,6 @@ def test_multi_component():
         Tex,
         dV,
         None,
-        None,
-        100.,
-        2.725
         )
 
     # should be 14 parameters total; 3 * 4 components + 2

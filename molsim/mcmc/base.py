@@ -62,9 +62,9 @@ class AbstractDistribution(ABC):
     def __call__(self, value: float) -> float:
         return self.ln_likelihood(value)
 
+    @abstractmethod
     def initial_value(self) -> float:
-        param = self.param()
-        return (param.min + param.max) / 2.0
+        raise NotImplementedError
 
 
 class UniformLikelihood(AbstractDistribution):
@@ -89,6 +89,9 @@ class UniformLikelihood(AbstractDistribution):
     def from_values(cls, name: str, min=-np.inf, max=np.inf):
         param = UniformParameter(min, max)
         return cls(name, param)
+
+    def initial_value(self) -> float:
+        return (self.param.min + self.param.max) / 2.0
 
     def ln_likelihood(self, value: float) -> float:
         """
@@ -138,8 +141,8 @@ class GaussianLikelihood(AbstractDistribution):
         return self._param
 
     def ln_likelihood(self, value: float) -> float:
-        if self._param.min <= value <= self._param.max:
-            mu, var = self._param.mu, self._param.var
+        if self.param.min <= value <= self.param.max:
+            mu, var = self.param.mu, self.param.var
             lnlikelihood = (
                 np.log(1.0 / (np.sqrt(2 * np.pi) * var))
                 - 0.5 * (value - mu) ** 2 / var ** 2
@@ -147,6 +150,10 @@ class GaussianLikelihood(AbstractDistribution):
             return lnlikelihood
         else:
             return -np.inf
+
+    def initial_value(self) -> float:
+        # for a Gaussian parameter, return the average value
+        return self.param.mu
 
     @classmethod
     def from_npy_chain(cls, name: str, chain: np.ndarray, min=0.0, max=np.inf):
@@ -202,6 +209,7 @@ class EmceeHelper(object):
         self.ndim = num_parameters
         self.chain = None
         self.positions = None
+        self.initial = initial
 
     def sample(
         self,

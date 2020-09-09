@@ -1114,6 +1114,7 @@ class Simulation(object):
 					res = 10., #resolution if simulating line profiles [kHz]
 					mol = None, #Molecule object associated with this simulation
 					notes = None, #notes
+                    use_obs = False # flag for line profile simulation to be done with observations
 				):
 				
 		self.spectrum = spectrum
@@ -1133,6 +1134,7 @@ class Simulation(object):
 		self.aij = None
 		self.gup = None
 		self.eup = None
+		self.use_obs = use_obs
 		
 		self._set_arrays()
 		self._apply_voffset()
@@ -1233,8 +1235,13 @@ class Simulation(object):
 					ll_trim.append(ll)
 					ul_trim.append(ul)
 			ll_trim = np.array(ll_trim)
-			ul_trim = np.array(ul_trim)		
-			freq_arr = np.concatenate([np.arange(ll,ul,self.res) for ll,ul in zip(ll_trim,ul_trim)])
+			ul_trim = np.array(ul_trim)
+			# perform the line profile calculation on the same grid as
+			# the observational data
+			if self.use_obs:
+				freq_arr = self.observation.spectrum.frequency
+			else:
+				freq_arr = np.concatenate([np.arange(ll,ul,self.res) for ll,ul in zip(ll_trim,ul_trim)])
 			tau_arr = np.zeros_like(freq_arr)
 			l_idxs = [find_nearest(freq_arr,x) for x in lls_raw]
 			u_idxs = [find_nearest(freq_arr,x) for x in uls_raw]		
