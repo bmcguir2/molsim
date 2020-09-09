@@ -6,12 +6,14 @@ import pymc3 as pm
 import numpy as np
 import numexpr as ne
 from loguru import logger
+from joblib import load
 
-from molsim.mcmc.base import AbstractModel, AbstractDistribution
+from molsim.mcmc.base import AbstractModel, AbstractDistribution, UniformLikelihood, GaussianLikelihood
 from molsim.mcmc import compute
 from molsim.utils import load_yaml, find_limits
-from molsim.classes import Source, Molecule, Simulation, Observation
+from molsim.classes import Source, Molecule, Simulation, Observation, Spectrum
 from molsim.functions import sum_spectra
+from molsim.file_handling import load_mol
 
 
 @dataclass
@@ -22,6 +24,7 @@ class SingleComponent(AbstractModel):
     Tex: AbstractDistribution
     dV: AbstractDistribution
     observation: Observation
+    molecule: Molecule
 
     def __post_init__(self):
         self._distributions = [
@@ -45,13 +48,12 @@ class SingleComponent(AbstractModel):
     def simulate_spectrum(
         self,
         parameters: np.ndarray,
-        molecule: Molecule,
     ) -> np.ndarray:
         size, vlsr, ncol, Tex, dV = parameters
         source = Source("", vlsr, size, column=ncol, Tex=Tex, dV=dV)
-        min_freq, max_freq = find_limits(observation.spectrum.frequency)
+        min_freq, max_freq = find_limits(self.observation.spectrum.frequency)
         simulation = Simulation(
-            mol=Molecule,
+            mol=self.molecule,
             ll=min_freq,
             ul=max_freq,
             observation=self.observation,
@@ -59,7 +61,7 @@ class SingleComponent(AbstractModel):
             line_profile="gaussian",
             use_obs=True
         )
-        return simulation
+        return simulation.spectrum.int_profile
 
     def compute_prior_likelihood(self, parameters: np.ndarray) -> float:
         lnlikelihood = sum(
@@ -85,13 +87,31 @@ class SingleComponent(AbstractModel):
         float
             [description]
         """
+        obs = self.observation.spectrum
         simulation = self.simulate_spectrum(parameters)
-        inv_sigmasq = 1.0 / (self.spectrum.noise ** 2.0)
+        inv_sigmasq = 1.0 / (obs.noise ** 2.0)
         tot_lnlike = np.sum(
-            (self.spectrum.intensity - simulation.spectrum.int_profile) ** 2 * inv_sigmasq
+            (obs.Tb - simulation) ** 2 * inv_sigmasq
             - np.log(inv_sigmasq)
         )
         return -0.5 * tot_lnlike
+
+    @classmethod
+    def from_yml(cls, yml_path: str):
+        input_dict = load_yaml(yml_path)
+        cls_dict = dict()
+        # the two stragglers
+        for key in input_dict.keys():
+            if key != "observation":
+                if hasattr(input_dict[key], "mu"):
+                    dist = GaussianLikelihood
+                else:
+                    dist = UniformLikelihood
+                cls_dict[key] = dist.from_values(**input_dict[key])
+            else:
+                # load in the observed data
+                cls_dict["observation"] = load(input_dict["observation"])
+        return cls(**cls_dict)
 
 
 class MultiComponent(SingleComponent):
@@ -113,8 +133,9 @@ class MultiComponent(SingleComponent):
         Tex: AbstractDistribution,
         dV: AbstractDistribution,
         observation: Observation,
+        molecule: Molecule
     ):
-        super().__init__(source_sizes, vlsrs, Ncols, Tex, dV, observation)
+        super().__init__(source_sizes, vlsrs, Ncols, Tex, dV, observation, molecule)
         assert len(source_sizes) == len(vlsrs) == len(Ncols)
         self.components = list()
         # these are not used in preference of `self.components` instead
@@ -128,8 +149,43 @@ class MultiComponent(SingleComponent):
                     Tex,
                     dV,
                     observation,
+                    molecule
                 )
             )
+
+    @classmethod
+    def from_yml(cls, yml_path: str):
+        input_dict = load_yaml(yml_path)
+        cls_dict = dict()
+        source_sizes, vlsrs, Ncols = list(), list(), list()
+        # make sure the number of components is the same
+        assert len(input_dict["source_sizes"]) == len(input_dict["vlsrs"]) == len(input_dict["Ncols"])
+        n_components = len(input_dict["source_sizes"])
+        # parse in all the different parameters
+        for param_list, parameter in zip([source_sizes, vlsrs, Ncols], ["source_sizes", "vlsrs", "Ncols"]):
+            for index in range(n_components):
+                size_params = input_dict[parameter][index]
+                size_params["name"] = f"{parameter}_{index}"
+                if "mu" in size_params:
+                    dist = GaussianLikelihood
+                else:
+                    dist = UniformLikelihood
+                param_list.append(
+                    dist.from_values(**size_params)
+                )
+            cls_dict[parameter] = param_list
+        # the two stragglers
+        for key in ["Tex", "dV"]:
+            input_dict[key]["name"] = key
+            if "mu" in input_dict[key]:
+                dist = GaussianLikelihood
+            else:
+                dist = UniformLikelihood
+            cls_dict[key] = dist.from_values(**input_dict[key])
+        # load in the observed data
+        cls_dict["observation"] = load(input_dict["observation"])
+        cls_dict["molecule"] = load(input_dict["molecule"])
+        return cls(**cls_dict)
 
     def __len__(self) -> int:
         return len(self.components) * 3 + 2
@@ -144,12 +200,19 @@ class MultiComponent(SingleComponent):
         return params
 
     def initialize_values(self):
-        params = list()
+        source_sizes = list()
+        vlsrs = list()
+        ncols = list()
         for index, component in enumerate(self.components):
-            values = component.initialize_values()[:-2]
+            values = component.initialize_values()
+            source_sizes.append(values[0])
+            vlsrs.append(values[1])
+            ncols.append(values[2])
             if index != len(self.components):
-                values = values[:-2]
-            params.extend(values)
+                final = values[-2:]
+        params = list()
+        for array in [source_sizes, vlsrs, ncols, final]:
+            params.extend(array)
         return params
 
     def _get_component_parameters(
@@ -163,18 +226,14 @@ class MultiComponent(SingleComponent):
     def simulate_spectrum(
         self,
         parameters: np.ndarray,
-        molecule: Molecule,
     ) -> np.ndarray:
-        simulations = list()
+        combined_intensity = np.zeros_like(self.observation.spectrum.frequency)
         for index, component in enumerate(self.components):
             # take every third element, corresponding to a parameter for
             # a particular component. Skip the last two, which are
             subparams = self._get_component_parameters(parameters, index)
-            simulations.append(
-                component.simulate_spectrum(subparams, molecule)
-            )
-        full_sim = sum_spectra(simulations)
-        return full_sim
+            combined_intensity += component.simulate_spectrum(subparams)
+        return combined_intensity
 
     def compute_prior_likelihood(self, parameters: np.ndarray) -> float:
         for index, component in enumerate(self.components):

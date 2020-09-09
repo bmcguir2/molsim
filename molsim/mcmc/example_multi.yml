@@ -53,3 +53,4 @@ Tex:
 dV:
   mu: 0.126
   var: 0.0151
+observation: "observation.pkl"
