@@ -1,7 +1,7 @@
+import os
 from typing import Type, Any, List, Tuple
 from dataclasses import dataclass
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED
 from itertools import repeat
 
 import numpy as np
@@ -13,11 +13,11 @@ from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process import kernels
 from sklearn.metrics import mean_squared_error
 from tqdm.auto import tqdm
+from joblib import dump
 
-from molsim.classes import Catalog
+from molsim.classes import Catalog, Spectrum, Observation
 from molsim.mcmc import compute
-
-from . import lineshapes
+from molsim.file_handling import _load_catalog
 
 
 @dataclass
@@ -46,6 +46,9 @@ class DataChunk:
             if self.mask is not None:
                 h5_file.create_dataset("mask", data=self.mask)
 
+    def to_pickle(self, filename: str, **kwargs) -> None:
+        dump(self, filename + ".pkl", **kwargs)
+
     @classmethod
     def from_hdf5(cls, filename: str, dask=False, **kwargs):
         h5_file = h5py.File(filename, **kwargs)
@@ -63,6 +66,19 @@ class DataChunk:
         if "mask" in h5_file:
             mask = load_func(h5_file["mask"])
         return cls(frequency, intensity, catalog_index, noise, mask)
+
+    def to_spectrum(self) -> Spectrum:
+        spectrum = Spectrum(
+            frequency=self.frequency,
+            Tb=intensity,
+        )
+        spectrum.noise = self.noise
+        return spectrum
+
+    def to_observation(self, observatory=None) -> Observation:
+        spectrum = self.to_spectrum()
+        observation = Observation(spectrum=spectrum, observatory=observatory)
+        return observation
 
 
 def extract_frequency_slice(
@@ -116,7 +132,6 @@ def extract_chunks(
     delta_v: float = 5.0,
     rbf_params={},
     noise_params={},
-    n_workers=4,
     verbose=False,
 ):
     """
@@ -291,15 +306,18 @@ def unroll_chunks(chunks: List[Type[DataChunk]]) -> Tuple[np.ndarray, List[int]]
     return frequency, intensity, noise, cat_indices
 
 
-def load_spectrum(
+def preprocess_spectrum(
+    name: str,
     spectrum_path: str,
-    catalog: Type[Catalog],
+    catalog_path: str,
     delta_v: float,
     rbf_params={},
     noise_params={},
-    n_workers: int = 4,
     freq_range: Tuple[float, float] = (0.0, np.inf),
 ) -> Type[DataChunk]:
+    output_path = Path(name)
+    if not output_path.exists():
+        output_path.mkdir()
     spectrum_path = Path(spectrum_path)
     if not spectrum_path.exists():
         raise FileNotFoundError("Spectrum file not found!")
@@ -314,14 +332,33 @@ def load_spectrum(
     assert data.shape[-1] == 2
     logger.info(f"Number of elements: {data.size}")
     logger.info(f"Min/max frequency: {data[:,0].min():.4f}/{data[:,0].max():.4f}")
+    catalog = _load_catalog(catalog_path, type="SPCAT")
+    # process chunks of spectra, including GP noise estimation
     chunks, catalog_mask = extract_chunks(
-        data, catalog, delta_v, rbf_params, noise_params, n_workers
+        data, catalog, delta_v, rbf_params, noise_params
     )
+    # unroll the chunks, and reform them into a single DataChunk object
     frequency, intensity, noise, cat_indices = unroll_chunks(chunks)
-    return DataChunk(
+    datachunk = DataChunk(
         frequency=frequency,
         intensity=intensity,
         catalog_index=cat_indices,
         noise=noise,
         mask=catalog_mask,
     )
+    # dump stuff for later usage
+    dump(
+        catalog,
+        output_path.joinpath("catalog.pkl"),
+        compress=True
+    )
+    dump(
+        datachunk.to_observation(),
+        output_path.joinpath("observation.pkl"),
+        compress=True
+    )
+    chunk_path = output_path.joinpath("datachunks.h5")
+    if chunk_path.exists():
+        os.remove(chunk_path)
+    datachunk.to_hdf5(chunk_path)
+    return datachunk
