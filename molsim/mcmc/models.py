@@ -2,7 +2,6 @@ from typing import Type, Dict, Union, Callable, List
 from pathlib import Path
 from dataclasses import dataclass
 
-import pymc3 as pm
 import numpy as np
 import numexpr as ne
 from loguru import logger
@@ -95,10 +94,10 @@ class SingleComponent(AbstractModel):
         obs = self.observation.spectrum
         simulation = self.simulate_spectrum(parameters)
         inv_sigmasq = 1.0 / (obs.noise ** 2.0)
-        tot_lnlike = -0.5 * np.sum(
+        lnlike = -0.5 * np.sum(
             (obs.Tb - simulation) ** 2 * inv_sigmasq - np.log(inv_sigmasq)
         )
-        return tot_lnlike
+        return lnlike
 
     @classmethod
     def from_yml(cls, yml_path: str):
@@ -223,7 +222,7 @@ class MultiComponent(SingleComponent):
         subparams = np.append(subparams, [parameters[-2], parameters[-1]])
         return subparams
 
-    def simulate_spectrum(self, parameters: np.ndarray,) -> np.ndarray:
+    def simulate_spectrum(self, parameters: np.ndarray) -> np.ndarray:
         combined_intensity = np.zeros_like(self.observation.spectrum.frequency)
         for index, component in enumerate(self.components):
             # take every third element, corresponding to a parameter for
@@ -258,19 +257,18 @@ class TMC1FourComponent(MultiComponent):
     def compute_prior_likelihood(self, parameters: np.ndarray) -> float:
         vlsr1, vlsr2, vlsr3, vlsr4 = parameters[[4, 5, 6, 7]]
         if (
-            vlsr1 < 0.0
-            or vlsr1 > (vlsr2 - 0.05)
-            or vlsr2 > (vlsr3 - 0.05)
-            or vlsr3 > (vlsr4 - 0.05)
-            or vlsr2 > (vlsr1 + 0.3)
-            or vlsr3 > (vlsr2 + 0.2)
-            or vlsr4 > (vlsr3 + 0.2)
+            (vlsr1 < (vlsr2 - 0.05))
+            and (vlsr2 < (vlsr3 - 0.05))
+            and (vlsr3 < (vlsr4 - 0.05))
+            and (vlsr2 < (vlsr1 + 0.3))
+            and (vlsr3 < (vlsr2 + 0.3))
+            and (vlsr4 < (vlsr3 + 0.3))
         ):
-            return -np.inf
-        for index, component in enumerate(self.components):
-            subparams = self._get_component_parameters(parameters, index)
-            if index == 0:
-                lnlikelihood = component.compute_prior_likelihood(subparams)
-            else:
-                lnlikelihood += component.compute_prior_likelihood(subparams)
-        return lnlikelihood
+            for index, component in enumerate(self.components):
+                subparams = self._get_component_parameters(parameters, index)
+                if index == 0:
+                    lnlikelihood = component.compute_prior_likelihood(subparams)
+                else:
+                    lnlikelihood += component.compute_prior_likelihood(subparams)
+            return lnlikelihood
+        return -np.inf

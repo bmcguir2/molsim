@@ -220,15 +220,15 @@ class EmceeHelper(object):
         scrambler += np.random.uniform(-scale, scale, (walkers, self.ndim))
         positions *= scrambler
         # run the MCMC sampling
-        with Pool(workers) as pool:
-            sampler = emcee.EnsembleSampler(
-                walkers,
-                self.ndim,
-                compute_model_likelihoods,
-                args=[model,],
-                pool=pool,
-            )
-            sampler.run_mcmc(positions, iterations, progress=True)
+        # with Pool(workers) as pool:
+        sampler = emcee.EnsembleSampler(
+            walkers,
+            self.ndim,
+            compute_model_likelihoods,
+            args=[model,],
+            # pool=pool,
+        )
+        sampler.run_mcmc(positions, iterations, progress=True)
         self.chain = sampler.chain
         self.positions = sampler.get_last_sample()
 
