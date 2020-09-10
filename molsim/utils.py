@@ -23,7 +23,7 @@ def find_nearest(arr,val):
 	else:
 		return idx 
 
-def _trim_arr(arr,lls,uls,key_arr=None,return_idxs=False,ll_idxs=None,ul_idxs=None):
+def _trim_arr(arr,lls,uls,key_arr=None,return_idxs=False,ll_idxs=None,ul_idxs=None,return_mask=False):
 	'''
 	Trims the input array to the limits specified.  Optionally, will get indices from 
 	the key_arr for trimming instead.
@@ -31,21 +31,25 @@ def _trim_arr(arr,lls,uls,key_arr=None,return_idxs=False,ll_idxs=None,ul_idxs=No
 	
 	if ll_idxs is not None:
 		return np.concatenate([arr[ll_idx:ul_idx] for ll_idx,ul_idx in zip(ll_idxs,ul_idxs)])
-		
-	mask_arr = np.ones_like(arr,dtype=int)*False
+	
+	# modified to set as False to begin with, and working with
+	# booleans instead of numbers
+	mask_arr = np.zeros_like(arr, dtype=bool)
 	if key_arr is None:	
 		for x,y in zip(lls,uls):
 			mask_arr[(arr>x) & (arr<y)] = True
 	else:
 		for x,y in zip(lls,uls):
 			mask_arr[(key_arr>x) & (key_arr<y)] = True
-			
+
+	if return_mask:
+		return mask_arr
 	if return_idxs is False:
-		return arr[mask_arr == 1]
+		return arr[mask_arr]
 	else:
 		ll_idxs_out = _find_ones(mask_arr)[0]
 		ul_idxs_out = _find_ones(mask_arr)[1]
-		return arr[mask_arr == 1],ll_idxs_out,ul_idxs_out
+		return arr[mask_arr],ll_idxs_out,ul_idxs_out
 		
 @njit
 def _make_gauss(freq0,int0,freq,dV,ckm):
@@ -143,9 +147,9 @@ def find_limits(freq_arr,spacing_tolerance=100,padding=0):
 	the simulation within the right area.
 	'''
 	
-	if len(freq_arr) == 0:
-		print('The input array has no data.')
-		return
+	# if len(freq_arr) == 0:
+	# 	print('The input array has no data.')
+	# 	return
 
 	#first, calculate the most common data point spacing as the mode of the spacings
 	#this won't be perfect if the data aren't uniformly sampled
