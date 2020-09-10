@@ -1141,7 +1141,7 @@ class Simulation(object):
 		self._calc_tau()
 		self._calc_bg()
 		self._calc_Iv()
-		self.spectrum.Tb = self._calc_Tb(self.spectrum.frequency,self.spectrum.tau,self.spectrum.Tbg)
+		self.spectrum.Tb = self._calc_Tb(self.spectrum.frequency,self.spectrum.tau,self.spectrum.Tbg,self.source.Tex)
 		self._make_lines()
 		self._beam_correct()
 		
@@ -1161,12 +1161,13 @@ class Simulation(object):
 			if isinstance(self.ul,np.ndarray):
 				self.ul = self.ul.tolist()
 			else:
-				self.ul = [self.ul]		
-		self.spectrum.frequency,self.ll_idxs,self.ul_idxs = _trim_arr(self.mol.catalog.frequency,self.ll,self.ul,return_idxs=True)
-		self.spectrum.freq0 = _trim_arr(self.mol.catalog.frequency,self.ll,self.ul,ll_idxs=self.ll_idxs,ul_idxs=self.ul_idxs)
-		self.aij = _trim_arr(self.mol.catalog.aij,self.ll,self.ul,ll_idxs=self.ll_idxs,ul_idxs=self.ul_idxs)
-		self.gup = _trim_arr(self.mol.catalog.gup,self.ll,self.ul,ll_idxs=self.ll_idxs,ul_idxs=self.ul_idxs)
-		self.eup = _trim_arr(self.mol.catalog.eup,self.ll,self.ul,ll_idxs=self.ll_idxs,ul_idxs=self.ul_idxs)
+				self.ul = [self.ul]
+		mask = _trim_arr(self.mol.catalog.frequency,self.ll,self.ul,return_mask=True)
+		self.spectrum.frequency = self.mol.catalog.frequency[mask]
+		self.spectrum.freq0 = np.copy(self.spectrum.frequency)
+		self.aij = self.mol.catalog.aij[mask]
+		self.gup = self.mol.catalog.gup[mask]
+		self.eup = self.mol.catalog.eup[mask]
 		return
 		
 	def _apply_voffset(self):
@@ -1197,7 +1198,9 @@ class Simulation(object):
 							)*1E26
 		return
 
-	def _calc_Tb(self,freq,tau,Tbg):
+	@staticmethod
+	@njit(fastmath=True)
+	def _calc_Tb(freq,tau,Tbg,Tex):
 		'''
 		Eq. A1 of Turner 1991.  Inline definition of J_T and J_Tbg have a typo - the extra
 		'-1' at the end should be an exponential.  These should be in Planck.
@@ -1205,7 +1208,7 @@ class Simulation(object):
 		
 		J_T = ((h*freq*10**6/k)*
 			  (np.exp(((h*freq*10**6)/
-			  (k*self.source.Tex))) -1)**-1
+			  (k*Tex))) -1)**-1
 			  )
 		J_Tbg = ((h*freq*10**6/k)*
 			  (np.exp(((h*freq*10**6)/
@@ -1250,7 +1253,7 @@ class Simulation(object):
 			self.spectrum.tau_profile = tau_arr
 			self.spectrum.freq_profile = freq_arr
 			self.spectrum.Tbg_profile = self.source.continuum.Tbg(freq_arr)
-			self.spectrum.int_profile = self._calc_Tb(freq_arr,tau_arr,self.spectrum.Tbg_profile)
+			self.spectrum.int_profile = self._calc_Tb(freq_arr,tau_arr,self.spectrum.Tbg_profile,self.source.Tex)
 			return
 			
 	def get_beam(self,freq):
