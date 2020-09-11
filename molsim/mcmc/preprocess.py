@@ -316,16 +316,22 @@ def _legacy_filter_spectrum(
     delta_v: float = 0.3,
     block_interlopers: bool = False,
     interloper_threshold: float = 6.0,
-    sim_cutoff: float = 0.1
+    sim_cutoff: float = 0.1,
+    line_wash_threshold: float = 3.5,
 ):
     restfreqs = catalog.frequency
-    int_sim = 10**catalog.logint
+    int_sim = 10 ** catalog.logint
     max_int_sim = int_sim.max()
+    logger.info("Thresholding catalog entries based on overlap and intensity.")
+    logger.info(f"Intensity cutoff: {sim_cutoff * max_int_sim}")
     # get indices of catalogs that actually fall in the range of the data
     cat_mask = np.where(
-        (restfreqs <= frequency.max()) & (restfreqs >= frequency.min()) & (int_sim > sim_cutoff * max_int_sim)
+        (restfreqs < frequency.max())
+        & (restfreqs > frequency.min())
+        & (int_sim > sim_cutoff * max_int_sim)
     )[0]
     restfreqs = restfreqs[cat_mask]
+    logger.info(f"Min/Max catalog frequencies: {restfreqs.min():.4f},{restfreqs.max():.4f}")
     int_sim[cat_mask]
     catalog_indices = list()
     relevant_freqs = np.zeros_like(frequency)
@@ -336,7 +342,9 @@ def _legacy_filter_spectrum(
         velocity = (restfreq - frequency) / restfreq * 300000
         mask = np.where((velocity < (delta_v + vlsr)) & (velocity > (-delta_v + vlsr)))
         if mask[0].size != 0:
-            noise_mean, noise_std = compute.calc_noise_std(intensity[mask])
+            noise_mean, noise_std = compute.calc_noise_std(
+                intensity[mask], line_wash_threshold
+            )
             if np.isnan(noise_mean) or np.isnan(noise_std):
                 logger.info(f"NaNs found at {restfreq}")
                 continue
@@ -354,8 +362,9 @@ def _legacy_filter_spectrum(
                 relevant_yerrs[mask] = np.sqrt(
                     noise_std ** 2.0 + (intensity[mask] * 0.1) ** 2.0
                 )
-
-    logger.info(f"Ignored a total of {ignore_counter} catalog entries due to interlopers.")
+    logger.info(
+        f"Ignored a total of {ignore_counter} catalog entries due to interlopers."
+    )
     mask = relevant_freqs > 0
     relevant_freqs = relevant_freqs[mask]
     relevant_intensity = relevant_intensity[mask]
@@ -385,6 +394,8 @@ def preprocess_spectrum(
     interloper_threshold: float = 6.0,
     observatory=None,
     legacy: bool = False,
+    sim_cutoff: float = 0.1,
+    line_wash_threshold: float = 3.5,
 ) -> Type[DataChunk]:
     output_path = Path(name)
     if not output_path.exists():
@@ -418,9 +429,18 @@ def preprocess_spectrum(
             noise=noise,
             mask=catalog_mask,
         )
+    # use the version of the code from GOTHAM DR1
     else:
         datachunk = _legacy_filter_spectrum(
-            catalog, data[:, 0], data[:, 1], vlsr, delta_v, block_interlopers, interloper_threshold
+            catalog,
+            data[:, 0],
+            data[:, 1],
+            vlsr,
+            delta_v,
+            block_interlopers,
+            interloper_threshold,
+            sim_cutoff,
+            line_wash_threshold,
         )
     # dump stuff for later usage
     dump(catalog, output_path.joinpath("catalog.pkl"), compress=True)
