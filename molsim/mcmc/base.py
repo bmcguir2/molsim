@@ -7,6 +7,12 @@ import sys
 
 import numpy as np
 import emcee
+import arviz
+from loguru import logger
+
+# this makes sure that the full range of parameters are shown
+# for pair plots
+arviz.rcParams["plot.max_subplots"] = 120
 
 from molsim.mcmc import compute
 
@@ -205,32 +211,76 @@ class EmceeHelper(object):
         self.initial = initial
         self.ndim = len(initial)
         self.chain = None
-        self.positions = None
+        self._positions = None
+        self.sampler = None
+        logger.info("MCMC analysis using emcee and Molsim")
+        logger.info(f"NumPy version: {np.__version__}, Emcee version: {emcee.__version__}")
+        logger.info(f"Initial parameters: {initial}")
+
+    @property
+    def posterior(self):
+        return arviz.convert_to_inference_data(self.chain)
 
     def sample(
         self,
         model: AbstractModel,
         walkers: int = 100,
         iterations: int = 1000,
-        workers: int = 4,
+        workers: int = 1,
         scale: float = 1e-3,
     ):
+        logger.info(f"Performing prior log likelihood check.")
+        prior = model.compute_prior_likelihood(self.initial)
+        if not np.isfinite(prior):
+            raise ValueError(f"Prior likelihood for initial parameters is {prior}! Check your values.")
+        logger.info(f"Passed—{prior:.4f}")
         positions = np.tile(self.initial, (walkers, 1))
         scrambler = np.ones_like(positions)
         scrambler += np.random.uniform(-scale, scale, (walkers, self.ndim))
         positions *= scrambler
         # run the MCMC sampling
-        # with Pool(workers) as pool:
-        sampler = emcee.EnsembleSampler(
-            walkers,
-            self.ndim,
-            compute_model_likelihoods,
-            args=[model,],
-            # pool=pool,
-        )
-        sampler.run_mcmc(positions, iterations, progress=True)
+        if workers > 1:
+            logger.info(f"Using multiprocessing for sampling with {workers} processes.")
+            with Pool(workers) as pool:
+                sampler = emcee.EnsembleSampler(
+                    walkers,
+                    self.ndim,
+                    compute_model_likelihoods,
+                    args=[model,],
+                    pool=pool,
+                )
+                sampler.run_mcmc(positions, iterations, progress=True)
+        else:
+            logger.info(f"Using single process for sampling.")
+            sampler = emcee.EnsembleSampler(
+                    walkers,
+                    self.ndim,
+                    compute_model_likelihoods,
+                    args=[model,],
+                )
+            sampler.run_mcmc(positions, iterations, progress=True)
+        self.sampler = sampler
         self.chain = sampler.chain
         self.positions = sampler.get_last_sample()
+
+    def save_posterior(self, filename: str):
+        posterior = self.posterior
+        arviz.to_netcdf(posterior, filename)
+        logger.info(f"Saved posterior samples to {filename}.")
+
+    @staticmethod
+    def chains_to_prior(chains: np.ndarray, distributions: List[NamedTuple]):
+        # make sure the number of parameters in the chain matches
+        # the number of input distributions
+        assert len(distributions) == chains.shape[-1]
+        for index, dist in enumerate(distributions):
+            dist_type = dist.__name__
+            if dist_type == "UniformParameter":
+                pass
+            elif dist_type == "GaussianParameter":
+                pass
+            else:
+                raise NotImplementedError(f"Unrecognized parameter type! {dist_type}")
 
 
 def compute_model_likelihoods(parameters: np.ndarray, model: AbstractModel) -> float:
