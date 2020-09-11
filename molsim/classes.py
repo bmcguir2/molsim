@@ -1204,6 +1204,9 @@ class Simulation(object):
 		'''
 		Eq. A1 of Turner 1991.  Inline definition of J_T and J_Tbg have a typo - the extra
 		'-1' at the end should be an exponential.  These should be in Planck.
+  
+		Edit by Kelvin: this is now turned into a static method that requires Tex as
+		an argument. This is so that the function can be njit'd.
 		'''
 		
 		J_T = ((h*freq*10**6/k)*
