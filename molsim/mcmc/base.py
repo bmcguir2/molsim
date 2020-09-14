@@ -249,7 +249,14 @@ class EmceeHelper(object):
                     args=[model,],
                     pool=pool,
                 )
-                sampler.run_mcmc(positions, iterations, progress=True)
+                try:
+                    sampler.run_mcmc(positions, iterations, progress=True)
+                except ValueError as error:
+                    logger.info(f"Sampling broke during evaluation of likelihood.")
+                    logger.info(f"Dumping sampler positions to dump.npz")
+                    positions = sampler.get_last_sample().coords
+                    np.save("dump.npz", positions)
+                    logger.error(error)
         else:
             logger.info(f"Using single process for sampling.")
             sampler = emcee.EnsembleSampler(
@@ -258,7 +265,14 @@ class EmceeHelper(object):
                     compute_model_likelihoods,
                     args=[model,],
                 )
-            sampler.run_mcmc(positions, iterations, progress=True)
+            try:
+                sampler.run_mcmc(positions, iterations, progress=True)
+            except ValueError as error:
+                logger.info(f"Sampling broke during evaluation of likelihood.")
+                logger.info(f"Dumping sampler positions to dump.npz")
+                positions = sampler.get_last_sample().coords
+                np.save("dump.npz", positions)
+                logger.error(error)
         self.sampler = sampler
         self.chain = sampler.chain
         self.positions = sampler.get_last_sample()
