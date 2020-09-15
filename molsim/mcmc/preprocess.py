@@ -414,7 +414,11 @@ def preprocess_spectrum(
     assert data.shape[-1] == 2
     logger.info(f"Number of elements: {data.size}")
     logger.info(f"Min/max frequency: {data[:,0].min():.4f}/{data[:,0].max():.4f}")
-    catalog = _load_catalog(catalog_path, type="SPCAT")
+    if ".npz" in catalog_path:
+        cat_type = "molsim"
+    else:
+        cat_type = "SPCAT"
+    catalog = _load_catalog(catalog_path, type=cat_type)
     if not legacy:
         # process chunks of spectra, including GP noise estimation
         chunks, catalog_mask = extract_chunks(
