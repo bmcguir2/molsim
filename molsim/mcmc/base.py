@@ -276,6 +276,9 @@ class EmceeHelper(object):
         self.sampler = sampler
         self.chain = sampler.chain
         self.positions = sampler.get_last_sample()
+        report = arviz.summary(self.posterior)
+        logger.info("Summary of sampling:")
+        logger.info(report)
 
     def save_posterior(self, filename: str):
         posterior = self.posterior
