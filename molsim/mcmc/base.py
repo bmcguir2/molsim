@@ -221,6 +221,19 @@ class EmceeHelper(object):
     def posterior(self):
         return arviz.convert_to_inference_data(self.chain)
 
+    @staticmethod
+    def likelihood_checks(model: AbstractModel, parameters: np.ndarray):
+        logger.info(f"Performing prior log likelihood check.")
+        prior = model.compute_prior_likelihood(parameters)
+        if not np.isfinite(prior):
+            raise ValueError(f"Prior likelihood for initial parameters is {prior}! Check your values.")
+        logger.info(f"Passed—{prior:.4f}")
+        logger.info(f"Performing negative log likelihood check.")
+        ln = model.compute_log_likelihood(parameters)
+        if not np.isfinite(ln):
+            raise ValueError(f"Negative log likelihood for initial parameters is {ln}! Check your data.")
+        logger.info(f"Passed—{ln:.4f}")
+
     def sample(
         self,
         model: AbstractModel,
@@ -229,11 +242,8 @@ class EmceeHelper(object):
         workers: int = 1,
         scale: float = 1e-3,
     ):
-        logger.info(f"Performing prior log likelihood check.")
-        prior = model.compute_prior_likelihood(self.initial)
-        if not np.isfinite(prior):
-            raise ValueError(f"Prior likelihood for initial parameters is {prior}! Check your values.")
-        logger.info(f"Passed—{prior:.4f}")
+        self.likelihood_checks(model, self.initial)
+        # set up walker positions, and move them by a small percentage
         positions = np.tile(self.initial, (walkers, 1))
         scrambler = np.ones_like(positions)
         scrambler += np.random.uniform(-scale, scale, (walkers, self.ndim))
@@ -284,6 +294,15 @@ class EmceeHelper(object):
         posterior = self.posterior
         arviz.to_netcdf(posterior, filename)
         logger.info(f"Saved posterior samples to {filename}.")
+
+    @classmethod
+    def from_netcdf(cls, netcdf_path: str):
+        samples = arviz.from_netcdf(netcdf_path)
+        # generate the "initial" values from the mean of the posterior
+        initial = np.array(samples.posterior.mean(dim=["chain", "draw"]))[0]
+        helper_obj = cls(initial)
+        helper_obj.posterior = samples
+        return helper_obj
 
     @staticmethod
     def chains_to_prior(chains: np.ndarray, distributions: List[NamedTuple]):
