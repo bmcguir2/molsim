@@ -29,6 +29,7 @@ class SingleComponent(AbstractModel):
     dV: AbstractDistribution
     observation: Observation
     molecule: Molecule
+    nominal_vlsr: float = 0.
 
     def __post_init__(self):
         self._distributions = [
@@ -49,10 +50,14 @@ class SingleComponent(AbstractModel):
         initial = [param.initial_value() for param in self._distributions]
         return initial
 
-    def simulate_spectrum(self, parameters: np.ndarray,) -> np.ndarray:
+    def simulate_spectrum(self, parameters: np.ndarray) -> np.ndarray:
         size, vlsr, ncol, Tex, dV = parameters
         source = Source("", vlsr, size, column=ncol, Tex=Tex, dV=dV)
         min_freq, max_freq = find_limits(self.observation.spectrum.frequency)
+        min_offsets = compute.calculate_dopplerwidth_frequency(min_freq, self.nominal_vlsr)
+        max_offsets = compute.calculate_dopplerwidth_frequency(max_freq, self.nominal_vlsr)
+        min_freq += min_offsets
+        max_freq += max_offsets
         simulation = Simulation(
             mol=self.molecule,
             ll=min_freq,
@@ -137,6 +142,7 @@ class MultiComponent(SingleComponent):
         dV: AbstractDistribution,
         observation: Observation,
         molecule: Molecule,
+        nominal_vlsr: float = 0.
     ):
         super().__init__(source_sizes, vlsrs, Ncols, Tex, dV, observation, molecule)
         assert len(source_sizes) == len(vlsrs) == len(Ncols)
@@ -145,8 +151,18 @@ class MultiComponent(SingleComponent):
         self.source_size = self.vlsr = self.Ncol = self._distributions = None
         for ss, vlsr, Ncol in zip(source_sizes, vlsrs, Ncols):
             self.components.append(
-                SingleComponent(ss, vlsr, Ncol, Tex, dV, observation, molecule)
+                SingleComponent(ss, vlsr, Ncol, Tex, dV, observation, molecule, nominal_vlsr)
             )
+
+    def get_names(self):
+        names = list()
+        n_components = len(self.components)
+        for parameter in ["SourceSize", "VLSR", "NCol"]:
+            names.extend(
+                [parameter + f"_{i}" for i in range(n_components)]
+            )
+        names.extend(["Tex", "dV"])
+        return names
 
     @classmethod
     def from_yml(cls, yml_path: str):
@@ -184,6 +200,7 @@ class MultiComponent(SingleComponent):
         # load in the observed data
         cls_dict["observation"] = load(input_dict["observation"])
         cls_dict["molecule"] = load(input_dict["molecule"])
+        cls_dict["nominal_vlsr"] = input_dict.get("nominal_vlsr", 0.)
         return cls(**cls_dict)
 
     def __len__(self) -> int:
@@ -251,8 +268,9 @@ class TMC1FourComponent(MultiComponent):
         dV: AbstractDistribution,
         observation: Observation,
         molecule: Molecule,
+        nominal_vlsr: float = 0.
     ):
-        super().__init__(source_sizes, vlsrs, Ncols, Tex, dV, observation, molecule)
+        super().__init__(source_sizes, vlsrs, Ncols, Tex, dV, observation, molecule, nominal_vlsr)
 
     def compute_prior_likelihood(self, parameters: np.ndarray) -> float:
         vlsr1, vlsr2, vlsr3, vlsr4 = parameters[[4, 5, 6, 7]]
