@@ -22,9 +22,7 @@ for a likelihood function. Currently there are two implemented
 based on what was used for the GOTHAM data: uniform and gaussian.
 """
 
-UniformParameter = namedtuple(
-    "UniformParameter", "min max", defaults=(-np.inf, np.inf)
-)
+UniformParameter = namedtuple("UniformParameter", "min max", defaults=(-np.inf, np.inf))
 GaussianParameter = namedtuple(
     "GaussianParameter", "mu var min max", defaults=(0.0, 1.0, 0.0, np.inf)
 )
@@ -214,11 +212,27 @@ class EmceeHelper(object):
         self._positions = None
         self.sampler = None
         logger.info("MCMC analysis using emcee and Molsim")
-        logger.info(f"NumPy version: {np.__version__}, Emcee version: {emcee.__version__}")
+        logger.info(
+            f"NumPy version: {np.__version__}, Emcee version: {emcee.__version__}"
+        )
         logger.info(f"Initial parameters: {initial}")
 
     @property
     def posterior(self):
+        """
+        To extract a number of burn-ins, you need to index using `xarray`
+        syntax. In this case, it'll look like:
+        
+        ```helper.posterior.sel(draw=slice(3000,None))```
+        
+        To get draws 3000 to the end. Unfortunately, -1000 does not appear
+        to work for this syntax.
+
+        Returns
+        -------
+        [type]
+            [description]
+        """
         return arviz.convert_to_inference_data(self.chain)
 
     @staticmethod
@@ -226,12 +240,16 @@ class EmceeHelper(object):
         logger.info(f"Performing prior log likelihood check.")
         prior = model.compute_prior_likelihood(parameters)
         if not np.isfinite(prior):
-            raise ValueError(f"Prior likelihood for initial parameters is {prior}! Check your values.")
+            raise ValueError(
+                f"Prior likelihood for initial parameters is {prior}! Check your values."
+            )
         logger.info(f"Passed—{prior:.4f}")
-        logger.info(f"Performing negative log likelihood check.")
+        logger.info(f"Performing log likelihood check.")
         ln = model.compute_log_likelihood(parameters)
         if not np.isfinite(ln):
-            raise ValueError(f"Negative log likelihood for initial parameters is {ln}! Check your data.")
+            raise ValueError(
+                f"Log likelihood for initial parameters is {ln}! Check your data."
+            )
         logger.info(f"Passed—{ln:.4f}")
 
     def sample(
@@ -270,11 +288,8 @@ class EmceeHelper(object):
         else:
             logger.info(f"Using single process for sampling.")
             sampler = emcee.EnsembleSampler(
-                    walkers,
-                    self.ndim,
-                    compute_model_likelihoods,
-                    args=[model,],
-                )
+                walkers, self.ndim, compute_model_likelihoods, args=[model,],
+            )
             try:
                 sampler.run_mcmc(positions, iterations, progress=True)
             except ValueError as error:
