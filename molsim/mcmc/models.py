@@ -98,9 +98,12 @@ class SingleComponent(AbstractModel):
         """
         obs = self.observation.spectrum
         simulation = self.simulate_spectrum(parameters)
-        inv_sigmasq = 1.0 / (obs.noise ** 2.0)
-        lnlike = -0.5 * np.sum(
-            (obs.Tb - simulation) ** 2 * inv_sigmasq - np.log(inv_sigmasq)
+        # inv_sigma2 = 1. / (2. * obs.noise**2.)
+        # lnlike = -0.5 * np.sum(
+        #     ((obs.Tb - simulation) ** 2) * inv_sigma2 - np.log(inv_sigma2)
+        # )
+        lnlike = np.sum(
+            np.log(1. / np.sqrt(obs.noise**2.)) * np.exp(-(obs.Tb - simulation)**2. / (2. * obs.noise**2.))
         )
         return lnlike
 
@@ -110,15 +113,18 @@ class SingleComponent(AbstractModel):
         cls_dict = dict()
         # the two stragglers
         for key in input_dict.keys():
-            if key != "observation":
+            if key not in ["observation", "molecule", "nominal_vlsr"]:
                 if hasattr(input_dict[key], "mu"):
                     dist = GaussianLikelihood
                 else:
                     dist = UniformLikelihood
                 cls_dict[key] = dist.from_values(**input_dict[key])
             else:
+                if key != "nominal_vlsr":
                 # load in the observed data
-                cls_dict["observation"] = load(input_dict["observation"])
+                    cls_dict[key] = load(input_dict[key])
+                else:
+                    cls_dict[key] = input_dict.get(key, 0.)
         return cls(**cls_dict)
 
 
