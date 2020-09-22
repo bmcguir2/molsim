@@ -54,9 +54,11 @@ class SingleComponent(AbstractModel):
         size, vlsr, ncol, Tex, dV = parameters
         source = Source("", vlsr, size, column=ncol, Tex=Tex, dV=dV)
         min_freq, max_freq = find_limits(self.observation.spectrum.frequency)
-        min_offsets = compute.calculate_dopplerwidth_frequency(min_freq, self.nominal_vlsr)
-        max_offsets = compute.calculate_dopplerwidth_frequency(max_freq, self.nominal_vlsr)
-        min_freq += min_offsets
+        # there's a buffer here just to make sure we don't go out of bounds
+        # and suddenly stop simulating lines
+        min_offsets = compute.calculate_dopplerwidth_frequency(min_freq, vlsr * 3)
+        max_offsets = compute.calculate_dopplerwidth_frequency(max_freq, vlsr * 3)
+        min_freq -= min_offsets
         max_freq += max_offsets
         simulation = Simulation(
             mol=self.molecule,
@@ -207,6 +209,8 @@ class MultiComponent(SingleComponent):
         cls_dict["observation"] = load(input_dict["observation"])
         cls_dict["molecule"] = load(input_dict["molecule"])
         cls_dict["nominal_vlsr"] = input_dict.get("nominal_vlsr", 0.)
+        if cls_dict["nominal_vlsr"] == 0.:
+            logger.warning("Nominal VLSR is set to zero; make sure this is correct!")
         return cls(**cls_dict)
 
     def __len__(self) -> int:
