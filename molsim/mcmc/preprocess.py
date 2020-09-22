@@ -397,6 +397,7 @@ def preprocess_spectrum(
     sim_cutoff: float = 0.1,
     line_wash_threshold: float = 3.5,
 ) -> Type[DataChunk]:
+    logger.add(f"{name}_analysis.log", rotation="1 days", colorize=True)
     output_path = Path(name)
     if not output_path.exists():
         output_path.mkdir()
@@ -419,6 +420,7 @@ def preprocess_spectrum(
     else:
         cat_type = "SPCAT"
     catalog = _load_catalog(catalog_path, type=cat_type)
+    logger.info(f"There are {len(catalog.frequency)} catalog entries.")
     if not legacy:
         # process chunks of spectra, including GP noise estimation
         chunks, catalog_mask = extract_chunks(
@@ -446,6 +448,7 @@ def preprocess_spectrum(
             sim_cutoff,
             line_wash_threshold,
         )
+    logger.info(f"Using {len(datachunk.catalog_index)} entries for analysis.")
     # dump stuff for later usage
     dump(catalog, output_path.joinpath("catalog.pkl"), compress=True)
     dump(
