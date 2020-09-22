@@ -50,26 +50,58 @@ class SingleComponent(AbstractModel):
         initial = [param.initial_value() for param in self._distributions]
         return initial
 
-    def simulate_spectrum(self, parameters: np.ndarray) -> np.ndarray:
+    def simulate_spectrum(self, parameters: np.ndarray, scale: float = 3.) -> np.ndarray:
+        """
+        Wraps `molsim` functionality to simulate the spectrum, given a set
+        of input parameters as a NumPy 1D array.
+        
+        The nuance in this function is with `scale`: during the preprocess
+        step, we assume that the observation frequency is not shifted to the
+        source reference. To simulate with molsim, we identify where the catalog
+        overlaps with our frequency windows, and because it is unshifted this
+        causes molsim to potentially ignore a lot of lines (particularly 
+        high frequency ones). The `scale` parameter scales the input VLSR
+        as to make sure that we cover everything as best as we can.
+
+        Parameters
+        ----------
+        parameters : np.ndarray
+            NumPy 1D array containing parameters for the simulation.
+        scale : float, optional
+            Modifies the window to consider catalog overlap, by default 3.
+
+        Returns
+        -------
+        np.ndarray
+            NumPy 1D array corresponding to the simulated spectrum
+        """
         size, vlsr, ncol, Tex, dV = parameters
         source = Source("", vlsr, size, column=ncol, Tex=Tex, dV=dV)
-        min_freq, max_freq = find_limits(self.observation.spectrum.frequency)
-        # there's a buffer here just to make sure we don't go out of bounds
-        # and suddenly stop simulating lines
-        min_offsets = compute.calculate_dopplerwidth_frequency(min_freq, vlsr * 3)
-        max_offsets = compute.calculate_dopplerwidth_frequency(max_freq, vlsr * 3)
-        min_freq -= min_offsets
-        max_freq += max_offsets
-        simulation = Simulation(
-            mol=self.molecule,
-            ll=min_freq,
-            ul=max_freq,
-            observation=self.observation,
-            source=source,
-            line_profile="gaussian",
-            use_obs=True,
-        )
-        return simulation.spectrum.int_profile
+        if not hasattr(self, "simulation"):
+            min_freq, max_freq = find_limits(self.observation.spectrum.frequency)
+            # there's a buffer here just to make sure we don't go out of bounds
+            # and suddenly stop simulating lines
+            min_offsets = compute.calculate_dopplerwidth_frequency(min_freq, vlsr * scale)
+            max_offsets = compute.calculate_dopplerwidth_frequency(max_freq, vlsr * scale)
+            min_freq -= min_offsets
+            max_freq += max_offsets
+            self.simulation = Simulation(
+                mol=self.molecule,
+                ll=min_freq,
+                ul=max_freq,
+                observation=self.observation,
+                source=source,
+                line_profile="gaussian",
+                use_obs=True,
+            )
+        else:
+            self.simulation.source = source
+            self.simulation._apply_voffset()
+            self.simulation._calc_tau()
+            self.simulation._make_lines()
+            self.simulation._beam_correct()
+        intensity = self.simulation.spectrum.int_profile
+        return intensity
 
     def prior_constraint(self, parameters: np.ndarray):
         pass
