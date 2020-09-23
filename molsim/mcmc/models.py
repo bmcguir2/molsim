@@ -53,7 +53,11 @@ class SingleComponent(AbstractModel):
     def simulate_spectrum(self, parameters: np.ndarray, scale: float = 3.) -> np.ndarray:
         """
         Wraps `molsim` functionality to simulate the spectrum, given a set
-        of input parameters as a NumPy 1D array.
+        of input parameters as a NumPy 1D array. On the first pass, this generates
+        a `Simulation` instance and stores it, which has some overhead associated
+        with figuring out which catalog entries to simulate. After the first
+        pass, the instance is re-used with the `Source` object updated with
+        the new parameters.
         
         The nuance in this function is with `scale`: during the preprocess
         step, we assume that the observation frequency is not shifted to the
@@ -107,6 +111,20 @@ class SingleComponent(AbstractModel):
         pass
 
     def compute_prior_likelihood(self, parameters: np.ndarray) -> float:
+        """
+        Calculate the total prior log likelihood. The calculation is handed
+        off to the individual distributions.
+
+        Parameters
+        ----------
+        parameters : np.ndarray
+            NumPy 1D array containing the model parameters
+
+        Returns
+        -------
+        float
+            The total prior log likelihood
+        """
         lnlikelihood = sum(
             [
                 dist.ln_likelihood(value)
@@ -132,10 +150,7 @@ class SingleComponent(AbstractModel):
         """
         obs = self.observation.spectrum
         simulation = self.simulate_spectrum(parameters)
-        # inv_sigma2 = 1. / (2. * obs.noise**2.)
-        # lnlike = -0.5 * np.sum(
-        #     ((obs.Tb - simulation) ** 2) * inv_sigma2 - np.log(inv_sigma2)
-        # )
+        # match the simulation with the spectrum
         lnlike = np.sum(
             np.log(1. / np.sqrt(obs.noise**2.)) * np.exp(-(obs.Tb - simulation)**2. / (2. * obs.noise**2.))
         )
