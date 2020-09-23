@@ -29,6 +29,16 @@ GaussianParameter = namedtuple(
 
 
 class AbstractDistribution(ABC):
+    """
+    Base class for the likelihood distributions.
+
+    Defines the abstract methods and properties that are shared
+    between the different types of distributions; for example,
+    all distributions need a way to calculate the log likelihood.
+
+    New distributions, beyond uniform and Gaussians, should inherit
+    from this class.
+    """
     def __init__(self, name: str):
         super().__init__()
         self._name = name
@@ -99,12 +109,12 @@ class UniformLikelihood(AbstractDistribution):
         Parameters
         ----------
         value : float
-            [description]
+            Value of the parameter
 
         Returns
         -------
         float
-            [description]
+            0. if between the limits, negative infinity otherwise
         """
         if self.param.min <= value <= self.param.max:
             return 0.0
@@ -258,7 +268,7 @@ class EmceeHelper(object):
         walkers: int = 100,
         iterations: int = 1000,
         workers: int = 1,
-        scale: float = 1e-3,
+        scale: float = 1e-2,
     ):
         self.likelihood_checks(model, self.initial)
         # set up walker positions, and move them by a small percentage
@@ -305,18 +315,23 @@ class EmceeHelper(object):
         logger.info("Summary of sampling:")
         logger.info(report)
 
-    def save_posterior(self, filename: str):
+    def save_posterior(self, filename: str) -> None:
         posterior = self.posterior
         arviz.to_netcdf(posterior, filename)
         logger.info(f"Saved posterior samples to {filename}.")
 
     @classmethod
-    def from_netcdf(cls, netcdf_path: str):
+    def from_netcdf(cls, netcdf_path: str, restart: bool = False):
         samples = arviz.from_netcdf(netcdf_path)
-        # generate the "initial" values from the mean of the posterior
-        initial = np.array(samples.posterior.mean(dim=["chain", "draw"]))[0]
+        # if we're restarting sampling, take the last position
+        if restart:
+            last = samples.posterior.isel(draw=-1).mean(dim=["chain"]).to_array()
+            initial = np.array(last)[0]
+        # generate the initial values from the mean of the posterior
+        else:
+            initial = np.array(samples.posterior.mean(dim=["chain", "draw"]).to_array())[0]
         helper_obj = cls(initial)
-        helper_obj.posterior = samples
+        helper_obj.chain = np.array(samples.posterior.to_array()).squeeze()
         return helper_obj
 
     @staticmethod
@@ -332,6 +347,33 @@ class EmceeHelper(object):
                 pass
             else:
                 raise NotImplementedError(f"Unrecognized parameter type! {dist_type}")
+
+    def sample_posterior(self, nsamples: int, nparams: int = 14, rng: np.random.Generator = None) -> np.ndarray:
+        """
+        Take a random sample from the posterior. This is useful for simulating
+        spectra for the purpose of illustrating how uncertainty in the model
+        parameters is reflected in the result.
+
+        Parameters
+        ----------
+        nsamples : int
+            Number of random samples to draw from the posterior.
+        nparams : int, optional
+            Dimensionality of the model, i.e. number of parameters.
+            By default 14
+        rng : np.random.Generator, optional
+            Instance of a NumPy RNG, by default None, which
+            creates one.
+
+        Returns
+        -------
+        np.ndarray
+            Random samples drawn from the posterior.
+        """
+        samples = np.array(self.posterior.posterior.to_array()).squeeze().reshape(-1, nparams)
+        if rng is None:
+            rng = np.random.default_rng()
+        return rng.choice(samples, nsamples, axis=0)
 
 
 def compute_model_likelihoods(parameters: np.ndarray, model: AbstractModel) -> float:
