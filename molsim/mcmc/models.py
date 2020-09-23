@@ -46,6 +46,12 @@ class SingleComponent(AbstractModel):
     def _get_components(self):
         return self._distributions
 
+    def __repr__(self) -> str:
+        output = f"Model: {type(self).__name__}\n"
+        for dist in self._distributions:
+            output += f"{dist}\n"
+        return output
+
     def initialize_values(self):
         initial = [param.initial_value() for param in self._distributions]
         return initial
@@ -218,6 +224,12 @@ class MultiComponent(SingleComponent):
             )
         names.extend(["Tex", "dV"])
         return names
+
+    def __repr__(self) -> str:
+        output = f"Model {type(self).__name__}\n"
+        for index, component in enumerate(self.components):
+            output += f"Component {index + 1}: {component}\n"
+        return output
 
     @classmethod
     def from_yml(cls, yml_path: str):
