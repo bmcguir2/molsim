@@ -270,6 +270,8 @@ class EmceeHelper(object):
         workers: int = 1,
         scale: float = 1e-2,
     ):
+        logger.info(f"Performing sampling with model:")
+        logger.info(f"{model}")
         self.likelihood_checks(model, self.initial)
         # set up walker positions, and move them by a small percentage
         positions = np.tile(self.initial, (walkers, 1))
@@ -322,6 +324,7 @@ class EmceeHelper(object):
 
     @classmethod
     def from_netcdf(cls, netcdf_path: str, restart: bool = False):
+        logger.info(f"Loading NetCDF chain; restarti = {restart}")
         samples = arviz.from_netcdf(netcdf_path)
         # if we're restarting sampling, take the last position
         if restart:
