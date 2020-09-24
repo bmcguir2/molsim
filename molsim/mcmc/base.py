@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from multiprocessing import Pool
 import sys
+import json
 
 import numpy as np
 import emcee
@@ -39,6 +40,7 @@ class AbstractDistribution(ABC):
     New distributions, beyond uniform and Gaussians, should inherit
     from this class.
     """
+
     def __init__(self, name: str):
         super().__init__()
         self._name = name
@@ -262,6 +264,26 @@ class EmceeHelper(object):
             )
         logger.info(f"Passed—{ln:.4f}")
 
+    def summary(self, model: AbstractModel) -> "DataFrame":
+        """
+        Generate a summary table of the posterior, using a model to get the names
+        of the parameters.
+
+        Parameters
+        ----------
+        model : AbstractModel
+            [description]
+
+        Returns
+        -------
+        [type]
+            [description]
+        """
+        param_names = model.get_names()
+        summary = arviz.summary(self.posterior)
+        summary.index = param_names
+        return summary
+
     def sample(
         self,
         model: AbstractModel,
@@ -332,7 +354,9 @@ class EmceeHelper(object):
             initial = np.array(last)[0]
         # generate the initial values from the mean of the posterior
         else:
-            initial = np.array(samples.posterior.mean(dim=["chain", "draw"]).to_array())[0]
+            initial = np.array(
+                samples.posterior.mean(dim=["chain", "draw"]).to_array()
+            )[0]
         helper_obj = cls(initial)
         helper_obj.chain = np.array(samples.posterior.to_array()).squeeze()
         return helper_obj
@@ -351,7 +375,9 @@ class EmceeHelper(object):
             else:
                 raise NotImplementedError(f"Unrecognized parameter type! {dist_type}")
 
-    def sample_posterior(self, nsamples: int, nparams: int = 14, rng: np.random.Generator = None) -> np.ndarray:
+    def sample_posterior(
+        self, nsamples: int, nparams: int = 14, rng: np.random.Generator = None
+    ) -> np.ndarray:
         """
         Take a random sample from the posterior. This is useful for simulating
         spectra for the purpose of illustrating how uncertainty in the model
@@ -373,10 +399,41 @@ class EmceeHelper(object):
         np.ndarray
             Random samples drawn from the posterior.
         """
-        samples = np.array(self.posterior.posterior.to_array()).squeeze().reshape(-1, nparams)
+        samples = (
+            np.array(self.posterior.posterior.to_array()).squeeze().reshape(-1, nparams)
+        )
         if rng is None:
             rng = np.random.default_rng()
         return rng.choice(samples, nsamples, axis=0)
+
+    def posterior_to_json(
+        self, name: str, model: AbstractModel, return_dict: bool = False
+    ) -> Union[dict, None]:
+        summary = self.summary(model)
+        n_components = len(model.components)
+        output = dict()
+        for parameter in ["SourceSize", "VLSR", "NCol"]:
+            for component in range(n_components):
+                key = f"{parameter}_{component}"
+                # if the parameter hasn't been done yet, initialize the dictionary
+                if parameter not in output:
+                    output[parameter] = {"mean": [], "sd": []}
+                # use pandas.loc to grab the value
+                output[parameter]["mean"].append(summary.loc[key, "mean"])
+                output[parameter]["sd"].append(summary.loc[key, "sd"])
+        # loop over Tex and dV separately because we repeat them
+        for parameter in ["Tex", "dV"]:
+            output[parameter] = {
+                "mean": [summary.loc[parameter, "mean"],] * n_components,
+                "sd": [summary.loc[parameter, "sd"],] * n_components,
+            }
+
+        with open(f"{name}_mcmc_result.json", "w+") as write_file:
+            json.dump(output, write_file, indent=4)
+        if return_dict:
+            return output
+        else:
+            return None
 
 
 def compute_model_likelihoods(parameters: np.ndarray, model: AbstractModel) -> float:
