@@ -46,6 +46,9 @@ class SingleComponent(AbstractModel):
     def _get_components(self):
         return self._distributions
 
+    def get_names(self) -> List[str]:
+        return ["SourceSize", "VLSR", "NCol", "Tex", "dV"]
+
     def __repr__(self) -> str:
         output = f"Model: {type(self).__name__}\n"
         for dist in self._distributions:
