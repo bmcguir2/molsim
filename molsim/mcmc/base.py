@@ -3,6 +3,7 @@ from collections import namedtuple
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from multiprocessing import Pool
+from scipy.stats import uniform, norm
 import sys
 import json
 
@@ -27,6 +28,7 @@ UniformParameter = namedtuple("UniformParameter", "min max", defaults=(-np.inf, 
 GaussianParameter = namedtuple(
     "GaussianParameter", "mu var min max", defaults=(0.0, 1.0, 0.0, np.inf)
 )
+DeltaParameter = namedtuple("DeltaParameter", "value", defaults=(0.,))
 
 
 class AbstractDistribution(ABC):
@@ -73,6 +75,51 @@ class AbstractDistribution(ABC):
     @abstractmethod
     def initial_value(self) -> float:
         raise NotImplementedError
+
+    @abstractmethod
+    def sample(self) -> float:
+        raise NotImplementedError
+
+
+class DeltaLikelihood(AbstractDistribution):
+    """
+    This implements a Dirac Delta likelihood, where the log likelihood
+    is finite _only_ for the value set. This is useful for freezing
+    parameters in an MCMC setting, particularly for deriving upper limits.
+    """
+    def __init__(self, name: str, param: DeltaParameter):
+        super().__init__(name)
+        self._param = param
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def param(self) -> DeltaParameter:
+        return self._param
+
+    @classmethod
+    def from_dict(cls, name: str, **kwargs):
+        params = DeltaParameter(**kwargs)
+        return cls(name, params)
+
+    @classmethod
+    def from_values(cls, name: str, value: float = 0.):
+        param = DeltaParameter(value)
+        return cls(name, param)
+
+    def initial_value(self) -> float:
+        return self.param.value
+
+    def ln_likelihood(self, value):
+        if value != self.param.value:
+            return -np.inf
+        else:
+            return 0.
+
+    def sample(self) -> float:
+        return self.param.value
 
 
 class UniformLikelihood(AbstractDistribution):
@@ -122,6 +169,9 @@ class UniformLikelihood(AbstractDistribution):
             return 0.0
         else:
             return -np.inf
+
+    def sample(self) -> float:
+        return uniform.rvs(self.param.min, self.param.max - self.param.min)
 
 
 class GaussianLikelihood(AbstractDistribution):
@@ -195,6 +245,12 @@ class GaussianLikelihood(AbstractDistribution):
     def from_dict(cls, name: str, **kwargs):
         params = GaussianParameter(**kwargs)
         return cls(name, params)
+
+    def sample(self) -> float:
+        while True:
+            value = norm.rvs(self.param.mu, self.param.var)
+            if (self.param.min <= value) & (value <= self.param.max):
+                return value
 
 
 class AbstractModel(ABC):
@@ -290,16 +346,24 @@ class EmceeHelper(object):
         walkers: int = 100,
         iterations: int = 1000,
         workers: int = 1,
-        scale: float = 1e-2,
+        scale: Union[float, None] = 1e-2,
     ):
         logger.info(f"Performing sampling with model:")
         logger.info(f"{model}")
-        self.likelihood_checks(model, self.initial)
+        initial = np.array(model.sample_prior())
+        self.likelihood_checks(model, initial)            
         # set up walker positions, and move them by a small percentage
-        positions = np.tile(self.initial, (walkers, 1))
-        scrambler = np.ones_like(positions)
-        scrambler += np.random.uniform(-scale, scale, (walkers, self.ndim))
-        positions *= scrambler
+        if not scale:
+            # use the more proper method of generating initial positions
+            positions = np.array([model.sample_prior() for _ in range(walkers)])
+        else:
+            # Use the old method where values are shifted by a small random
+            # amount
+            positions = np.tile(self.initial, (walkers, 1))
+            scrambler = np.ones_like(positions)
+            scrambler += np.random.uniform(-scale, scale, (walkers, self.ndim))
+            positions *= scrambler
+        logger.info(f"Starting positions: {positions}")
         # run the MCMC sampling
         if workers > 1:
             logger.info(f"Using multiprocessing for sampling with {workers} processes.")
@@ -312,7 +376,7 @@ class EmceeHelper(object):
                     pool=pool,
                 )
                 try:
-                    sampler.run_mcmc(positions, iterations, progress=True)
+                    sampler.run_mcmc(positions, iterations, progress=True, skip_initial_state_check=True)
                 except ValueError as error:
                     logger.info(f"Sampling broke during evaluation of likelihood.")
                     logger.info(f"Dumping sampler positions to dump.npz")
@@ -325,7 +389,7 @@ class EmceeHelper(object):
                 walkers, self.ndim, compute_model_likelihoods, args=[model,],
             )
             try:
-                sampler.run_mcmc(positions, iterations, progress=True)
+                sampler.run_mcmc(positions, iterations, progress=True, skip_initial_state_check=True)
             except ValueError as error:
                 logger.info(f"Sampling broke during evaluation of likelihood.")
                 logger.info(f"Dumping sampler positions to dump.npz")

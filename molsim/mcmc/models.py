@@ -12,6 +12,7 @@ from molsim.mcmc.base import (
     AbstractDistribution,
     UniformLikelihood,
     GaussianLikelihood,
+    DeltaLikelihood
 )
 from molsim.mcmc import compute
 from molsim.utils import load_yaml, find_limits
@@ -55,8 +56,8 @@ class SingleComponent(AbstractModel):
             output += f"{dist}\n"
         return output
 
-    def initialize_values(self):
-        initial = [param.initial_value() for param in self._distributions]
+    def sample_prior(self):
+        initial = np.array([param.sample() for param in self._distributions])
         return initial
 
     def simulate_spectrum(self, parameters: np.ndarray, scale: float = 3.) -> np.ndarray:
@@ -255,6 +256,8 @@ class MultiComponent(SingleComponent):
                 size_params["name"] = f"{parameter}_{index}"
                 if "mu" in size_params:
                     dist = GaussianLikelihood
+                elif "value" in size_params:
+                    dist = DeltaLikelihood
                 else:
                     dist = UniformLikelihood
                 param_list.append(dist.from_values(**size_params))
@@ -264,6 +267,8 @@ class MultiComponent(SingleComponent):
             input_dict[key]["name"] = key
             if "mu" in input_dict[key]:
                 dist = GaussianLikelihood
+            elif "value" in input_dict[key]:
+                dist = DeltaLikelihood
             else:
                 dist = UniformLikelihood
             cls_dict[key] = dist.from_values(**input_dict[key])
@@ -287,12 +292,12 @@ class MultiComponent(SingleComponent):
                 params.extend(component._distributions)
         return params
 
-    def initialize_values(self):
+    def sample_prior(self):
         source_sizes = list()
         vlsrs = list()
         ncols = list()
         for index, component in enumerate(self.components):
-            values = component.initialize_values()
+            values = component.sample_prior()
             source_sizes.append(values[0])
             vlsrs.append(values[1])
             ncols.append(values[2])
