@@ -235,6 +235,13 @@ class MultiComponent(SingleComponent):
             output += f"Component {index + 1}: {component}\n"
         return output
 
+    @property
+    def distributions(self):
+        dists = list()
+        for component in self.components:
+            dists.extend(component._distributions)
+        return dists
+
     @classmethod
     def from_yml(cls, yml_path: str):
         input_dict = load_yaml(yml_path)
