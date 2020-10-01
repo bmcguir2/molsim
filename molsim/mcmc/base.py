@@ -113,7 +113,7 @@ class DeltaLikelihood(AbstractDistribution):
         return self.param.value
 
     def ln_likelihood(self, value):
-        if value != self.param.value:
+        if not np.isclose(self.param.value, value):
             return -np.inf
         else:
             return 0.
