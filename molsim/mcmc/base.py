@@ -351,23 +351,25 @@ class EmceeHelper(object):
     ):
         logger.info(f"Performing sampling with model:")
         logger.info(f"{model}")
-        initial = np.array(model.sample_prior())
-        self.likelihood_checks(model, initial)
         if restart:
             positions = self.sample_posterior(walkers)
+            initial = np.array(model.sample_prior())
         else:
             # set up walker positions, and move them by a small percentage
             if not scale:
                 # use the more proper method of generating initial positions
                 positions = np.array([model.sample_prior() for _ in range(walkers)])
+                initial = np.array(model.sample_prior())
             else:
                 # Use the old method where values are shifted by a small random
                 # amount
+                initial = self.initial
                 positions = np.tile(self.initial, (walkers, 1))
                 scrambler = np.ones_like(positions)
                 scrambler += np.random.uniform(-scale, scale, (walkers, self.ndim))
                 positions *= scrambler
         logger.info(f"Starting positions: {positions}")
+        self.likelihood_checks(model, initial)
         # run the MCMC sampling
         if workers > 1:
             logger.info(f"Using multiprocessing for sampling with {workers} processes.")
