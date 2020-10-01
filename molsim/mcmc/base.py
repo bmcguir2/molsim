@@ -352,24 +352,27 @@ class EmceeHelper(object):
         logger.info(f"Performing sampling with model:")
         logger.info(f"{model}")
         if restart:
-            positions = self.sample_posterior(walkers)
-            initial = np.array(model.sample_prior())
+            # if we're restarting, just take the last step
+            # for every chain, and the likelihood check uses the mean
+            # over chains
+            positions = self.chain[:,-1,:]
+            initial = np.array(positions.mean(axis=0))
         else:
             # set up walker positions, and move them by a small percentage
             if not scale:
                 # use the more proper method of generating initial positions
                 positions = np.array([model.sample_prior() for _ in range(walkers)])
-                initial = np.array(model.sample_prior())
+                initial = np.array(positions.mean(axis=0))
             else:
                 # Use the old method where values are shifted by a small random
-                # amount
+                # amount, with initial position taken from initialization
                 initial = self.initial
                 positions = np.tile(self.initial, (walkers, 1))
                 scrambler = np.ones_like(positions)
                 scrambler += np.random.uniform(-scale, scale, (walkers, self.ndim))
                 positions *= scrambler
-        logger.info(f"Starting positions: {positions}")
         self.likelihood_checks(model, initial)
+        logger.info(f"Starting positions: {positions}")
         # run the MCMC sampling
         if workers > 1:
             logger.info(f"Using multiprocessing for sampling with {workers} processes.")
