@@ -15,6 +15,8 @@ def plot_mf(spectrum,params={}):
 	'ylabel'		: 	'Impulse Response (' + r'$\sigma$' + ')', #string
 	'xlimits'		: 	None, #list [lowerlimit,upperlimit]
 	'ylimits'		:	None, #list [lowerlimit,upperlimit]
+	'nxticks'		:	None, #integer number of xtick marks
+	'nyticks'		:	None, #integer number of ytick marks
 	'colors'		:	['black'], #list of matplotlib colors
 	'drawstyles'	:	['steps'], #list of strings: 'default', 'steps', 'steps-pre', 'steps-mid', 'steps-post'
 	'linewidths'	:	[1.0], #list of floats
@@ -38,6 +40,8 @@ def plot_mf(spectrum,params={}):
 				'ylabel'		: 	'Impulse Response (' + r'$\sigma$' + ')',
 				'xlimits'		: 	None,
 				'ylimits'		:	None,
+				'nxticks'		:	None,
+				'nyticks'		:	None,
 				'colors'		:	['black'],
 				'drawstyles'	:	['steps'],
 				'linewidths'	:	[1.0],
@@ -67,6 +71,8 @@ def plot_mf(spectrum,params={}):
 	ylabel = settings['ylabel']		
 	xlimits = settings['xlimits']	
 	ylimits	= settings['ylimits']		
+	nxticks = settings['nxticks']
+	nyticks = settings['nyticks']
 	colors = settings['colors']
 	drawstyles = settings['drawstyles']	
 	linewidths = settings['linewidths']
@@ -100,6 +106,11 @@ def plot_mf(spectrum,params={}):
 	ax.tick_params(axis='y', which='both', direction='in')
 	ax.yaxis.set_ticks_position('both')
 	ax.xaxis.set_ticks_position('both')	
+	
+	if nxticks is not None:
+		ax.xaxis.set_major_locator(plt.MaxNLocator(nxticks))
+	if nyticks is not None:
+		ax.yaxis.set_major_locator(plt.MaxNLocator(nyticks))
 	
 	#plot
 	for spectrum,color,drawstyle,linewidth,alpha,zorder in zip(spectrum,colors,drawstyles,linewidths,alphas,orders):
@@ -151,6 +162,8 @@ def plot_stack(spectrum,params={}):
 	'ylabel'		: 	'Signal-to-Noise Ratio (' + r'$\sigma$' + ')', #string
 	'xlimits'		: 	None, #list [lowerlimit,upperlimit]
 	'ylimits'		:	None, #list [lowerlimit,upperlimit]
+	'nxticks'		:	None, #integer number of xtick marks
+	'nyticks'		:	None, #integer number of ytick marks	
 	'plot_color'	:	'black', #matplotlib color
 	'drawstyle'		:	'steps', #string: 'default', 'steps', 'steps-pre', 'steps-mid', 'steps-post'
 	'linewidth'		:	1.0, #float
@@ -178,6 +191,8 @@ def plot_stack(spectrum,params={}):
 				'ylabel'		: 	'Signal-to-Noise Ratio (' + r'$\sigma$' + ')',
 				'xlimits'		: 	None,
 				'ylimits'		:	None,
+				'nxticks'		:	None,
+				'nyticks'		:	None,				
 				'plot_color'	:	'black',
 				'drawstyle'		:	'steps',
 				'linewidth'		:	1.0,
@@ -208,6 +223,8 @@ def plot_stack(spectrum,params={}):
 	ylabel = settings['ylabel']		
 	xlimits = settings['xlimits']	
 	ylimits	= settings['ylimits']		
+	nxticks = settings['nxticks']
+	nyticks = settings['nyticks']	
 	plot_color = settings['plot_color']
 	drawstyle = settings['drawstyle']	
 	linewidth = settings['linewidth']
@@ -245,6 +262,11 @@ def plot_stack(spectrum,params={}):
 	ax.tick_params(axis='y', which='both', direction='in')
 	ax.yaxis.set_ticks_position('both')
 	ax.xaxis.set_ticks_position('both')	
+	
+	if nxticks is not None:
+		ax.xaxis.set_major_locator(plt.MaxNLocator(nxticks))
+	if nyticks is not None:
+		ax.yaxis.set_major_locator(plt.MaxNLocator(nyticks))	
 	
 	#plot
 	plt.plot(spectrum.velocity,spectrum.snr,color=plot_color,drawstyle=drawstyle,linewidth=linewidth,alpha=stack_alpha)
@@ -299,6 +321,8 @@ def plot_sim(spectra,params={}):
 	'ylabel'		: 	r'T$_{b}$ (K)', #string
 	'xlimits'		: 	None, #list [lowerlimit,upperlimit]
 	'ylimits'		:	None, #list [lowerlimit,upperlimit]
+	'nxticks'		:	None, #integer number of xtick marks
+	'nyticks'		:	None, #integer number of ytick marks		
 	'sim_colors'	:	['red'], #list of matplotlib colors
 	'sim_drawstyles':	['steps'], #list of drawstyles; string: 'default', 'steps', 'steps-pre', 'steps-mid', 'steps-post'
 	'sim_linewidths':	[1.0], #list of floats
@@ -322,6 +346,8 @@ def plot_sim(spectra,params={}):
 				'ylabel'		: 	r'T$_{b}$ (K)',
 				'xlimits'		: 	None,
 				'ylimits'		:	None,
+				'nxticks'		:	None,
+				'nyticks'		:	None,					
 				'sim_colors'	:	['red'] * len(spectra),
 				'sim_drawstyles':	['steps'] * len(spectra),
 				'sim_linewidths':	[1.0] * len(spectra),
@@ -347,7 +373,9 @@ def plot_sim(spectra,params={}):
 	xlabel = settings['xlabel']		
 	ylabel = settings['ylabel']		
 	xlimits = settings['xlimits']	
-	ylimits	= settings['ylimits']		
+	ylimits	= settings['ylimits']	
+	nxticks = settings['nxticks']
+	nyticks = settings['nyticks']		
 	sim_colors = settings['sim_colors']
 	sim_drawstyles = settings['sim_drawstyles']
 	sim_linewidths = settings['sim_linewidths']
@@ -382,6 +410,11 @@ def plot_sim(spectra,params={}):
 	ax.yaxis.set_ticks_position('both')
 	ax.xaxis.set_ticks_position('both')	
 	
+	if nxticks is not None:
+		ax.xaxis.set_major_locator(plt.MaxNLocator(nxticks))
+	if nyticks is not None:
+		ax.yaxis.set_major_locator(plt.MaxNLocator(nyticks))		
+	
 	#plot
 	for spectrum,color,drawstyle,linewidth,order,alpha in zip(spectra,sim_colors,sim_drawstyles,sim_linewidths,sim_orders,sim_alphas):
 		plt.plot(spectrum.freq_profile,spectrum.int_profile,color=color,drawstyle=drawstyle,linewidth=linewidth,alpha=alpha,zorder=order)
@@ -407,3 +440,119 @@ def plot_sim(spectra,params={}):
 		plt.savefig(file_out,format='pdf',transparent=True,bbox_inches='tight')
 		
 	return	
+	
+def plot_highest_snr(sims,obs,params={}):
+
+	'''
+	Makes a grid plot of the highest snr lines from a simulation using parameters
+	as defined in the parameters dictionary.  The keywords that can be specified,
+	and their defaults, are as follows:
+
+	'name' 			: 	'Simulation', #string
+	'figsize'		: 	(9,6), #tuple
+	'fontsize'		: 	16, #integer
+	'xlabel'		: 	'Frequency (MHz)', #string
+	'ylabel'		: 	r'T$_{b}$ (K)', #string
+	'xlimits'		: 	None, #list [lowerlimit,upperlimit]
+	'ylimits'		:	None, #list [lowerlimit,upperlimit]
+	'nxticks'		:	None, #integer number of xtick marks
+	'nyticks'		:	None, #integer number of ytick marks		
+	'sim_colors'	:	['red'], #list of matplotlib colors
+	'sim_drawstyles':	['steps'], #list of drawstyles; string: 'default', 'steps', 'steps-pre', 'steps-mid', 'steps-post'
+	'sim_linewidths':	[1.0], #list of floats
+	'sim_orders'	:	[2], #list of integers
+	'sim_alphas'	:	[1.0], #list of floats
+	'obs_colors'	:	['black'], #list of matplotlib colors
+	'obs_drawstyles':	['steps'], #list of drawstyles; string: 'default', 'steps', 'steps-pre', 'steps-mid', 'steps-post'
+	'obs_linewidths':	[1.0], #list of floats
+	'obs_orders'	:	[1], #list of integers
+	'obs_alphas'	:	[1.0], #list of floats
+	'save_plot'		:	False, #True or False
+	'file_out'		:	'simulated_spectrum.pdf' #string
+		
+	'''
+	
+	#load in options from the params dictionary, and any defaults
+	settings = {'name' 			: 	'Simulation',
+				'figsize'		: 	(9,6),
+				'fontsize'		: 	16,
+				'xlabel'		: 	'Frequency (MHz)',
+				'ylabel'		: 	r'T$_{b}$ (K)',
+				'xlimits'		: 	None,
+				'ylimits'		:	None,
+				'nxticks'		:	None,
+				'nyticks'		:	None,					
+				'sim_colors'	:	['red'] * len(spectra),
+				'sim_drawstyles':	['steps'] * len(spectra),
+				'sim_linewidths':	[1.0] * len(spectra),
+				'sim_orders'	:	[2] * len(spectra),
+				'sim_alphas'	:	[1.0] * len(spectra),
+				'obs'			:	None,
+				'obs_colors'	:	['black'],
+				'obs_drawstyles':	['steps'],
+				'obs_linewidths':	[1.0],
+				'obs_orders'	:	[1],			
+				'obs_alphas'	:	[1.0],	
+				'save_plot'		:	False,
+				'file_out'		:	'simulated_spectrum.pdf'
+				}
+				
+	for x in params:
+		if x in settings:
+			settings[x] = params[x]			
+		
+	name = params['name'] if 'name' in params else 'Highest SNR Lines'
+	figsize	= params['figsize'] if 'figsize' in params else ''
+	fontsize = params['fontsize']	
+	xlabel = params['xlabel']		
+	ylabel = params['ylabel']		
+	xlimits = params['xlimits']	
+	ylimits	= params['ylimits']	
+	nxticks = params['nxticks']
+	nyticks = params['nyticks']		
+	sim_colors = params['sim_colors']
+	sim_drawstyles = params['sim_drawstyles']
+	sim_linewidths = params['sim_linewidths']
+	sim_orders = params['sim_orders']
+	sim_alphas = params['sim_alphas']
+	obs = params['obs']
+	obs_colors = params['obs_colors']
+	obs_drawstyles = params['obs_drawstyles']
+	obs_linewidths = params['obs_linewidths']
+	obs_orders = params['obs_orders']
+	obs_alphas = params['obs_alphas']
+	save_plot = params['save_plot']
+	file_out = params['file_out']		
+
+	return
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	

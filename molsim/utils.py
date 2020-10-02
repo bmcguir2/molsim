@@ -1,6 +1,7 @@
 import numpy as np
 from numba import njit
 from molsim.constants import ccm, cm, ckm, h, k, kcm
+from molsim.stats import get_rms
 import math
 import warnings
 from scipy import stats, signal

@@ -1113,6 +1113,7 @@ class Simulation(object):
 					sim_width = 10, #fwhms to simulate +/- line center
 					res = 10., #resolution if simulating line profiles [kHz]
 					mol = None, #Molecule object associated with this simulation
+					units = 'K', #units for the simulation; accepts 'K', 'mK', 'Jy/beam'
 					notes = None, #notes
 				):
 				
@@ -1125,6 +1126,7 @@ class Simulation(object):
 		self.sim_width = sim_width
 		self.res = res
 		self.mol = mol
+		self.units = units
 		self.notes = notes
 		self.beam_size = None
 		self.beam_dilution = None
@@ -1142,6 +1144,7 @@ class Simulation(object):
 		self.spectrum.Tb = self._calc_Tb(self.spectrum.frequency,self.spectrum.tau,self.spectrum.Tbg)
 		self._make_lines()
 		self._beam_correct()
+		self._set_units()
 		
 		return	
 	
@@ -1248,6 +1251,28 @@ class Simulation(object):
 			
 	def get_beam(self,freq):
 		return 	206265 * 1.22 * ((freq*u.MHz).to(u.m, equivalencies=u.spectral()).value) / self.observation.observatory.dish		
+
+	def _set_units(self):
+	
+		'''
+		Define the output units.  Natively calculated in K, can convert to mK or Jy/beam.
+		'''
+		
+		if self.units == 'K':
+			return
+		
+		if self.units == 'mK':
+			self.spectrum.int_profile *= 1000
+			return
+			
+		if self.units in ['Jy/beam', 'Jy']:
+			omega = self.observation.observatory.synth_beam[0]*self.observation.observatory.synth_beam[1] #conversion below has volume element built in
+			mask = np.where(self.spectrum.int_profile != 0)[0]
+			self.spectrum.int_profile[mask] = (3.92E-8 * (self.spectrum.freq_profile[mask]*1E-3)**3 *omega/ (np.exp(0.048*self.spectrum.freq_profile[mask]*1E-3/self.spectrum.int_profile[mask]) - 1))
+			return
+			
+	
+		return
 				
 	def update(self):
 		self._set_arrays()
@@ -1258,4 +1283,5 @@ class Simulation(object):
 		self.spectrum.Tb = self._calc_Tb(self.spectrum.frequency,self.spectrum.tau,self.spectrum.Tbg)
 		self._make_lines()
 		self._beam_correct()
+		self._set_units()
 		return
