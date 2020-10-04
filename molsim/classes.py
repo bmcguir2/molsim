@@ -9,6 +9,9 @@ from scipy.interpolate import interp1d
 from astropy import units
 from astropy.coordinates import SkyCoord, EarthLocation
 import astropy.units as u
+import matplotlib.pyplot as plt
+import matplotlib
+from datetime import datetime
 
 class Workspace(object):
 
@@ -1284,4 +1287,182 @@ class Simulation(object):
 		self._make_lines()
 		self._beam_correct()
 		self._set_units()
+		return											
+																
+class Trace(object):
+	def __init__(self,
+					name = None,
+					data = None,
+					x = None,
+					y = None,
+					color = None,
+					drawstyle = 'steps',
+					linewidth = 1.,
+					order = 1.,
+					alpha = 1.,
+					visible = True,
+					):
+		
+		self.name = name
+		self.data = data
+		self.x = x
+		self.y = y
+		self.color = color
+		self.drawstyle = drawstyle
+		self.linewidth = linewidth
+		self.order = order
+		self.alpha = alpha
+		self.visible = visible
+		
+		self.set_defaults()
+		
+		return	
+		
+	def set_defaults(self):
+		if self.name is None:
+			self.name = str(datetime.utcnow().timestamp())
+		if self.data is not None:
+			if isinstance(self.data,Observation):
+				self.x = self.data.spectrum.frequency
+				self.y = self.data.spectrum.Tb
+			if isinstance(self.data,Simulation):
+				self.x = self.data.spectrum.freq_profile
+				self.y = self.data.spectrum.int_profile
+			if isinstance(self.data,Spectrum):
+				self.x = self.data.freq_profile
+				self.y = self.data.int_profile
+		if self.color is None:
+			if self.data is not None:
+				if isinstance(self.data,Observation):
+					self.color = 'black' #default to black for observations
+				else:
+					self.color = 'red' #default to red for anything else
+		if self.visible is False:
+			self.alpha = 0.0
+		return			
+
+class Iplot(object):
+
+	def __init__(self,
+				 plot_name = 'Interactive Plot',
+				 figsize = (9,6),
+				 fontsize = 16,
+				 xlabel = 'Frequency (MHz)',
+				 ylabel = 'Intensity (Probably K)',
+				 nxticks = None,
+				 nyticks = None,
+				 xlimits = None,
+				 ylimits = None,
+				 save_plot = False,
+				 file_out = None,
+				 file_format = 'pdf',
+				 file_dpi = 300,
+				 transparent = True,
+				 traces = []
+				):
+		
+		self.plot_name = plot_name
+		self.figsize = figsize
+		self.fontsize = fontsize
+		self.xlabel = xlabel
+		self.ylabel = ylabel
+		self.nxticks = nxticks
+		self.nyticks = nyticks
+		self.xlimits = xlimits
+		self.ylimits = ylimits
+		self.save_plot = save_plot
+		self.file_out = file_out
+		self.file_format = file_format
+		self.file_dpi = file_dpi
+		self.transparent = transparent
+		self.traces = traces
+		self.traces_dict = {}
+		self.line_dict = {}
+		self.fig = None
+		
+		self.set_file_out()
+		self.set_data()
+		self.make_plot()
+	
 		return
+
+	def set_file_out(self):
+		if self.save_plot is True and self.file_out is None:
+			self.file_out = 'plot.' + self.file_format
+			
+	def set_data(self):
+		for x in self.traces:
+			self.traces_dict[x.name] = x
+						
+	def make_plot(self):
+		#plot shell making
+		plt.ion()
+		plt.close(self.plot_name)
+		fig = plt.figure(num=self.plot_name,figsize=self.figsize)
+		fontparams = {'size':self.fontsize, 'family':'sans-serif','sans-serif':['Helvetica']}	
+		plt.rc('font',**fontparams)
+		plt.rc('mathtext', fontset='stixsans')
+		matplotlib.rcParams['pdf.fonttype'] = 42	
+		ax = fig.add_subplot(111)
+
+		#axis labels
+		plt.xlabel(self.xlabel)
+		plt.ylabel(self.ylabel)
+	
+		#fix ticks
+		ax.tick_params(axis='x', which='both', direction='in')
+		ax.tick_params(axis='y', which='both', direction='in')
+		ax.yaxis.set_ticks_position('both')
+		ax.xaxis.set_ticks_position('both') 
+	
+		if self.nxticks is not None:
+			ax.xaxis.set_major_locator(plt.MaxNLocator(self.nxticks))
+		if self.nyticks is not None:
+			ax.yaxis.set_major_locator(plt.MaxNLocator(self.nyticks))
+		
+		#xlimits
+		ax.get_xaxis().get_major_formatter().set_scientific(False) #Don't let the x-axis go into scientific notation
+		ax.get_xaxis().get_major_formatter().set_useOffset(False)	
+		if self.xlimits is not None:
+			ax.set_xlim(self.xlimits)
+	
+		#ylimits	
+		if self.ylimits is not None:
+			ax.set_ylim(self.ylimits)	   
+		for x in self.traces_dict:
+			y = self.traces_dict[x]
+			self.line_dict[y.name], = plt.plot(y.x,
+												y.y,
+												color=y.color,
+												drawstyle=y.drawstyle,
+												linewidth=y.linewidth,
+												alpha=y.alpha,
+												zorder=y.order,)
+		fig.canvas.draw()
+		self.fig = fig												
+			
+	def update(self,traces=None):	
+		if traces is not None:
+			if isinstance(traces,list) is False:
+				traces = [traces]
+			for x in traces:
+				self.traces_dict[x.name] = x			
+		for x in self.traces_dict:
+			y = self.traces_dict[x]
+			if y.name in self.line_dict.keys():
+				self.line_dict[y.name].set_data(y.x,y.y)
+				self.line_dict[y.name].set_color(y.color) 
+				self.line_dict[y.name].set_alpha(y.alpha)
+				self.line_dict[y.name].set_linewidth(y.linewidth)
+				self.line_dict[y.name].set_drawstyle(y.drawstyle)
+				self.line_dict[y.name].set_zorder(y.order)
+			else:
+				self.line_dict[y.name], = plt.plot(y.x,
+													y.y,
+													color=y.color,
+													drawstyle=y.drawstyle,
+													linewidth=y.linewidth,
+													alpha=y.alpha,
+													zorder=y.order,)			
+		self.fig.canvas.draw()					
+		

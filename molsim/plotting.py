@@ -526,33 +526,79 @@ def plot_highest_snr(sims,obs,params={}):
 
 	return
 	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
+# def interactive_plot(params = {}):
+# 
+# 
+# 	plot_name = params['plot_name'] if params['plot_name'] else 'Interactive Plot'
+# 	figsize = params['figsize'] if params['figsize'] else (9,6)
+# 	xlabel = params['xlabel'] if params['xlabel'] else 'Freqeuncy (MHz)'
+# 	ylabel = params['ylabel'] if params['ylabel'] else 'Intensity (Probably K)'
+# 	nxticks = params['nxticks'] if params['nxticks'] else None
+# 	nyticks = params['nyticks'] if params['nyticks'] else None
+# 	xlimits = params['xlimits'] if params['xlimits'] else None
+# 	ylimits = params['ylimits'] if params['ylimits'] else None
+# 	save_plot = params['save_plot'] if params['save_plot'] else False
+# 	file_out = params['file_out'] if params['file_out'] else None
+# 	file_format = params['file_format'] if params['file_format'] else 'pdf'
+# 	file_dpi = params['file_dpi'] if params['file_dpi'] else 300
+# 	transparent = params['transparent'] if params['transparent'] else True
+# 	
+# 	
+# 
+# 	#plot shell making
+# 	plt.ion()
+# 	plt.close(plot_name)
+# 	fig = plt.figure(num=plot_name,figsize=figsize)
+# 	fontparams = {'size':fontsize, 'family':'sans-serif','sans-serif':['Helvetica']}	
+# 	plt.rc('font',**fontparams)
+# 	plt.rc('mathtext', fontset='stixsans')
+# 	matplotlib.rcParams['pdf.fonttype'] = 42	
+# 	ax = fig.add_subplot(111)
+# 
+# 	#axis labels
+# 	plt.xlabel(xlabel)
+# 	plt.ylabel(ylabel)
+# 	
+# 	#fix ticks
+# 	ax.tick_params(axis='x', which='both', direction='in')
+# 	ax.tick_params(axis='y', which='both', direction='in')
+# 	ax.yaxis.set_ticks_position('both')
+# 	ax.xaxis.set_ticks_position('both')	
+# 	
+# 	if nxticks is not None:
+# 		ax.xaxis.set_major_locator(plt.MaxNLocator(nxticks))
+# 	if nyticks is not None:
+# 		ax.yaxis.set_major_locator(plt.MaxNLocator(nyticks))
+# 		
+# 	#xlimits
+# 	ax.get_xaxis().get_major_formatter().set_scientific(False) #Don't let the x-axis go into scientific notation
+# 	ax.get_xaxis().get_major_formatter().set_useOffset(False)	
+# 	if xlimits is not None:
+# 		ax.set_xlim(xlimits)
+# 	
+# 	#ylimits	
+# 	if ylimits is not None:
+# 		ax.set_ylim(ylimits)	
+# 	
+# 	
+# 	
+# 	for trace in traces:
+# 	
+# 			
+# 
+# 	#show it
+# 	fig.canvas.draw()
+# 	
+# 	#save it if desired
+# 	if save_plot is True:
+# 		if file_format == 'pdf':
+# 			plt.savefig(file_out,format=file_format,transparent=transparent,bbox_inches='tight')
+# 		if file_format == 'png':
+# 			plt.savefig(file_out,format=file_format,dpi=file_dpi,transparent=transparent,bbox_inches='tight')
+# 			
+# 			
+# 
+# 
+# 	return
 	
 	
