@@ -9,6 +9,9 @@ from scipy.interpolate import interp1d
 from astropy import units
 from astropy.coordinates import SkyCoord, EarthLocation
 import astropy.units as u
+import matplotlib.pyplot as plt
+import matplotlib
+from datetime import datetime
 
 class Workspace(object):
 
@@ -935,7 +938,7 @@ class Spectrum(object):
 								snr = self.snr,
 							)
 		
-		return			
+		return				
 		
 class Continuum(object):
 
@@ -1095,7 +1098,7 @@ class Observation(object):
 		self.id = id
 		self.notes = notes
 		
-		return				
+		return
 
 class Simulation(object):
 	'''
@@ -1113,7 +1116,9 @@ class Simulation(object):
 					sim_width = 10, #fwhms to simulate +/- line center
 					res = 10., #resolution if simulating line profiles [kHz]
 					mol = None, #Molecule object associated with this simulation
+					units = 'K', #units for the simulation; accepts 'K', 'mK', 'Jy/beam'
 					notes = None, #notes
+                    use_obs = False # flag for line profile simulation to be done with observations
 				):
 				
 		self.spectrum = spectrum
@@ -1125,6 +1130,7 @@ class Simulation(object):
 		self.sim_width = sim_width
 		self.res = res
 		self.mol = mol
+		self.units = units
 		self.notes = notes
 		self.beam_size = None
 		self.beam_dilution = None
@@ -1133,15 +1139,17 @@ class Simulation(object):
 		self.aij = None
 		self.gup = None
 		self.eup = None
+		self.use_obs = use_obs
 		
 		self._set_arrays()
 		self._apply_voffset()
 		self._calc_tau()
 		self._calc_bg()
 		self._calc_Iv()
-		self.spectrum.Tb = self._calc_Tb(self.spectrum.frequency,self.spectrum.tau,self.spectrum.Tbg)
+		self.spectrum.Tb = self._calc_Tb(self.spectrum.frequency,self.spectrum.tau,self.spectrum.Tbg,self.source.Tex)
 		self._make_lines()
 		self._beam_correct()
+		self._set_units()
 		
 		return	
 	
@@ -1159,12 +1167,13 @@ class Simulation(object):
 			if isinstance(self.ul,np.ndarray):
 				self.ul = self.ul.tolist()
 			else:
-				self.ul = [self.ul]		
-		self.spectrum.frequency,self.ll_idxs,self.ul_idxs = _trim_arr(self.mol.catalog.frequency,self.ll,self.ul,return_idxs=True)
-		self.spectrum.freq0 = _trim_arr(self.mol.catalog.frequency,self.ll,self.ul,ll_idxs=self.ll_idxs,ul_idxs=self.ul_idxs)
-		self.aij = _trim_arr(self.mol.catalog.aij,self.ll,self.ul,ll_idxs=self.ll_idxs,ul_idxs=self.ul_idxs)
-		self.gup = _trim_arr(self.mol.catalog.gup,self.ll,self.ul,ll_idxs=self.ll_idxs,ul_idxs=self.ul_idxs)
-		self.eup = _trim_arr(self.mol.catalog.eup,self.ll,self.ul,ll_idxs=self.ll_idxs,ul_idxs=self.ul_idxs)
+				self.ul = [self.ul]
+		mask = _trim_arr(self.mol.catalog.frequency,self.ll,self.ul,return_mask=True)
+		self.spectrum.frequency = self.mol.catalog.frequency[mask]
+		self.spectrum.freq0 = np.copy(self.spectrum.frequency)
+		self.aij = self.mol.catalog.aij[mask]
+		self.gup = self.mol.catalog.gup[mask]
+		self.eup = self.mol.catalog.eup[mask]
 		return
 		
 	def _apply_voffset(self):
@@ -1195,15 +1204,20 @@ class Simulation(object):
 							)*1E26
 		return
 
-	def _calc_Tb(self,freq,tau,Tbg):
+	@staticmethod
+	@njit(fastmath=True)
+	def _calc_Tb(freq,tau,Tbg,Tex):
 		'''
 		Eq. A1 of Turner 1991.  Inline definition of J_T and J_Tbg have a typo - the extra
 		'-1' at the end should be an exponential.  These should be in Planck.
+  
+		Edit by Kelvin: this is now turned into a static method that requires Tex as
+		an argument. This is so that the function can be njit'd.
 		'''
 		
 		J_T = ((h*freq*10**6/k)*
 			  (np.exp(((h*freq*10**6)/
-			  (k*self.source.Tex))) -1)**-1
+			  (k*Tex))) -1)**-1
 			  )
 		J_Tbg = ((h*freq*10**6/k)*
 			  (np.exp(((h*freq*10**6)/
@@ -1233,8 +1247,13 @@ class Simulation(object):
 					ll_trim.append(ll)
 					ul_trim.append(ul)
 			ll_trim = np.array(ll_trim)
-			ul_trim = np.array(ul_trim)		
-			freq_arr = np.concatenate([np.arange(ll,ul,self.res) for ll,ul in zip(ll_trim,ul_trim)])
+			ul_trim = np.array(ul_trim)
+			# perform the line profile calculation on the same grid as
+			# the observational data
+			if self.use_obs:
+				freq_arr = self.observation.spectrum.frequency
+			else:
+				freq_arr = np.concatenate([np.arange(ll,ul,self.res) for ll,ul in zip(ll_trim,ul_trim)])
 			tau_arr = np.zeros_like(freq_arr)
 			l_idxs = [find_nearest(freq_arr,x) for x in lls_raw]
 			u_idxs = [find_nearest(freq_arr,x) for x in uls_raw]		
@@ -1243,11 +1262,33 @@ class Simulation(object):
 			self.spectrum.tau_profile = tau_arr
 			self.spectrum.freq_profile = freq_arr
 			self.spectrum.Tbg_profile = self.source.continuum.Tbg(freq_arr)
-			self.spectrum.int_profile = self._calc_Tb(freq_arr,tau_arr,self.spectrum.Tbg_profile)
+			self.spectrum.int_profile = self._calc_Tb(freq_arr,tau_arr,self.spectrum.Tbg_profile,self.source.Tex)
 			return
 			
 	def get_beam(self,freq):
 		return 	206265 * 1.22 * ((freq*u.MHz).to(u.m, equivalencies=u.spectral()).value) / self.observation.observatory.dish		
+
+	def _set_units(self):
+	
+		'''
+		Define the output units.  Natively calculated in K, can convert to mK or Jy/beam.
+		'''
+		
+		if self.units == 'K':
+			return
+		
+		if self.units == 'mK':
+			self.spectrum.int_profile *= 1000
+			return
+			
+		if self.units in ['Jy/beam', 'Jy']:
+			omega = self.observation.observatory.synth_beam[0]*self.observation.observatory.synth_beam[1] #conversion below has volume element built in
+			mask = np.where(self.spectrum.int_profile != 0)[0]
+			self.spectrum.int_profile[mask] = (3.92E-8 * (self.spectrum.freq_profile[mask]*1E-3)**3 *omega/ (np.exp(0.048*self.spectrum.freq_profile[mask]*1E-3/self.spectrum.int_profile[mask]) - 1))
+			return
+			
+	
+		return
 				
 	def update(self):
 		self._set_arrays()
@@ -1258,4 +1299,183 @@ class Simulation(object):
 		self.spectrum.Tb = self._calc_Tb(self.spectrum.frequency,self.spectrum.tau,self.spectrum.Tbg)
 		self._make_lines()
 		self._beam_correct()
+		self._set_units()
+		return											
+																
+class Trace(object):
+	def __init__(self,
+					name = None,
+					data = None,
+					x = None,
+					y = None,
+					color = None,
+					drawstyle = 'steps',
+					linewidth = 1.,
+					order = 1.,
+					alpha = 1.,
+					visible = True,
+					):
+		
+		self.name = name
+		self.data = data
+		self.x = x
+		self.y = y
+		self.color = color
+		self.drawstyle = drawstyle
+		self.linewidth = linewidth
+		self.order = order
+		self.alpha = alpha
+		self.visible = visible
+		
+		self.set_defaults()
+		
+		return	
+		
+	def set_defaults(self):
+		if self.name is None:
+			self.name = str(datetime.utcnow().timestamp())
+		if self.data is not None:
+			if isinstance(self.data,Observation):
+				self.x = self.data.spectrum.frequency
+				self.y = self.data.spectrum.Tb
+			if isinstance(self.data,Simulation):
+				self.x = self.data.spectrum.freq_profile
+				self.y = self.data.spectrum.int_profile
+			if isinstance(self.data,Spectrum):
+				self.x = self.data.freq_profile
+				self.y = self.data.int_profile
+		if self.color is None:
+			if self.data is not None:
+				if isinstance(self.data,Observation):
+					self.color = 'black' #default to black for observations
+				else:
+					self.color = 'red' #default to red for anything else
+		if self.visible is False:
+			self.alpha = 0.0
+		return			
+
+class Iplot(object):
+
+	def __init__(self,
+				 plot_name = 'Interactive Plot',
+				 figsize = (9,6),
+				 fontsize = 16,
+				 xlabel = 'Frequency (MHz)',
+				 ylabel = 'Intensity (Probably K)',
+				 nxticks = None,
+				 nyticks = None,
+				 xlimits = None,
+				 ylimits = None,
+				 save_plot = False,
+				 file_out = None,
+				 file_format = 'pdf',
+				 file_dpi = 300,
+				 transparent = True,
+				 traces = []
+				):
+		
+		self.plot_name = plot_name
+		self.figsize = figsize
+		self.fontsize = fontsize
+		self.xlabel = xlabel
+		self.ylabel = ylabel
+		self.nxticks = nxticks
+		self.nyticks = nyticks
+		self.xlimits = xlimits
+		self.ylimits = ylimits
+		self.save_plot = save_plot
+		self.file_out = file_out
+		self.file_format = file_format
+		self.file_dpi = file_dpi
+		self.transparent = transparent
+		self.traces = traces
+		self.traces_dict = {}
+		self.line_dict = {}
+		self.fig = None
+		
+		self.set_file_out()
+		self.set_data()
+		self.make_plot()
+	
 		return
+
+	def set_file_out(self):
+		if self.save_plot is True and self.file_out is None:
+			self.file_out = 'plot.' + self.file_format
+			
+	def set_data(self):
+		for x in self.traces:
+			self.traces_dict[x.name] = x
+						
+	def make_plot(self):
+		#plot shell making
+		plt.ion()
+		plt.close(self.plot_name)
+		fig = plt.figure(num=self.plot_name,figsize=self.figsize)
+		fontparams = {'size':self.fontsize, 'family':'sans-serif','sans-serif':['Helvetica']}	
+		plt.rc('font',**fontparams)
+		plt.rc('mathtext', fontset='stixsans')
+		matplotlib.rcParams['pdf.fonttype'] = 42	
+		ax = fig.add_subplot(111)
+
+		#axis labels
+		plt.xlabel(self.xlabel)
+		plt.ylabel(self.ylabel)
+	
+		#fix ticks
+		ax.tick_params(axis='x', which='both', direction='in')
+		ax.tick_params(axis='y', which='both', direction='in')
+		ax.yaxis.set_ticks_position('both')
+		ax.xaxis.set_ticks_position('both') 
+	
+		if self.nxticks is not None:
+			ax.xaxis.set_major_locator(plt.MaxNLocator(self.nxticks))
+		if self.nyticks is not None:
+			ax.yaxis.set_major_locator(plt.MaxNLocator(self.nyticks))
+		
+		#xlimits
+		ax.get_xaxis().get_major_formatter().set_scientific(False) #Don't let the x-axis go into scientific notation
+		ax.get_xaxis().get_major_formatter().set_useOffset(False)	
+		if self.xlimits is not None:
+			ax.set_xlim(self.xlimits)
+	
+		#ylimits	
+		if self.ylimits is not None:
+			ax.set_ylim(self.ylimits)	   
+		for x in self.traces_dict:
+			y = self.traces_dict[x]
+			self.line_dict[y.name], = plt.plot(y.x,
+												y.y,
+												color=y.color,
+												drawstyle=y.drawstyle,
+												linewidth=y.linewidth,
+												alpha=y.alpha,
+												zorder=y.order,)
+		fig.canvas.draw()
+		self.fig = fig												
+			
+	def update(self,traces=None):	
+		if traces is not None:
+			if isinstance(traces,list) is False:
+				traces = [traces]
+			for x in traces:
+				self.traces_dict[x.name] = x			
+		for x in self.traces_dict:
+			y = self.traces_dict[x]
+			if y.name in self.line_dict.keys():
+				self.line_dict[y.name].set_data(y.x,y.y)
+				self.line_dict[y.name].set_color(y.color) 
+				self.line_dict[y.name].set_alpha(y.alpha)
+				self.line_dict[y.name].set_linewidth(y.linewidth)
+				self.line_dict[y.name].set_drawstyle(y.drawstyle)
+				self.line_dict[y.name].set_zorder(y.order)
+			else:
+				self.line_dict[y.name], = plt.plot(y.x,
+													y.y,
+													color=y.color,
+													drawstyle=y.drawstyle,
+													linewidth=y.linewidth,
+													alpha=y.alpha,
+													zorder=y.order,)			
+		self.fig.canvas.draw()					
+		
