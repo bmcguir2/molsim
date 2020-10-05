@@ -1,7 +1,17 @@
 import numpy as np
 from numba import njit
+import math
 from molsim.constants import ccm, cm, ckm, h, k, kcm 
+from molsim.stats import get_rms
+from molsim.utils import _trim_arr, find_nearest, _make_gauss, _apply_vlsr, _apply_beam
+from molsim.file_io import _read_txt, _read_xy
 from scipy.interpolate import interp1d
+from astropy import units
+from astropy.coordinates import SkyCoord, EarthLocation
+import astropy.units as u
+import matplotlib.pyplot as plt
+import matplotlib
+from datetime import datetime
 
 class Workspace(object):
 
@@ -67,6 +77,7 @@ class Catalog(object):
 					qn6up = None, #upper state quantum number 6
 					qn7up = None, #upper state quantum number 7
 					qn8up = None, #upper state quantum number 8
+					qnup_str = None, #upper state quantum number string
 					qn1low = None, #lower state principle quantum number 1
 					qn2low = None, #lower state quantum number 2
 					qn3low = None, #lower state quantum number 3
@@ -74,7 +85,9 @@ class Catalog(object):
 					qn5low = None, #lower state quantum number 5
 					qn6low = None, #lower state quantum number 6
 					qn7low = None, #lower state quantum number 7
-					qn8low = None, #lower state quantum number 8		
+					qn8low = None, #lower state quantum number 8	
+					qnlow_str = None, #lower state quantum number string
+					qnstr_fmt = None, #commands for formatting this molecule's qns
 					version = None, #version of this catalog in the database			
 					source = None, #where the catalog came from
 					last_update = None,	#when it was last updated
@@ -111,6 +124,7 @@ class Catalog(object):
 		self.qn6up = qn6up
 		self.qn7up = qn7up
 		self.qn8up = qn8up
+		self.qnup_str = qnup_str
 		self.qn1low = qn1low
 		self.qn2low = qn2low
 		self.qn3low = qn3low
@@ -118,7 +132,9 @@ class Catalog(object):
 		self.qn5low = qn5low
 		self.qn6low = qn6low
 		self.qn7low = qn7low
-		self.qn8low = qn8low		
+		self.qn8low = qn8low	
+		self.qnlow_str = qnlow_str	
+		self.qnstr_fmt = qnstr_fmt
 		self.version = version
 		self.source = source
 		self.last_update = last_update
@@ -128,7 +144,6 @@ class Catalog(object):
 		self.refs = refs
 		
 		self._unpack_catdict()
-		#self._set_nones()
 	
 		return
 		
@@ -191,6 +206,8 @@ class Catalog(object):
 				self.qn7up = self.catdict['qn7up']
 			if all(['qn8up' in self.catdict, self.qn8up is None]):
 				self.qn8up = self.catdict['qn8up']
+			if all(['qnup_str' in self.catdict, self.qnup_str is None]):
+				self.qnup_str = self.catdict['qnup_str']			
 			if all(['qn1low' in self.catdict, self.qn1low is None]):
 				self.qn1low = self.catdict['qn1low']
 			if all(['qn2low' in self.catdict, self.qn2low is None]):
@@ -207,6 +224,10 @@ class Catalog(object):
 				self.qn7low = self.catdict['qn7low']
 			if all(['qn8low' in self.catdict, self.qn8low is None]):
 				self.qn8low = self.catdict['qn8low']
+			if all(['qnlow_str' in self.catdict, self.qnlow_str is None]):
+				self.qnlow_str = self.catdict['qnlow_str']				
+			if all(['qnstr_fmt' in self.catdict, self.qnstr_fmt is None]):
+				self.qnstr_fmt = self.catdict['qnstr_fmt']				
 			if all(['version' in self.catdict, self.version is None]):
 				self.version = self.catdict['version']
 			if all(['source' in self.catdict, self.source is None]):
@@ -233,13 +254,62 @@ class Catalog(object):
 
 		return	
 		
-	def _set_nones(self):
-		qnlist = [self.qn1low,self.qn2low,self.qn3low,self.qn4low,self.qn5low,self.qn6low,
-					self.qn7low,self.qn8low,self.qn1up,self.qn2up,self.qn3up,self.qn4up,
-					self.qn5up,self.qn6up,self.qn7up,self.qn8up]
-		for x in qnlist:
-			if x is None:
-				x = np.full(len(self.frequency),None)
+	def export_cat(self,fileout,catformat='molsim'):
+		'''
+		Exports a catalog to an output file.  If catformat is set to 'molsim' it outputs a
+		file that will read into molsim much faster in the future.  If it is set to 
+		'spcat' it will output in spcat format.
+		'''
+		
+		if catformat == 'molsim':
+			np.savez_compressed(fileout,
+								catdict = self.catdict,
+								catid = self.catid ,
+								molecule = self.molecule,
+								frequency = self.frequency,
+								freq_err = self.freq_err,
+								measured = self.measured,
+								logint = self.logint,
+								sijmu = self.sijmu,
+								sij = self.sij,
+								aij = self.aij,
+								man_int = self.man_int,
+								types = self.types,
+								dof = self.dof,
+								elow = self.elow,
+								eup = self.eup,
+								glow = self.glow,
+								gup = self.gup,
+								tag = self.tag,
+								qnformat = self.qnformat,
+								qn1up = self.qn1up,
+								qn2up = self.qn2up,
+								qn3up = self.qn3up,
+								qn4up = self.qn4up,
+								qn5up = self.qn5up,
+								qn6up = self.qn6up,
+								qn7up = self.qn7up,
+								qn8up = self.qn8up,
+								qnup_str = self.qnup_str,
+								qn1low = self.qn1low,
+								qn2low = self.qn2low,
+								qn3low = self.qn3low,
+								qn4low = self.qn4low,
+								qn5low = self.qn5low,
+								qn6low = self.qn6low,
+								qn7low = self.qn7low,
+								qn8low = self.qn8low	,
+								qnlow_str = self.qnlow_str,
+								qnstr_fmt = self.qnstr_fmt,
+								version = self.version,
+								source = self.source,
+								last_update = self.last_update,
+								contributor_name = self.contributor_name,
+								contributor_email = self.contributor_email,
+								notes = self.notes,
+								refs = self.refs
+							)
+		
 		return	
 	
 class Level(object):
@@ -320,6 +390,7 @@ class Transition(object):
 					qn6up = None, #upper state quantum number 6
 					qn7up = None, #upper state quantum number 7
 					qn8up = None, #upper state quantum number 8
+					qnup_str = None, #string of upper states smashed together
 					qn1low = None, #lower state principle quantum number 1
 					qn2low = None, #lower state quantum number 2
 					qn3low = None, #lower state quantum number 3
@@ -327,25 +398,20 @@ class Transition(object):
 					qn5low = None, #lower state quantum number 5
 					qn6low = None, #lower state quantum number 6
 					qn7low = None, #lower state quantum number 7
-					qn8low = None, #lower state quantum number 8	
+					qn8low = None, #lower state quantum number 8
+					qnlow_str = None, #string of lower states mashed together
+					qnstr_formatted = None, #formatted quantum number string	
 					nqns = None, #number of quantum numbers
 					id = None, #unique ID for this transition
-					qnstr_low = None, #lower quantum number string
-					qnstr_low_tex = None, #lower quantum number string with LaTeX code
-					qnstr_up = None, #upper quantum number string
-					qnstr_up_tex = None, #upper quantum number string with LaTeX code
-					qnstr = None, #complete quantum number string
-					qnstr_tex = None, #complete quantum number string with LaTeX code
 					sijmu = None, #sijmu2 [debye^2]
 					sij = None, #sij [unitless]
 					aij = None, #aij [s^-1]
 					logint = None, #logarithmic intensity [log10(nm^2 MHz)]
-					man_int = None, #manually entered intensity, not used in calcs.
 					type = None, #transition type
-					elow_id = None, #ID of the lower energy level for this transition
-					eup_id = None, #ID of the upper energy level for this transition
-					molid = None, #ID of the molecule this transition belongs to
-					mol = None, #the actual associated molecule class
+					upper_level = None, #Level object of upper level
+					lower_level = None, #Level object of lower level
+					mol = None, #the molecule object
+					catalog = None, #the catalog object
 				):
 				
 		self.frequency = frequency
@@ -363,6 +429,7 @@ class Transition(object):
 		self.qn6up = qn6up
 		self.qn7up = qn7up
 		self.qn8up = qn8up
+		self.qnup_str = qnup_str
 		self.qn1low = qn1low
 		self.qn2low = qn2low
 		self.qn3low = qn3low
@@ -371,24 +438,19 @@ class Transition(object):
 		self.qn6low = qn6low
 		self.qn7low = qn7low
 		self.qn8low = qn8low
+		self.qnlow_str = qnlow_str
+		self.qnstr_formatted = qnstr_formatted
 		self.nqns = nqns
 		self.id = id
-		self.qnstr_low = qnstr_low
-		self.qnstr_low_tex = qnstr_low_tex
-		self.qnstr_up = qnstr_up
-		self.qnstr_up_tex = qnstr_up_tex
-		self.qnstr = qnstr
-		self.qnstr_tex = qnstr_tex
 		self.sijmu = sijmu
 		self.sij = sij
 		self.aij = aij
 		self.logint = logint
-		self.man_int = man_int
 		self.type = type
-		self.elow_id = elow_id
-		self.eup_id = eup_id
-		self.molid = molid
+		self.upper_level = upper_level
+		self.lower_level = lower_level
 		self.mol = mol		
+		self.catalog = catalog
 		
 		return		
 		
@@ -449,8 +511,7 @@ class Molecule(object):
 		
 	def q(self,T):
 		return self.qpart.q(T)
-				
-				
+		 							
 class PartitionFunction(object):		
 		
 	'''
@@ -573,6 +634,7 @@ class PartitionFunction(object):
 	
 	def __init__(
 					self,
+					qpart_file = None, #a file that holds this info externally
 					form = None, #the functional form of the partition function
 					params = None, #the parameters for that functional form
 					temps = None, #a temperature array if we're going to interpolate [K]
@@ -586,7 +648,8 @@ class PartitionFunction(object):
 					vib_is_K = False, #set to true if your vibstates are in Kelvin
 					notes = None, #a way to add notes
 				):
-				
+		
+		self.qpart_file = qpart_file		
 		self.form = form
 		self.params = params
 		self.temps = temps
@@ -600,10 +663,56 @@ class PartitionFunction(object):
 		self.notes = notes
 		self.flag = None
 
-		self._initialize_flag()
+		self._setup()
 		self._check_functional()
 		
 		return				
+		
+	def _setup(self):
+		if self.qpart_file is None:
+			self._initialize_flag()
+		else:
+			form_line = None
+			vibs_read = False
+			vibs_line = None
+			qpart_raw = _read_txt(self.qpart_file)
+			for i in range(len(qpart_raw)):
+				if '#' in qpart_raw[i]:
+					linesplit = qpart_raw[i].split(':')
+					if 'form' in linesplit[0]:
+						self.form = linesplit[1].strip()
+						if self.form in ['poly','polynomial','power','pow','rotcons']:
+							self.flag = 'functional'
+						else: 
+							self.flag = linesplit[1].strip()
+						form_line = i+1
+					if 'vibs' in linesplit[0]:
+						vibs_read = True
+						vibs_line = i+1
+			if self.form == 'interpolation':
+				t_arr = []
+				q_arr = []
+				for line in qpart_raw:
+					if '#' not in line:
+						t_arr.append(float(line.split()[0]))
+						q_arr.append(float(line.split()[1].strip()))
+				self.temps = np.array(t_arr)
+				self.vals = np.array(q_arr)
+			if self.form in ['pow','power']:
+				self.params = [float(qpart_raw[form_line].split(',')[0].strip()),float(qpart_raw[form_line].split(',')[1].strip()),float(qpart_raw[form_line].split(',')[2].strip())]
+			if self.form in ['poly', 'polynomial']:
+				self.params = []
+				for x in qpart_raw[form_line].split(','):
+					self.params.append(float(x.strip()))
+			if vibs_read is True:
+				vibs = []
+				for x in qpart_raw[vibs_line].split(','):
+					vibs.append(float(x.strip()))
+				self.vib_states = np.asarray(vibs)
+				
+		return
+					
+			
 		
 	def _initialize_flag(self):
 	
@@ -691,7 +800,7 @@ class PartitionFunction(object):
 					
 			#if it's a power law...
 			if self.form in ['pow','power']:
-				return self.params[0]*T**self.params[1] + self.params[2]
+				return self.params[0]*T**self.params[2] + self.params[1]
 				
 			#if it's rotational constants
 			if self.form == 'rotcons':
@@ -724,7 +833,7 @@ class PartitionFunction(object):
 				energies = np.array([level.energy for level in self.mol.levels])
 			else:
 				gs = self.gs
-				energies = self.energies	
+				energies = self.energies
 			return (1/self.sigma)*np.sum(gs*np.exp(-energies/T))
 	
 	def qvib(self,T):
@@ -748,3 +857,612 @@ class PartitionFunction(object):
 		'''	
 		
 		return self.qrot(T)*self.qvib(T)
+		
+class Spectrum(object):
+
+	'''
+	This class stores the information for a single spectrum.
+	'''		
+	
+	def __init__(
+					self,
+					freq0 = None, #unshifted frequency data
+					frequency = None, #frequency data
+					Tb = None, #intensity in units of [K]
+					Iv = None, #intensity in units of [Jy/beam] or [Jy/sr]
+					Tbg = None, #intensity of background in [K]
+					Ibg = None, #intensity of background in [Jy/beam] or [Jy/sr]
+					tau = None, #optical depths
+					tau_profile = None, #tau with line profile applied
+					freq_profile = None, #frequency of line profile data
+					int_profile = None, #intensity of line profile data
+					Tbg_profile = None, #background with line profile
+					velocity = None, #velocity space Data
+					int_sim = None, #intensity of a simulation
+					freq_sim = None, #frequency of a simulation
+					snr = None, #data in snr space
+					id = None, #a unique ID for this spectrum
+					notes = None, #notes
+					name = None, #name
+				):
+		
+		self.freq0 = freq0
+		self.frequency = frequency
+		self.Tb = Tb
+		self.Iv = Iv
+		self.Tbg = Tbg
+		self.Ibg = Ibg
+		self.tau = tau
+		self.tau_profile = tau_profile
+		self.freq_profile = freq_profile
+		self.int_profile = int_profile
+		self.Tbg_profile = Tbg_profile
+		self.id = id
+		self.notes = notes
+		self.ll = np.amin(frequency) if frequency is not None else None
+		self.ul = np.amax(frequency) if frequency is not None else None
+		self.name = name
+		self.velocity = velocity
+		self.int_sim = int_sim
+		self.freq_sim = freq_sim
+		self.snr = snr
+
+		return	
+		
+
+	def export_spectrum(self,fileout,format='molsim'):
+		'''
+		Export a spectrum and all meta data out to a file.  If format='molsim', it will be
+		an npz file that is much faster for restoring later.
+		'''
+		
+		if format == 'molsim':
+			np.savez_compressed(fileout,
+								freq0 = self.freq0,
+								frequency = self.frequency,
+								Tb = self.Tb,
+								Iv = self.Iv,
+								Tbg = self.Tbg,
+								Ibg = self.Ibg,
+								tau = self.tau,
+								tau_profile = self.tau_profile,
+								freq_profile = self.freq_profile,
+								int_profile = self.int_profile,
+								Tbg_profile = self.Tbg_profile,
+								id = self.id,
+								notes = self.notes,
+								name = self.name,
+								velocity = self.velocity,
+								int_sim = self.int_sim,
+								freq_sim = self.freq_sim,
+								snr = self.snr,
+							)
+		
+		return				
+		
+class Continuum(object):
+
+	'''
+	This class stores the information needed to provide a continuum value at any point
+	'''		
+	
+	def __init__(
+					self,
+					cont_file = None, #a cont file to read parameters from
+					type = 'thermal', #type of continuum to calculate
+					params = [2.7], #necessary parameters
+					freqs = None, #frequencies [MHz] if interpolating between points
+					temps = None, #values [K] if interpolating T between points
+					fluxes = None, #fluxes [Jy/beam] if interpolating Jy between points
+					notes = None, #notes 
+				):
+				
+		self.cont_file = cont_file		
+		self.type = type
+		self.params = params
+		self.freqs = freqs
+		self.temps = temps
+		self.fluxes = fluxes
+		self.notes = notes
+		
+		self._check_type()
+		self._fix_params()
+		
+		return
+		
+	def _check_type(self):
+		types = ['thermal','polynomial','poly','interpolation']
+		if self.type not in types:
+			print('WARNING: Unrecognized type ("{}") specified for continuum generation.' \
+			' Will use 2.7 K CMB instead.' .format(self.type))
+			self.params = [2.7]
+		return
+		
+	def _fix_params(self):
+		if isinstance(self.params,int) or isinstance(self.params,float):
+			self.params = [self.params]	
+		
+	def Tbg(self,freq):
+		'''
+		Takes an input frequency numpy array [MHz] and returns a numpy array of brightness
+		temperatures at those frequencies.
+		'''
+		
+		if self.type == 'thermal':
+			return np.full_like(freq,self.params[0])
+				
+	def Ibg(self,freq):			
+		'''
+		Takes an input frequency numpy array [MHz] and returns a numpy array of flux
+		densities [Jy/sr] at those frequencies.
+		'''
+		
+		if self.type == 'thermal':
+			return 2*h*(freq*1E6)**3 / (cm**2 * np.exp(h*freq*1E6/(k*self.params[0])))*1E26		
+
+class Source(object):
+
+	'''
+	This class stores the information for a single source of molecules
+	'''		
+	
+	def __init__(
+					self,
+					name = None, # name
+					velocity = 0., #lsr velocity [km/s]
+					size = 1E20, #diameter [arcsec]
+					solid_angle = None, #solid angle on the sky; pi*(size/2)^2 [arcsec^2]
+					continuum = None, #a continuum object
+					column = 1.E13, #column density [cm-2]
+					Tex = 300., #float or numpy array of excitation temperatures [K]
+					Tkin = None, #kinetic temperature of source [K]
+					dV = 3., #fwhm [km/s]
+					id = None, #unique id
+					notes = None, #notes
+				):
+				
+		self.name = name
+		self.velocity = velocity
+		self.size = size
+		self.solid_angle = solid_angle
+		self.continuum = continuum if continuum is not None else Continuum()
+		self.column = column
+		self.Tex = Tex
+		self.Tkin = Tkin
+		self.dV = dV
+		self.id = id
+		self.notes = notes
+		
+		return			
+
+class Observatory(object):
+
+	'''
+	This class stores the information for a single Observatory
+	'''		
+	
+	def __init__(
+					self,
+					name = None, #telescope name, str
+					id = None, #unique ID
+					sd = True, #is it a single dish?
+					array = False, #is it an array?
+					dish = 100., #dish size in meters if single dish
+					synth_beam = [1.,1.], #synthesized beam bmaj,bmin in arcseconds
+					loc = None, #astropy EarthLocation object 
+					eta = None, #numpy array of aperture efficiency
+					eta_type = 'constant', #how to calculate eta
+					eta_params = [1.], #parameters for calculating eta
+					atmo = None, #numpy array of atmospheric transmission in percent
+				):
+				
+		self.name = name
+		self.id = id
+		self.sd = sd
+		self.array = array
+		self.dish = dish
+		self.synth_beam = synth_beam
+		self.loc = loc
+		self.eta = eta
+		self.eta_type = eta_type
+		self.eta_params = eta_params
+		self.atmo = atmo
+		
+		return
+		
+	def get_beam(self,freq):
+		return 	206265 * 1.22 * ((freq*u.MHz).to(u.m, equivalencies=u.spectral()).value) / self.dish		
+
+class Observation(object):
+
+	'''
+	This class stores the information for a observation
+	'''		
+	
+	def __init__(
+					self,
+					name = None, #a name
+					coords = None, #an astropy SkyCoord object		
+					vlsr = None, #a nominal vlsr for the observed objection [km/s]			
+					spectrum = None, #a spectrum object for this observation
+					observatory = None, #an observatory object for this observation
+					id = None, #a unique ID for this observation
+					notes = None, #notes
+				):
+				
+		self.name = name
+		self.coords = coords		
+		self.vlsr = vlsr
+		self.spectrum = spectrum if spectrum is not None else Spectrum()
+		self.observatory = observatory if observatory is not None else Observatory()
+		self.id = id
+		self.notes = notes
+		
+		return				
+
+class Simulation(object):
+	'''
+	This class stores the information for a single simulation
+	'''		
+	
+	def __init__(
+					self,
+					spectrum = None, #Spectrum object associated with this simulation
+					observation = None, #Observation object associated with this simulation
+					source = None, #Source object associated with this simulation
+					ll = [np.float('-inf')], #lower limits
+					ul = [np.float('-inf')], #lower limits
+					line_profile = None, #simulate a line profile or not
+					sim_width = 10, #fwhms to simulate +/- line center
+					res = 10., #resolution if simulating line profiles [kHz]
+					mol = None, #Molecule object associated with this simulation
+					units = 'K', #units for the simulation; accepts 'K', 'mK', 'Jy/beam'
+					notes = None, #notes
+				):
+				
+		self.spectrum = spectrum
+		self.observation = observation
+		self.source = source
+		self.ll = ll
+		self.ul = ul
+		self.line_profile = line_profile
+		self.sim_width = sim_width
+		self.res = res
+		self.mol = mol
+		self.units = units
+		self.notes = notes
+		self.beam_size = None
+		self.beam_dilution = None
+		self.ll_idxs = None
+		self.ul_idxs = None
+		self.aij = None
+		self.gup = None
+		self.eup = None
+		
+		self._set_arrays()
+		self._apply_voffset()
+		self._calc_tau()
+		self._calc_bg()
+		self._calc_Iv()
+		self.spectrum.Tb = self._calc_Tb(self.spectrum.frequency,self.spectrum.tau,self.spectrum.Tbg)
+		self._make_lines()
+		self._beam_correct()
+		self._set_units()
+		
+		return	
+	
+	def _set_arrays(self):
+		if self.spectrum is None:
+			self.spectrum = Spectrum()
+		if self.source is None:
+			self.source = Source()
+		if isinstance(self.ll,list) is False:
+			if isinstance(self.ll,np.ndarray):
+				self.ll = self.ll.tolist()
+			else:
+				self.ll = [self.ll]
+		if isinstance(self.ul,list) is False:
+			if isinstance(self.ul,np.ndarray):
+				self.ul = self.ul.tolist()
+			else:
+				self.ul = [self.ul]		
+		self.spectrum.frequency,self.ll_idxs,self.ul_idxs = _trim_arr(self.mol.catalog.frequency,self.ll,self.ul,return_idxs=True)
+		self.spectrum.freq0 = _trim_arr(self.mol.catalog.frequency,self.ll,self.ul,ll_idxs=self.ll_idxs,ul_idxs=self.ul_idxs)
+		self.aij = _trim_arr(self.mol.catalog.aij,self.ll,self.ul,ll_idxs=self.ll_idxs,ul_idxs=self.ul_idxs)
+		self.gup = _trim_arr(self.mol.catalog.gup,self.ll,self.ul,ll_idxs=self.ll_idxs,ul_idxs=self.ul_idxs)
+		self.eup = _trim_arr(self.mol.catalog.eup,self.ll,self.ul,ll_idxs=self.ll_idxs,ul_idxs=self.ul_idxs)
+		return
+		
+	def _apply_voffset(self):
+		self.spectrum.frequency = _apply_vlsr(self.spectrum.freq0,self.source.velocity)
+		return	
+		
+	def _calc_tau(self):
+		self.spectrum.tau = ((self.aij * cm**3 * (self.source.column * 100**2) * 
+								self.gup * (np.exp(-self.eup/self.source.Tex)) *
+							 	(np.exp(h*self.spectrum.frequency*1E6/(k*self.source.Tex))-1)
+							 )
+							/
+							(8*np.pi*(self.spectrum.frequency*1E6)**3 *
+								self.source.dV*1000 * self.mol.q(self.source.Tex)
+							)
+					)
+		return
+		
+	def _calc_bg(self):
+		self.spectrum.Ibg = self.source.continuum.Ibg(self.spectrum.frequency)
+		self.spectrum.Tbg = self.source.continuum.Tbg(self.spectrum.frequency)
+		return
+		
+	def _calc_Iv(self):
+		self.spectrum.Iv = ((2*h*self.spectrum.tau*(self.spectrum.frequency*1E6)**3)/
+							cm**2 * (np.exp(h*self.spectrum.frequency*1E6 /
+											(k*self.source.Tex)) -1 )
+							)*1E26
+		return
+
+	def _calc_Tb(self,freq,tau,Tbg):
+		'''
+		Eq. A1 of Turner 1991.  Inline definition of J_T and J_Tbg have a typo - the extra
+		'-1' at the end should be an exponential.  These should be in Planck.
+		'''
+		
+		J_T = ((h*freq*10**6/k)*
+			  (np.exp(((h*freq*10**6)/
+			  (k*self.source.Tex))) -1)**-1
+			  )
+		J_Tbg = ((h*freq*10**6/k)*
+			  (np.exp(((h*freq*10**6)/
+			  (k*Tbg))) -1)**-1
+			  )			  
+		return (J_T - J_Tbg)*(1 - np.exp(-tau))
+		
+	def _beam_correct(self):
+		if self.observation is not None:
+			if self.observation.observatory.sd is True:
+				self.spectrum.Tb,self.beam_dilution = _apply_beam(self.spectrum.frequency,self.spectrum.Tb,self.source.size,self.observation.observatory.dish,return_beam=True)
+				self.spectrum.int_profile = _apply_beam(self.spectrum.freq_profile,self.spectrum.int_profile,self.source.size,self.observation.observatory.dish,return_beam=False)
+		return	
+		
+	def _make_lines(self):
+		if self.line_profile is None:
+			return
+		if self.line_profile.lower() in ['gaussian','gauss']:
+			lls_raw = self.spectrum.frequency - self.sim_width*self.source.dV*self.spectrum.frequency/ckm
+			uls_raw = self.spectrum.frequency + self.sim_width*self.source.dV*self.spectrum.frequency/ckm
+			ll_trim = [lls_raw[0]]
+			ul_trim = [uls_raw[0]]
+			for ll,ul in zip(lls_raw[1:],uls_raw[1:]):
+				if ll < ul_trim[-1]:
+					ul_trim[-1] = ul
+				else:
+					ll_trim.append(ll)
+					ul_trim.append(ul)
+			ll_trim = np.array(ll_trim)
+			ul_trim = np.array(ul_trim)		
+			freq_arr = np.concatenate([np.arange(ll,ul,self.res) for ll,ul in zip(ll_trim,ul_trim)])
+			tau_arr = np.zeros_like(freq_arr)
+			l_idxs = [find_nearest(freq_arr,x) for x in lls_raw]
+			u_idxs = [find_nearest(freq_arr,x) for x in uls_raw]		
+			for x,y,ll,ul in zip(self.spectrum.frequency,self.spectrum.tau,l_idxs,u_idxs):
+				tau_arr[ll:ul] += _make_gauss(x,y,freq_arr[ll:ul],self.source.dV,ckm)
+			self.spectrum.tau_profile = tau_arr
+			self.spectrum.freq_profile = freq_arr
+			self.spectrum.Tbg_profile = self.source.continuum.Tbg(freq_arr)
+			self.spectrum.int_profile = self._calc_Tb(freq_arr,tau_arr,self.spectrum.Tbg_profile)
+			return
+			
+	def get_beam(self,freq):
+		return 	206265 * 1.22 * ((freq*u.MHz).to(u.m, equivalencies=u.spectral()).value) / self.observation.observatory.dish		
+
+	def _set_units(self):
+	
+		'''
+		Define the output units.  Natively calculated in K, can convert to mK or Jy/beam.
+		'''
+		
+		if self.units == 'K':
+			return
+		
+		if self.units == 'mK':
+			self.spectrum.int_profile *= 1000
+			return
+			
+		if self.units in ['Jy/beam', 'Jy']:
+			omega = self.observation.observatory.synth_beam[0]*self.observation.observatory.synth_beam[1] #conversion below has volume element built in
+			mask = np.where(self.spectrum.int_profile != 0)[0]
+			self.spectrum.int_profile[mask] = (3.92E-8 * (self.spectrum.freq_profile[mask]*1E-3)**3 *omega/ (np.exp(0.048*self.spectrum.freq_profile[mask]*1E-3/self.spectrum.int_profile[mask]) - 1))
+			return
+			
+	
+		return
+				
+	def update(self):
+		self._set_arrays()
+		self._apply_voffset()
+		self._calc_tau()
+		self._calc_bg()
+		self._calc_Iv()
+		self.spectrum.Tb = self._calc_Tb(self.spectrum.frequency,self.spectrum.tau,self.spectrum.Tbg)
+		self._make_lines()
+		self._beam_correct()
+		self._set_units()
+		return											
+																
+class Trace(object):
+	def __init__(self,
+					name = None,
+					data = None,
+					x = None,
+					y = None,
+					color = None,
+					drawstyle = 'steps',
+					linewidth = 1.,
+					order = 1.,
+					alpha = 1.,
+					visible = True,
+					):
+		
+		self.name = name
+		self.data = data
+		self.x = x
+		self.y = y
+		self.color = color
+		self.drawstyle = drawstyle
+		self.linewidth = linewidth
+		self.order = order
+		self.alpha = alpha
+		self.visible = visible
+		
+		self.set_defaults()
+		
+		return	
+		
+	def set_defaults(self):
+		if self.name is None:
+			self.name = str(datetime.utcnow().timestamp())
+		if self.data is not None:
+			if isinstance(self.data,Observation):
+				self.x = self.data.spectrum.frequency
+				self.y = self.data.spectrum.Tb
+			if isinstance(self.data,Simulation):
+				self.x = self.data.spectrum.freq_profile
+				self.y = self.data.spectrum.int_profile
+			if isinstance(self.data,Spectrum):
+				self.x = self.data.freq_profile
+				self.y = self.data.int_profile
+		if self.color is None:
+			if self.data is not None:
+				if isinstance(self.data,Observation):
+					self.color = 'black' #default to black for observations
+				else:
+					self.color = 'red' #default to red for anything else
+		if self.visible is False:
+			self.alpha = 0.0
+		return			
+
+class Iplot(object):
+
+	def __init__(self,
+				 plot_name = 'Interactive Plot',
+				 figsize = (9,6),
+				 fontsize = 16,
+				 xlabel = 'Frequency (MHz)',
+				 ylabel = 'Intensity (Probably K)',
+				 nxticks = None,
+				 nyticks = None,
+				 xlimits = None,
+				 ylimits = None,
+				 save_plot = False,
+				 file_out = None,
+				 file_format = 'pdf',
+				 file_dpi = 300,
+				 transparent = True,
+				 traces = []
+				):
+		
+		self.plot_name = plot_name
+		self.figsize = figsize
+		self.fontsize = fontsize
+		self.xlabel = xlabel
+		self.ylabel = ylabel
+		self.nxticks = nxticks
+		self.nyticks = nyticks
+		self.xlimits = xlimits
+		self.ylimits = ylimits
+		self.save_plot = save_plot
+		self.file_out = file_out
+		self.file_format = file_format
+		self.file_dpi = file_dpi
+		self.transparent = transparent
+		self.traces = traces
+		self.traces_dict = {}
+		self.line_dict = {}
+		self.fig = None
+		
+		self.set_file_out()
+		self.set_data()
+		self.make_plot()
+	
+		return
+
+	def set_file_out(self):
+		if self.save_plot is True and self.file_out is None:
+			self.file_out = 'plot.' + self.file_format
+			
+	def set_data(self):
+		for x in self.traces:
+			self.traces_dict[x.name] = x
+						
+	def make_plot(self):
+		#plot shell making
+		plt.ion()
+		plt.close(self.plot_name)
+		fig = plt.figure(num=self.plot_name,figsize=self.figsize)
+		fontparams = {'size':self.fontsize, 'family':'sans-serif','sans-serif':['Helvetica']}	
+		plt.rc('font',**fontparams)
+		plt.rc('mathtext', fontset='stixsans')
+		matplotlib.rcParams['pdf.fonttype'] = 42	
+		ax = fig.add_subplot(111)
+
+		#axis labels
+		plt.xlabel(self.xlabel)
+		plt.ylabel(self.ylabel)
+	
+		#fix ticks
+		ax.tick_params(axis='x', which='both', direction='in')
+		ax.tick_params(axis='y', which='both', direction='in')
+		ax.yaxis.set_ticks_position('both')
+		ax.xaxis.set_ticks_position('both') 
+	
+		if self.nxticks is not None:
+			ax.xaxis.set_major_locator(plt.MaxNLocator(self.nxticks))
+		if self.nyticks is not None:
+			ax.yaxis.set_major_locator(plt.MaxNLocator(self.nyticks))
+		
+		#xlimits
+		ax.get_xaxis().get_major_formatter().set_scientific(False) #Don't let the x-axis go into scientific notation
+		ax.get_xaxis().get_major_formatter().set_useOffset(False)	
+		if self.xlimits is not None:
+			ax.set_xlim(self.xlimits)
+	
+		#ylimits	
+		if self.ylimits is not None:
+			ax.set_ylim(self.ylimits)	   
+		for x in self.traces_dict:
+			y = self.traces_dict[x]
+			self.line_dict[y.name], = plt.plot(y.x,
+												y.y,
+												color=y.color,
+												drawstyle=y.drawstyle,
+												linewidth=y.linewidth,
+												alpha=y.alpha,
+												zorder=y.order,)
+		fig.canvas.draw()
+		self.fig = fig												
+			
+	def update(self,traces=None):	
+		if traces is not None:
+			if isinstance(traces,list) is False:
+				traces = [traces]
+			for x in traces:
+				self.traces_dict[x.name] = x			
+		for x in self.traces_dict:
+			y = self.traces_dict[x]
+			if y.name in self.line_dict.keys():
+				self.line_dict[y.name].set_data(y.x,y.y)
+				self.line_dict[y.name].set_color(y.color) 
+				self.line_dict[y.name].set_alpha(y.alpha)
+				self.line_dict[y.name].set_linewidth(y.linewidth)
+				self.line_dict[y.name].set_drawstyle(y.drawstyle)
+				self.line_dict[y.name].set_zorder(y.order)
+			else:
+				self.line_dict[y.name], = plt.plot(y.x,
+													y.y,
+													color=y.color,
+													drawstyle=y.drawstyle,
+													linewidth=y.linewidth,
+													alpha=y.alpha,
+													zorder=y.order,)			
+		self.fig.canvas.draw()					
+		

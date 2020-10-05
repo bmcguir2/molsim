@@ -1,4 +1,6 @@
 molsim.pdf
+molsim.egg-info/
 molsim.drawio
 working/
 .DS_Store
+__pycache__
