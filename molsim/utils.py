@@ -1,10 +1,12 @@
 import numpy as np
 from numba import njit
 from molsim.constants import ccm, cm, ckm, h, k, kcm
+from molsim.stats import get_rms
 import math
 import warnings
 from scipy import stats, signal
 import sys, os
+import json
 from ruamel.yaml import YAML
 
 
@@ -14,7 +16,7 @@ def load_yaml(yml_path: str) -> dict:
         input_dict = yaml.load(read_file)
     return input_dict
 
-
+  
 def find_nearest(arr,val):
 	idx = np.searchsorted(arr, val, side="left")
 	if idx > 0 and (idx == len(arr) or math.fabs(val - arr[idx-1]) \
@@ -31,7 +33,6 @@ def _trim_arr(arr,lls,uls,key_arr=None,return_idxs=False,ll_idxs=None,ul_idxs=No
 	
 	if ll_idxs is not None:
 		return np.concatenate([arr[ll_idx:ul_idx] for ll_idx,ul_idx in zip(ll_idxs,ul_idxs)])
-	
 	# modified to set as False to begin with, and working with
 	# booleans instead of numbers
 	mask_arr = np.zeros_like(arr, dtype=bool)
@@ -41,7 +42,6 @@ def _trim_arr(arr,lls,uls,key_arr=None,return_idxs=False,ll_idxs=None,ul_idxs=No
 	else:
 		for x,y in zip(lls,uls):
 			mask_arr[(key_arr>x) & (key_arr<y)] = True
-
 	if return_mask:
 		return mask_arr
 	if return_idxs is False:
@@ -434,7 +434,76 @@ def generate_spcat_qrots(basename,fileout=None,add_temps=None,kmax=150):
 		for t,q in zip(temps_l,qvals_l):
 			output.write(f'{t} {q}\n')
 	
+def process_mcmc_json(json_file, molecule, observation, ll=0, ul=float('inf'), line_profile='Gaussian', res=0.0014, stack_params = None, stack_plot_params = None, make_plots=True, return_json = False):
+
+	from molsim.classes import Source, Simulation
+	from molsim.functions import sum_spectra, velocity_stack, matched_filter
+	from molsim.plotting import plot_stack, plot_mf
+	
+	with open(json_file) as input:
+		json_dict = json.load(input)
+		
+	n_sources = len(json_dict['SourceSize']['mean'])
+	
+	sources = []
+	
+	for size,vlsr,col,tex,dv in zip(
+		json_dict['SourceSize']['mean'],
+		json_dict['VLSR']['mean'],
+		json_dict['NCol']['mean'],
+		json_dict['Tex']['mean'],
+		json_dict['dV']['mean']):
+		sources.append(Source(size=size,velocity=vlsr,column=col,Tex=tex,dV=dv))
+		
+	sims = [Simulation(mol=molecule,ll=ll,ul=ul,observation=observation,source=x,line_profile=line_profile,res=res) for x in sources]	
+	sum1 = sum_spectra(sims)
+	
+	if make_plots is False:
+		if return_json is True:
+			return sources, sims, sum1, json_dict
+		else:
+			return sources, sims, sum1
 			
+	internal_stack_params = {'selection' : 'lines',
+					'freq_arr' : observation.spectrum.frequency,
+					'int_arr' : observation.spectrum.Tb,
+					'freq_sim' : sum1.freq_profile,
+					'int_sim' : sum1.int_profile,
+					'res_inp' : res,
+					'dV' : np.mean([x for x in json_dict['dV']['mean']]),
+					'dV_ext' : 40,
+					'vlsr' : np.mean([x for x in json_dict['VLSR']['mean']]),
+					'vel_width' : 40,
+					'v_res' : 0.02,
+					'blank_lines' : True,
+					'blank_keep_range' : [-5*np.mean([x for x in json_dict['dV']['mean']]),5*np.mean([x for x in json_dict['dV']['mean']])],
+					'flag_lines' : False,
+					'flag_sigma' : 5,
+					}	
+	
+	if stack_params is not None:
+		for x in stack_params:
+			internal_stack_params[x] = stack_params[x]
+		
+	stack = velocity_stack(internal_stack_params)
+	
+	internal_stack_plot_params = {'xlimits' : [-10,10]}
+	
+	if stack_plot_params is not None:
+		for	x in stack_plot_params:
+			internal_stack_plot_params[x] = stack_plot_params[x]
+		
+	plot_stack(stack,params=internal_stack_plot_params)	
+	
+	mf = matched_filter(stack.velocity,
+						stack.snr,
+						stack.int_sim[find_nearest(stack.velocity,-2):find_nearest(stack.velocity,2)])
+	plot_mf(mf)
+	
+	if return_json is True:
+		return sources, sims, sum1, json_dict
+	else:
+		return sources, sims, sum1	
 					
 				
 				
