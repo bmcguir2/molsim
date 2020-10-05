@@ -1,4 +1,4 @@
-from typing import Type, Dict, Union, Callable, List
+from typing import Type, Dict, Union, Callable, List, Tuple
 from pathlib import Path
 from dataclasses import dataclass
 
@@ -6,13 +6,14 @@ import numpy as np
 import numexpr as ne
 from loguru import logger
 from joblib import load
+from scipy.optimize import minimize
 
 from molsim.mcmc.base import (
     AbstractModel,
     AbstractDistribution,
     UniformLikelihood,
     GaussianLikelihood,
-    DeltaLikelihood
+    DeltaLikelihood,
 )
 from molsim.mcmc import compute
 from molsim.utils import load_yaml, find_limits
@@ -30,7 +31,7 @@ class SingleComponent(AbstractModel):
     dV: AbstractDistribution
     observation: Observation
     molecule: Molecule
-    nominal_vlsr: float = 0.
+    nominal_vlsr: float = 0.0
 
     def __post_init__(self):
         self._distributions = [
@@ -60,7 +61,9 @@ class SingleComponent(AbstractModel):
         initial = np.array([param.sample() for param in self._distributions])
         return initial
 
-    def simulate_spectrum(self, parameters: np.ndarray, scale: float = 3.) -> np.ndarray:
+    def simulate_spectrum(
+        self, parameters: np.ndarray, scale: float = 3.0
+    ) -> np.ndarray:
         """
         Wraps `molsim` functionality to simulate the spectrum, given a set
         of input parameters as a NumPy 1D array. On the first pass, this generates
@@ -95,8 +98,12 @@ class SingleComponent(AbstractModel):
             min_freq, max_freq = find_limits(self.observation.spectrum.frequency)
             # there's a buffer here just to make sure we don't go out of bounds
             # and suddenly stop simulating lines
-            min_offsets = compute.calculate_dopplerwidth_frequency(min_freq, vlsr * scale)
-            max_offsets = compute.calculate_dopplerwidth_frequency(max_freq, vlsr * scale)
+            min_offsets = compute.calculate_dopplerwidth_frequency(
+                min_freq, vlsr * scale
+            )
+            max_offsets = compute.calculate_dopplerwidth_frequency(
+                max_freq, vlsr * scale
+            )
             min_freq -= min_offsets
             max_freq += max_offsets
             self.simulation = Simulation(
@@ -156,15 +163,78 @@ class SingleComponent(AbstractModel):
         Returns
         -------
         float
-            [description]
+            Log likelihood of the model
         """
         obs = self.observation.spectrum
         simulation = self.simulate_spectrum(parameters)
         # match the simulation with the spectrum
         lnlike = np.sum(
-            np.log(1. / np.sqrt(obs.noise**2.)) * np.exp(-(obs.Tb - simulation)**2. / (2. * obs.noise**2.))
+            np.log(1.0 / np.sqrt(obs.noise ** 2.0))
+            * np.exp(-((obs.Tb - simulation) ** 2.0) / (2.0 * obs.noise ** 2.0))
         )
         return lnlike
+
+    def nll(self, parameters: np.ndarray) -> float:
+        """
+        Calculate the negative log likelihood. This is functionally exactly
+        the sample as `compute_log_likelihood`, except that the sign of the
+        likelihood is negative for use in maximum likelihood estimation.
+
+        Parameters
+        ----------
+        parameters : np.ndarray
+            [description]
+
+        Returns
+        -------
+        float
+            Negative log likelihood of the model
+        """
+        return -self.compute_log_likelihood(parameters)
+
+    def mle_optimization(
+        self,
+        initial: Union[None, np.ndarray] = None,
+        bounds: Union[None, List[Union[Tuple[float, float]]], None] = None,
+        **kwargs,
+    ):
+        """
+        Obtain a maximum likelihood estimate, given an initial starting point in
+        parameter space. Because of the often highly covariant nature of models,
+        
+        Additional kwargs are passed into `scipy.optimize.minimize`, and can be 
+        used to overwrite things like the optimization method.
+        
+        The `Result` object from `scipy.optimize` is returned, which holds the
+        MLE parameters as the attribute `x`, and the likelihood value as `fun`.
+
+        Parameters
+        ----------
+        initial : Union[None, np.ndarray], optional
+            Initial parameters for optimization, by default None, which
+            will take the mean of the prior.
+        bounds : Union[None, List[Union[Tuple[float, float]]], None], optional
+            Bounds for constrained optimization. By default None, which
+            imposes no constraints (highly not recommended!). See the
+            `scipy.optimize.minimize` page for how `bounds` is specified.
+
+        Returns
+        -------
+        `scipy.optimize.Result`
+            A fit `Result` object that contains the final state of the
+            minimization
+        """
+        if initial is None:
+            initial = np.array([self.sample_prior() for _ in range(3000)]).mean(axis=0)
+        opt_kwargs = {
+            "fun": self.nll,
+            "x0": initial,
+            "method": "Powell",
+            "bounds": bounds,
+        }
+        opt_kwargs.update(**kwargs)
+        result = minimize(**opt_kwargs)
+        return result
 
     @classmethod
     def from_yml(cls, yml_path: str):
@@ -180,10 +250,10 @@ class SingleComponent(AbstractModel):
                 cls_dict[key] = dist.from_values(**input_dict[key])
             else:
                 if key != "nominal_vlsr":
-                # load in the observed data
+                    # load in the observed data
                     cls_dict[key] = load(input_dict[key])
                 else:
-                    cls_dict[key] = input_dict.get(key, 0.)
+                    cls_dict[key] = input_dict.get(key, 0.0)
         return cls(**cls_dict)
 
 
@@ -207,7 +277,7 @@ class MultiComponent(SingleComponent):
         dV: AbstractDistribution,
         observation: Observation,
         molecule: Molecule,
-        nominal_vlsr: float = 0.
+        nominal_vlsr: float = 0.0,
     ):
         super().__init__(source_sizes, vlsrs, Ncols, Tex, dV, observation, molecule)
         assert len(source_sizes) == len(vlsrs) == len(Ncols)
@@ -216,16 +286,16 @@ class MultiComponent(SingleComponent):
         self.source_size = self.vlsr = self.Ncol = self._distributions = None
         for ss, vlsr, Ncol in zip(source_sizes, vlsrs, Ncols):
             self.components.append(
-                SingleComponent(ss, vlsr, Ncol, Tex, dV, observation, molecule, nominal_vlsr)
+                SingleComponent(
+                    ss, vlsr, Ncol, Tex, dV, observation, molecule, nominal_vlsr
+                )
             )
 
     def get_names(self):
         names = list()
         n_components = len(self.components)
         for parameter in ["SourceSize", "VLSR", "NCol"]:
-            names.extend(
-                [parameter + f"_{i}" for i in range(n_components)]
-            )
+            names.extend([parameter + f"_{i}" for i in range(n_components)])
         names.extend(["Tex", "dV"])
         return names
 
@@ -282,8 +352,8 @@ class MultiComponent(SingleComponent):
         # load in the observed data
         cls_dict["observation"] = load(input_dict["observation"])
         cls_dict["molecule"] = load(input_dict["molecule"])
-        cls_dict["nominal_vlsr"] = input_dict.get("nominal_vlsr", 0.)
-        if cls_dict["nominal_vlsr"] == 0.:
+        cls_dict["nominal_vlsr"] = input_dict.get("nominal_vlsr", 0.0)
+        if cls_dict["nominal_vlsr"] == 0.0:
             logger.warning("Nominal VLSR is set to zero; make sure this is correct!")
         return cls(**cls_dict)
 
@@ -352,9 +422,11 @@ class TMC1FourComponent(MultiComponent):
         dV: AbstractDistribution,
         observation: Observation,
         molecule: Molecule,
-        nominal_vlsr: float = 0.
+        nominal_vlsr: float = 0.0,
     ):
-        super().__init__(source_sizes, vlsrs, Ncols, Tex, dV, observation, molecule, nominal_vlsr)
+        super().__init__(
+            source_sizes, vlsrs, Ncols, Tex, dV, observation, molecule, nominal_vlsr
+        )
 
     def compute_prior_likelihood(self, parameters: np.ndarray) -> float:
         vlsr1, vlsr2, vlsr3, vlsr4 = parameters[[4, 5, 6, 7]]
