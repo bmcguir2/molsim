@@ -149,7 +149,7 @@ def velocity_stack(params):
 			#check if we have more nans than not, and if so, skip it
 			if np.count_nonzero(~np.isnan(self.int_obs)) < np.count_nonzero(np.isnan(self.int_obs)):
 				self.flag = True
-				return	
+				return
 			#check if peak_int is 0.0, in which case skip it
 			if self.peak_int == 0:
 				self.flag = True
