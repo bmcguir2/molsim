@@ -7,7 +7,16 @@ import warnings
 from scipy import stats, signal
 import sys, os
 import json
+from ruamel.yaml import YAML
 
+
+def load_yaml(yml_path: str) -> dict:
+    with open(yml_path, "r") as read_file:
+        yaml = YAML(typ="safe")
+        input_dict = yaml.load(read_file)
+    return input_dict
+
+  
 def find_nearest(arr,val):
 	idx = np.searchsorted(arr, val, side="left")
 	if idx > 0 and (idx == len(arr) or math.fabs(val - arr[idx-1]) \
@@ -16,7 +25,7 @@ def find_nearest(arr,val):
 	else:
 		return idx 
 
-def _trim_arr(arr,lls,uls,key_arr=None,return_idxs=False,ll_idxs=None,ul_idxs=None):
+def _trim_arr(arr,lls,uls,key_arr=None,return_idxs=False,ll_idxs=None,ul_idxs=None,return_mask=False):
 	'''
 	Trims the input array to the limits specified.  Optionally, will get indices from 
 	the key_arr for trimming instead.
@@ -24,21 +33,23 @@ def _trim_arr(arr,lls,uls,key_arr=None,return_idxs=False,ll_idxs=None,ul_idxs=No
 	
 	if ll_idxs is not None:
 		return np.concatenate([arr[ll_idx:ul_idx] for ll_idx,ul_idx in zip(ll_idxs,ul_idxs)])
-		
-	mask_arr = np.ones_like(arr,dtype=int)*False
+	# modified to set as False to begin with, and working with
+	# booleans instead of numbers
+	mask_arr = np.zeros_like(arr, dtype=bool)
 	if key_arr is None:	
 		for x,y in zip(lls,uls):
 			mask_arr[(arr>x) & (arr<y)] = True
 	else:
 		for x,y in zip(lls,uls):
 			mask_arr[(key_arr>x) & (key_arr<y)] = True
-			
+	if return_mask:
+		return mask_arr
 	if return_idxs is False:
-		return arr[mask_arr == 1]
+		return arr[mask_arr]
 	else:
 		ll_idxs_out = _find_ones(mask_arr)[0]
 		ul_idxs_out = _find_ones(mask_arr)[1]
-		return arr[mask_arr == 1],ll_idxs_out,ul_idxs_out
+		return arr[mask_arr],ll_idxs_out,ul_idxs_out
 		
 @njit
 def _make_gauss(freq0,int0,freq,dV,ckm):
@@ -112,12 +123,14 @@ def _make_qnstr(qn1,qn2,qn3,qn4,qn5,qn6,qn7,qn8):
 	tmp_list = [str(x).zfill(2) for x in qn_list if x != None]
 	return ''.join(tmp_list)	
 
-@njit
 def _apply_vlsr(frequency,vlsr):
 	'''
 	Applies a vlsr shift to a frequency array.  Frequency in [MHz], vlsr in [km/s]
 	'''
 	return frequency - vlsr*frequency/ckm
+
+# JIT'd version of the above function; PyMC3 no like Numba
+_njit_apply_vlsr = njit(_apply_vlsr)
 	
 def _apply_beam(freq_arr,int_arr,source_size,dish_size,return_beam=False):
 	beam_size = 206265 * 1.22 * (cm/(freq_arr * 1E6)) / dish_size #get beam size in arcsec
@@ -134,9 +147,9 @@ def find_limits(freq_arr,spacing_tolerance=100,padding=0):
 	the simulation within the right area.
 	'''
 	
-	if len(freq_arr) == 0:
-		print('The input array has no data.')
-		return
+	# if len(freq_arr) == 0:
+	# 	print('The input array has no data.')
+	# 	return
 
 	#first, calculate the most common data point spacing as the mode of the spacings
 	#this won't be perfect if the data aren't uniformly sampled
