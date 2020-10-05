@@ -1,22 +1,23 @@
+import os
 from typing import Type, Any, List, Tuple
 from dataclasses import dataclass
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED
 from itertools import repeat
 
 import numpy as np
 import h5py
+import numba
 from dask import array as da
 from loguru import logger
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process import kernels
 from sklearn.metrics import mean_squared_error
 from tqdm.auto import tqdm
+from joblib import dump
 
-from molsim.classes import Catalog
+from molsim.classes import Catalog, Spectrum, Observation
 from molsim.mcmc import compute
-
-from . import lineshapes
+from molsim.file_handling import _load_catalog
 
 
 @dataclass
@@ -27,26 +28,54 @@ class DataChunk:
     # technically we could instantiate with a NumPy array,
     # but None is probably faster
     noise: Any = None
-    
+    mask: Any = None
+
+    def __len__(self):
+        return self.frequency.size
+
+    def __repr__(self):
+        return f"DataChunk with {len(self)} elements. Noise: {self.noise is not None}, Mask: {self.mask is not None}"
+
     def to_hdf5(self, filename: str, **kwargs):
-        with h5py.File(filename, **kwargs) as h5_file:
+        with h5py.File(filename, mode="a", **kwargs) as h5_file:
             h5_file.create_dataset("frequency", data=self.frequency)
             h5_file.create_dataset("intensity", data=self.intensity)
             h5_file.create_dataset("catalog_index", data=self.catalog_index)
             if self.noise is not None:
                 h5_file.create_dataset("noise", data=self.noise)
+            if self.mask is not None:
+                h5_file.create_dataset("mask", data=self.mask)
+
+    def to_pickle(self, filename: str, **kwargs) -> None:
+        dump(self, filename + ".pkl", **kwargs)
 
     @classmethod
-    def from_hdf5(cls, filename: str, **kwargs):
+    def from_hdf5(cls, filename: str, dask=False, **kwargs):
         h5_file = h5py.File(filename, **kwargs)
-        frequency = da.from_array(h5_file["frequency"])
-        intensity = da.from_array(h5_file["intensity"])
-        catalog_index = da.from_array(h5_file["catalog_index"])
+        if dask:
+            load_func = da.from_array
+        else:
+            load_func = np.array
+        frequency = load_func(h5_file["frequency"])
+        intensity = load_func(h5_file["intensity"])
+        catalog_index = load_func(h5_file["catalog_index"])
         if "noise" in h5_file:
-            noise = da.from_array(h5_file["noise"])
+            noise = load_func(h5_file["noise"])
         else:
             noise = None
-        return cls(frequency, intensity, catalog_index, noise)
+        if "mask" in h5_file:
+            mask = load_func(h5_file["mask"])
+        return cls(frequency, intensity, catalog_index, noise, mask)
+
+    def to_spectrum(self) -> Spectrum:
+        spectrum = Spectrum(frequency=self.frequency, Tb=self.intensity,)
+        spectrum.noise = self.noise
+        return spectrum
+
+    def to_observation(self, observatory=None) -> Observation:
+        spectrum = self.to_spectrum()
+        observation = Observation(spectrum=spectrum, observatory=observatory)
+        return observation
 
 
 def extract_frequency_slice(
@@ -77,14 +106,33 @@ def extract_frequency_slice(
     return data[mask, :]
 
 
+@numba.njit(parallel=True)
+def filter_catalog(
+    spectrum_frequencies: np.ndarray, catalog_frequencies: np.ndarray, max_dist=1.0
+) -> np.ndarray:
+    mask = np.zeros_like(catalog_frequencies, dtype=np.uint8)
+    n_catalog = catalog_frequencies.size
+    # parallelize loop over the catalog frequencies
+    for index in numba.prange(n_catalog):
+        distance = np.sum(
+            np.abs(catalog_frequencies[index] - spectrum_frequencies) <= max_dist
+        )
+        # if we have overlap in the spectrum, take it out
+        if distance != 0:
+            mask[index] = 1
+    return mask
+
+
 def extract_chunks(
     data: np.ndarray,
     catalog: Type[Catalog],
     delta_v: float = 5.0,
+    vlsr: float = 5.8,
     rbf_params={},
     noise_params={},
-    n_workers=4,
-    verbose=False,
+    verbose: bool = False,
+    block_interlopers: bool = False,
+    interloper_threshold: float = 6.0,
 ):
     """
     Function to extract frequency chunks out of a large NumPy 2D array, where
@@ -102,27 +150,33 @@ def extract_chunks(
     # Extract only frequencies within band of the observations
     logger.info("Extracting inband chunks.")
     min_freq, max_freq = data[:, 0].min(), data[:, 0].max()
-    # vectorized finding overlap regions in the spectrum
-    mask = np.logical_and(min_freq <= catalog.frequency, catalog.frequency <= max_freq)
+    # njit'd function to find regions of significant overlap between the spectrum
+    # and the catalog entries
+    mask = filter_catalog(data[:, 0], catalog.frequency).astype(bool)
+    logger.info("Calculated mask.")
     # get indices to track which catalog entry is used
     indices = np.arange(catalog.frequency.size)[mask]
     # vectorized computation of the frequency offsets based on a doppler velocity
-    offsets = compute.calculate_dopplerwidth_frequency(catalog.frequency[mask], delta_v)
-    inband_freqs = np.vstack([indices, catalog.frequency[mask], offsets]).T
-    logger.info(f"Expecting {len(inband_freqs)} chunks.")
-    # parallelize the chunking and GP noise estimation; the latter does not have
-    # native parallelization support, so we do a subprocess manually here
-    # with ThreadPoolExecutor(n_workers) as executor:
-    #     chunks = list(tqdm(executor.map(_compute_chunks, inband_freqs, [data] * len(inband_freqs)), total=len(inband_freqs)))
+    offsets = compute.calculate_dopplerwidth_frequency(catalog.frequency[indices], vlsr)
+    # nominal vlsr frequencies
+    vlsr_catalog_frequencies = catalog.frequency[indices] + offsets
+    inband_freqs = np.vstack([indices, vlsr_catalog_frequencies, offsets]).T
+    logger.info(f"There are {mask.sum()} catalog hits.")
     chunks = list()
+    last_freq = 0.0
     for inband_data in tqdm(inband_freqs):
-        try:
-            chunks.append(
-                _compute_chunks(inband_data, data, rbf_params, noise_params, verbose)
+        # check to make sure the last frequency doesn't overlap
+        if abs(inband_data[1] - last_freq) > compute.calculate_dopplerwidth_frequency(
+            inband_data[1], delta_v
+        ):
+            chunk = _compute_chunks(
+                inband_data, data, rbf_params, noise_params, verbose
             )
-        except ValueError:
+            last_freq = inband_data[1]
+        else:
             pass
-    return chunks
+    logger.info(f"Created {len(chunks)} chunks.")
+    return chunks, indices
 
 
 def _compute_chunks(
@@ -254,15 +308,99 @@ def unroll_chunks(chunks: List[Type[DataChunk]]) -> Tuple[np.ndarray, List[int]]
     return frequency, intensity, noise, cat_indices
 
 
-def load_spectrum(
+def _legacy_filter_spectrum(
+    catalog: Catalog,
+    frequency: np.ndarray,
+    intensity: np.ndarray,
+    vlsr: float = 5.8,
+    delta_v: float = 0.3,
+    block_interlopers: bool = False,
+    interloper_threshold: float = 6.0,
+    sim_cutoff: float = 0.1,
+    line_wash_threshold: float = 3.5,
+):
+    restfreqs = catalog.frequency
+    int_sim = 10 ** catalog.logint
+    max_int_sim = int_sim.max()
+    logger.info("Thresholding catalog entries based on overlap and intensity.")
+    logger.info(f"Intensity cutoff: {sim_cutoff * max_int_sim}")
+    # get indices of catalogs that actually fall in the range of the data
+    cat_mask = np.where(
+        (restfreqs < frequency.max())
+        & (restfreqs > frequency.min())
+        & (int_sim > sim_cutoff * max_int_sim)
+    )[0]
+    restfreqs = restfreqs[cat_mask]
+    logger.info(f"Min/Max catalog frequencies: {restfreqs.min():.4f},{restfreqs.max():.4f}")
+    int_sim[cat_mask]
+    catalog_indices = list()
+    relevant_freqs = np.zeros_like(frequency)
+    relevant_intensity = np.zeros_like(intensity)
+    relevant_yerrs = np.zeros_like(intensity)
+    ignore_counter = 0
+    for catalog_index, restfreq in zip(cat_mask, restfreqs):
+        velocity = (restfreq - frequency) / restfreq * 300000
+        mask = np.where((velocity < (delta_v + vlsr)) & (velocity > (-delta_v + vlsr)))
+        if mask[0].size != 0:
+            noise_mean, noise_std = compute.calc_noise_std(
+                intensity[mask], line_wash_threshold
+            )
+            if np.isnan(noise_mean) or np.isnan(noise_std):
+                logger.info(f"NaNs found at {restfreq}")
+                continue
+            if (
+                block_interlopers
+                and intensity[mask].max() > interloper_threshold * noise_std
+            ):
+                logger.info(f"Found interloper at {restfreq}; ignoring.")
+                ignore_counter += 1
+                continue
+            else:
+                catalog_indices.append(catalog_index)
+                relevant_freqs[mask] = frequency[mask]
+                relevant_intensity[mask] = intensity[mask]
+                relevant_yerrs[mask] = np.sqrt(
+                    noise_std ** 2.0 + (intensity[mask] * 0.1) ** 2.0
+                )
+    logger.info(
+        f"Ignored a total of {ignore_counter} catalog entries due to interlopers."
+    )
+    mask = relevant_freqs > 0
+    relevant_freqs = relevant_freqs[mask]
+    relevant_intensity = relevant_intensity[mask]
+    relevant_yerrs = relevant_yerrs[mask]
+    mask = np.zeros_like(catalog.frequency)
+    mask[catalog_indices] = 1
+    chunk = DataChunk(
+        frequency=relevant_freqs,
+        intensity=relevant_intensity,
+        noise=relevant_yerrs,
+        catalog_index=catalog_indices,
+        mask=mask.astype(bool),
+    )
+    return chunk
+
+
+def preprocess_spectrum(
+    name: str,
     spectrum_path: str,
-    catalog: Type[Catalog],
+    catalog_path: str,
     delta_v: float,
+    vlsr: float,
     rbf_params={},
     noise_params={},
-    n_workers: int = 4,
     freq_range: Tuple[float, float] = (0.0, np.inf),
+    block_interlopers: bool = False,
+    interloper_threshold: float = 6.0,
+    observatory=None,
+    legacy: bool = False,
+    sim_cutoff: float = 0.1,
+    line_wash_threshold: float = 3.5,
 ) -> Type[DataChunk]:
+    logger.add(f"{name}_analysis.log", rotation="1 days", colorize=True)
+    output_path = Path(name)
+    if not output_path.exists():
+        output_path.mkdir()
     spectrum_path = Path(spectrum_path)
     if not spectrum_path.exists():
         raise FileNotFoundError("Spectrum file not found!")
@@ -277,11 +415,49 @@ def load_spectrum(
     assert data.shape[-1] == 2
     logger.info(f"Number of elements: {data.size}")
     logger.info(f"Min/max frequency: {data[:,0].min():.4f}/{data[:,0].max():.4f}")
-    chunks = extract_chunks(data, catalog, delta_v, rbf_params, noise_params, n_workers)
-    frequency, intensity, noise, cat_indices = unroll_chunks(chunks)
-    return DataChunk(
-        frequency=frequency,
-        intensity=intensity,
-        catalog_index=cat_indices,
-        noise=noise,
+    if ".npz" in catalog_path:
+        cat_type = "molsim"
+    else:
+        cat_type = "SPCAT"
+    catalog = _load_catalog(catalog_path, type=cat_type)
+    logger.info(f"There are {len(catalog.frequency)} catalog entries.")
+    if not legacy:
+        # process chunks of spectra, including GP noise estimation
+        chunks, catalog_mask = extract_chunks(
+            data, catalog, delta_v, vlsr, rbf_params, noise_params
+        )
+        # unroll the chunks, and reform them into a single DataChunk object
+        frequency, intensity, noise, cat_indices = unroll_chunks(chunks)
+        datachunk = DataChunk(
+            frequency=frequency,
+            intensity=intensity,
+            catalog_index=cat_indices,
+            noise=noise,
+            mask=catalog_mask,
+        )
+    # use the version of the code from GOTHAM DR1
+    else:
+        datachunk = _legacy_filter_spectrum(
+            catalog,
+            data[:, 0],
+            data[:, 1],
+            vlsr,
+            delta_v,
+            block_interlopers,
+            interloper_threshold,
+            sim_cutoff,
+            line_wash_threshold,
+        )
+    logger.info(f"Using {len(datachunk.catalog_index)} entries for analysis.")
+    # dump stuff for later usage
+    dump(catalog, output_path.joinpath("catalog.pkl"), compress=True)
+    dump(
+        datachunk.to_observation(observatory),
+        output_path.joinpath("observation.pkl"),
+        compress=True,
     )
+    chunk_path = output_path.joinpath("datachunks.h5")
+    if chunk_path.exists():
+        os.remove(chunk_path)
+    datachunk.to_hdf5(chunk_path)
+    return datachunk

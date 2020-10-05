@@ -1,0 +1,18 @@
+name: astro_mcmc
+channels:
+  - defaults
+dependencies:
+  - numpy
+  - scipy
+  - python=3.7
+  - ipython
+  - ipykernel
+  - numba
+  - matplotlib
+  - astropy
+  - scikit-learn
+  - jupyter
+  - ipywidgets
+  - xarray
+  - dask
+prefix: /home/kelvin/anaconda3/envs/astro_mcmc
