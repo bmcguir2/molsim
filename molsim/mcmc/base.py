@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from multiprocessing import Pool
 from scipy.stats import uniform, norm
+from ruamel.yaml import YAML
 import sys
 import json
 
@@ -336,7 +337,7 @@ class EmceeHelper(object):
             [description]
         """
         param_names = model.get_names()
-        summary = arviz.summary(self.posterior)
+        summary = arviz.summary(self.posterior, round_to=None)
         summary.index = param_names
         return summary
 
@@ -503,6 +504,35 @@ class EmceeHelper(object):
 
         with open(f"{name}_mcmc_result.json", "w+") as write_file:
             json.dump(output, write_file, indent=4)
+        if return_dict:
+            return output
+        else:
+            return None
+
+    def posterior_to_yml(
+        self, name: str, model: AbstractModel, return_dict: bool = False
+    ) -> Union[dict, None]:
+        summary = self.summary(model)
+        n_components = len(model.components)
+        output = dict()
+        for parameter in ["SourceSize", "VLSR", "NCol"]:
+            for component in range(n_components):
+                key = f"{parameter}_{component}"
+                # if the parameter hasn't been done yet, initialize the dictionary
+                if parameter not in output:
+                    output[parameter] = {"mean": [], "sd": []}
+                # use pandas.loc to grab the value
+                output[parameter]["mean"].append(float(summary.loc[key, "mean"]))
+                output[parameter]["sd"].append(float(summary.loc[key, "sd"]))
+        # loop over Tex and dV separately because we repeat them
+        for parameter in ["Tex", "dV"]:
+            output[parameter] = {
+                "mean": [float(summary.loc[parameter, "mean"]),] * n_components,
+                "sd": [float(summary.loc[parameter, "sd"]),] * n_components,
+            }
+        yaml = YAML(typ="unsafe")
+        with open(f"{name}_mcmc_result.yml", "w+") as write_file:
+            yaml.dump(output, write_file)
         if return_dict:
             return output
         else:
