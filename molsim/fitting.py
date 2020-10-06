@@ -38,6 +38,7 @@ def do_lsf(obs, mol, fit_vars, params=None, method='leastsq'):
 		'll'			:	[float('-inf')], #list (MHz)
 		'ul'			:	[float('inf')], #list (MHz)
 		'line_profile'	:	'Gaussian',	#str; must be known line profile method.
+		'units'			:	'K'; #str can be 'K', 'mK', 'Jy/beam'
 		
 	method: str
 		The method to use; must be from those allowed by lmfit.  Defaults to 'leastsq' 
@@ -50,6 +51,7 @@ def do_lsf(obs, mol, fit_vars, params=None, method='leastsq'):
 					'll'			:	[float('-inf')],
 					'ul'			:	[float('inf')],
 					'line_profile'	:	'Gaussian',
+					'units'			:	'K',
 					}					
 					
 	#override defaults with user-supplied values; warn user if they've mistyped something
@@ -68,7 +70,7 @@ def do_lsf(obs, mol, fit_vars, params=None, method='leastsq'):
 					vary = fit_vars[x]['vary'],
 					)
 	
-	def residual(params, x, obs, mol0, ll0, ul0, line_profile0, res0):
+	def residual(params, x, obs, mol0, ll0, ul0, line_profile0, res0, units):
 	
 		parvals = params.valuesdict()
 		size = parvals['size']
@@ -93,10 +95,11 @@ def do_lsf(obs, mol, fit_vars, params=None, method='leastsq'):
 							source = source,
 							line_profile = line_profile0,
 							res = res0,
-							use_obs = True,)
+							use_obs = True,
+							units = units)
 		
 		return np.array(obs.spectrum.Tb - sim.spectrum.int_profile)
 	
-	results = lmfit.minimize(residual, params, method=method, args=(obs.spectrum.frequency, obs, mol, int_params['ll'], int_params['ul'], int_params['line_profile'], int_params['res']))
+	results = lmfit.minimize(residual, params, method=method, args=(obs.spectrum.frequency, obs, mol, int_params['ll'], int_params['ul'], int_params['line_profile'], int_params['res'], int_params['units']))
 
 	return results
