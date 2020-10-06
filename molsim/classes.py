@@ -1354,6 +1354,7 @@ class Trace(object):
 			self.alpha = 0.0
 		return			
 
+
 class Iplot(object):
 
 	def __init__(self,
@@ -1402,10 +1403,12 @@ class Iplot(object):
 	def set_file_out(self):
 		if self.save_plot is True and self.file_out is None:
 			self.file_out = 'plot.' + self.file_format
+		return
 			
 	def set_data(self):
 		for x in self.traces:
 			self.traces_dict[x.name] = x
+		return
 						
 	def make_plot(self):
 		#plot shell making
@@ -1452,7 +1455,8 @@ class Iplot(object):
 												alpha=y.alpha,
 												zorder=y.order,)
 		fig.canvas.draw()
-		self.fig = fig												
+		self.fig = fig
+		return												
 			
 	def update(self,traces=None):	
 		if traces is not None:
@@ -1477,5 +1481,7 @@ class Iplot(object):
 													linewidth=y.linewidth,
 													alpha=y.alpha,
 													zorder=y.order,)			
-		self.fig.canvas.draw()					
-		
+		self.fig.canvas.draw()
+		return
+							
+ 		
