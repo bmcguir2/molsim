@@ -1231,7 +1231,7 @@ class Simulation(object):
 				self.spectrum.Tb,self.beam_dilution = _apply_beam(self.spectrum.frequency,self.spectrum.Tb,self.source.size,self.observation.observatory.dish,return_beam=True)
 				self.spectrum.int_profile = _apply_beam(self.spectrum.freq_profile,self.spectrum.int_profile,self.source.size,self.observation.observatory.dish,return_beam=False)
 		return	
-		
+  
 	def _make_lines(self):
 		if self.line_profile is None:
 			return
@@ -1252,11 +1252,22 @@ class Simulation(object):
 			# the observational data
 			if self.use_obs:
 				freq_arr = self.observation.spectrum.frequency
+				if not hasattr(self, "_cache"):
+					self._cache = {"l_idxs": None, "u_idxs": None}
 			else:
 				freq_arr = np.concatenate([np.arange(ll,ul,self.res) for ll,ul in zip(ll_trim,ul_trim)])
 			tau_arr = np.zeros_like(freq_arr)
-			l_idxs = [find_nearest(freq_arr,x) for x in lls_raw]
-			u_idxs = [find_nearest(freq_arr,x) for x in uls_raw]		
+			if self.use_obs and self._cache:
+				l_idxs = self._cache.get("l_idxs")
+				if l_idxs is None:
+					l_idxs = [find_nearest(freq_arr,x) for x in lls_raw]
+					u_idxs = [find_nearest(freq_arr,x) for x in uls_raw]
+					self._cache["l_idxs"] = l_idxs
+					self._cache["u_idxs"] = u_idxs
+				u_idxs = self._cache.get("u_idxs")
+			else:
+				l_idxs = [find_nearest(freq_arr,x) for x in lls_raw]
+				u_idxs = [find_nearest(freq_arr,x) for x in uls_raw]		
 			for x,y,ll,ul in zip(self.spectrum.frequency,self.spectrum.tau,l_idxs,u_idxs):
 				tau_arr[ll:ul] += _make_gauss(x,y,freq_arr[ll:ul],self.source.dV,ckm)
 			self.spectrum.tau_profile = tau_arr
