@@ -1,6 +1,6 @@
 import numpy as np
 import lmfit
-from molsim.classes import Source, Simulation, Spectrum
+from molsim.classes import Source, Simulation, Spectrum, Continuum
 
 def do_lsf(obs, mol, fit_vars, params=None, method='leastsq'):
 
@@ -52,6 +52,7 @@ def do_lsf(obs, mol, fit_vars, params=None, method='leastsq'):
 					'ul'			:	[float('inf')],
 					'line_profile'	:	'Gaussian',
 					'units'			:	'K',
+					'continuum'		:	Continuum(),
 					}					
 					
 	#override defaults with user-supplied values; warn user if they've mistyped something
@@ -70,7 +71,8 @@ def do_lsf(obs, mol, fit_vars, params=None, method='leastsq'):
 					vary = fit_vars[x]['vary'],
 					)
 	
-	def residual(params, x, obs, mol0, ll0, ul0, line_profile0, res0, units):
+	return_sims = []
+	def residual(params, x, obs, mol0, ll0, ul0, line_profile0, res0, units, continuum):
 	
 		parvals = params.valuesdict()
 		size = parvals['size']
@@ -80,7 +82,8 @@ def do_lsf(obs, mol, fit_vars, params=None, method='leastsq'):
 		column = parvals['column']
 	
 		#generate a source object
-		source = Source(size = size,
+		source = Source(continuum = continuum,
+						size = size,
 						dV = dV,
 						velocity = velocity,
 						Tex = Tex,
@@ -98,8 +101,9 @@ def do_lsf(obs, mol, fit_vars, params=None, method='leastsq'):
 							use_obs = True,
 							units = units)
 		
+		return_sims.append(sim)
 		return np.array(obs.spectrum.Tb - sim.spectrum.int_profile)
 	
-	results = lmfit.minimize(residual, params, method=method, args=(obs.spectrum.frequency, obs, mol, int_params['ll'], int_params['ul'], int_params['line_profile'], int_params['res'], int_params['units']))
+	results = lmfit.minimize(residual, params, method=method, args=(obs.spectrum.frequency, obs, mol, int_params['ll'], int_params['ul'], int_params['line_profile'], int_params['res'], int_params['units'], int_params['continuum']))
 
-	return results
+	return results, return_sims

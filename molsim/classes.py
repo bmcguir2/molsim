@@ -944,13 +944,17 @@ class Continuum(object):
 
 	'''
 	This class stores the information needed to provide a continuum value at any point
+	
+	If type = 'thermal' is specified, params must be a float.
+	
+	If type = 'range', then params is a list of lists of the format: [[lower,upper,value]]
 	'''		
 	
 	def __init__(
 					self,
 					cont_file = None, #a cont file to read parameters from
 					type = 'thermal', #type of continuum to calculate
-					params = [2.7], #necessary parameters
+					params = 2.7, #necessary parameters
 					freqs = None, #frequencies [MHz] if interpolating between points
 					temps = None, #values [K] if interpolating T between points
 					fluxes = None, #fluxes [Jy/beam] if interpolating Jy between points
@@ -966,21 +970,16 @@ class Continuum(object):
 		self.notes = notes
 		
 		self._check_type()
-		self._fix_params()
 		
 		return
 		
 	def _check_type(self):
-		types = ['thermal','polynomial','poly','interpolation']
+		types = ['thermal','polynomial','poly','interpolation','range']
 		if self.type not in types:
 			print('WARNING: Unrecognized type ("{}") specified for continuum generation.' \
 			' Will use 2.7 K CMB instead.' .format(self.type))
-			self.params = [2.7]
+			self.params = 2.7
 		return
-		
-	def _fix_params(self):
-		if isinstance(self.params,int) or isinstance(self.params,float):
-			self.params = [self.params]	
 		
 	def Tbg(self,freq):
 		'''
@@ -989,7 +988,13 @@ class Continuum(object):
 		'''
 		
 		if self.type == 'thermal':
-			return np.full_like(freq,self.params[0])
+			return np.full_like(freq,self.params)
+			
+		if self.type == 'range':
+			tbg_arr = np.full_like(freq,2.7)
+			for x in self.params:
+				tbg_arr[np.where(np.logical_and(freq>=x[0], freq<=x[1]))[0]] = x[2]
+			return tbg_arr
 				
 	def Ibg(self,freq):			
 		'''
@@ -998,7 +1003,7 @@ class Continuum(object):
 		'''
 		
 		if self.type == 'thermal':
-			return 2*h*(freq*1E6)**3 / (cm**2 * np.exp(h*freq*1E6/(k*self.params[0])))*1E26		
+			return 2*h*(freq*1E6)**3 / (cm**2 * np.exp(h*freq*1E6/(k*self.params)))*1E26		
 
 class Source(object):
 
@@ -1112,7 +1117,7 @@ class Simulation(object):
 					source = None, #Source object associated with this simulation
 					ll = [np.float('-inf')], #lower limits
 					ul = [np.float('-inf')], #lower limits
-					line_profile = None, #simulate a line profile or not
+					line_profile = 'Gaussian', #simulate a line profile or not
 					sim_width = 10, #fwhms to simulate +/- line center
 					res = 10., #resolution if simulating line profiles [kHz]
 					mol = None, #Molecule object associated with this simulation
