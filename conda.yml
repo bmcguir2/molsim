@@ -1,4 +1,4 @@
-name: astro_mcmc
+name: molsim
 channels:
   - defaults
 dependencies:
@@ -15,4 +15,3 @@ dependencies:
   - ipywidgets
   - xarray
   - dask
-prefix: /home/kelvin/anaconda3/envs/astro_mcmc
