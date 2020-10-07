@@ -3,7 +3,7 @@ from numba import njit
 import math
 from molsim.constants import ccm, cm, ckm, h, k, kcm 
 from molsim.stats import get_rms
-from molsim.utils import _trim_arr, find_nearest, _make_gauss, _apply_vlsr, _apply_beam
+from molsim.utils import _trim_arr, find_nearest, _make_gauss, _apply_vlsr, _apply_beam, _make_fmted_qnstr
 from molsim.file_io import _read_txt, _read_xy
 from scipy.interpolate import interp1d
 from astropy import units
@@ -12,6 +12,9 @@ import astropy.units as u
 import matplotlib.pyplot as plt
 import matplotlib
 from datetime import datetime
+from tabulate import tabulate
+tabulate.PRESERVE_WHITESPACE = True
+from IPython.core.display import display, HTML, Markdown
 
 class Workspace(object):
 
@@ -366,7 +369,8 @@ class Level(object):
 		self.mol = mol		
 		
 		return	
-		
+
+##Transition object likely to be deprecated (was never used)		
 class Transition(object):
 
 	'''
@@ -1294,18 +1298,226 @@ class Simulation(object):
 			return
 		
 		if self.units == 'mK':
-			self.spectrum.int_profile *= 1000
+			if self.line_profile.lower() in ['gaussian','gauss']:
+				self.spectrum.int_profile *= 1000
+			self.spectrum.Tb *= 1000
 			return
 			
 		if self.units in ['Jy/beam', 'Jy']:
 			omega = self.observation.observatory.synth_beam[0]*self.observation.observatory.synth_beam[1] #conversion below has volume element built in
-			mask = np.where(self.spectrum.int_profile != 0)[0]
-			self.spectrum.int_profile[mask] = (3.92E-8 * (self.spectrum.freq_profile[mask]*1E-3)**3 *omega/ (np.exp(0.048*self.spectrum.freq_profile[mask]*1E-3/self.spectrum.int_profile[mask]) - 1))
+			if self.line_profile.lower() in ['gaussian','gauss']:
+				mask = np.where(self.spectrum.int_profile != 0)[0]
+				self.spectrum.int_profile[mask] = (3.92E-8 * (self.spectrum.freq_profile[mask]*1E-3)**3 *omega/ (np.exp(0.048*self.spectrum.freq_profile[mask]*1E-3/self.spectrum.int_profile[mask]) - 1))
+			mask = np.where(self.spectrum.Tb != 0)[0]
+			self.spectrum.Tb[mask] = (3.92E-8 * (self.spectrum.frequency[mask]*1E-3)**3 *omega/ (np.exp(0.048*self.spectrum.frequency[mask]*1E-3/self.spectrum.Tb[mask]) - 1))
 			return
 			
 	
 		return
 				
+	def print_lines(self,ll=None,ul=None,threshold=None,use_profile=False,dV=None,vlsr=None,file_out=None,latex_out=False,txt_out=False):
+	
+		'''
+		Prints all the lines within the simulation, optionally with constraints or output to a file.
+	
+		Parameters
+		----------
+	
+		ll: list
+			If provided, overrides internal limits.  Can only reduce the range returned - will not extend
+			the range of the simulation to print more lines.  Must also specify ul.
+	
+		ul: list
+			If provided, overrides internal limits.  Can only reduce the range returned - will not extend
+			the range of the simulation to print more lines.  Must also specify ll.
+		
+		threshold: float
+			Only lines with simulated peak intensity above this threshold will be printed. Works off of the
+			intensities of lines __before__ line profiles are applied and before lines are co-added. 
+		
+		use_profile: bool
+			If set to True, will determine intensities for thresholding based on a peak finding algorithm, only
+			identifying peaks separated by at least dV (must also be specified). ** Not currently implemented. **
+		
+		dV: float
+			Required if use_profile is set.  Peak finding algorithm will find only peaks separated by this value.
+			Give in km/s.
+			
+		vlsr: float
+			If given, will also provide sky-frame frequencies.  Provide in km/s.
+		
+		file_out: string
+			If latex_out or txt_out is specified, this specifies the file name to be printed to.  Required for
+			either output feature.
+		
+		latex_out: bool
+			Set to True to print a LaTeX-formatted table to file_out.  Cannot be used with txt_out.
+		
+		txt_out: bool
+			Set to True to print a plain text tab-delimited table to file_out.  Cannot be used with latex_out.
+		
+		'''
+		
+		#First check for inconsistencies in the specified variables.
+		if latex_out is True and txt_out is True:
+			print('ERROR: Cannot specify both latex_out and txt_out.  Neither will happen.')
+			latex_out = False
+			txt_out = False
+		if use_profile is True:
+			print('WARNING: use_profile is not yet implemented and will not be used.')
+		#if use_profile is True and dV is None:
+		#	print('ERROR: A value for dV is required to use use_profile.  It will not be used.')
+		#	use_profile = False
+		if ll is not None and ul is None:
+			print('ERROR: Must specify both ll and ul, or neither.  Given ll will be ignored.')	
+			ll = None
+		elif ul is not None and ll is None:
+			print('ERROR: Must specify both ll and ul, or neither.  Given ul will be ignored.')
+			ul = None
+			
+		#find the indices for trimming the arrays
+		if ll is None and ul is None:
+			lls = self.ll
+			uls = self.ul
+			
+		#for getting from catalogs	
+		l_idxs = [find_nearest(self.mol.catalog.frequency,x) for x in lls]
+		u_idxs = [find_nearest(self.mol.catalog.frequency,x) for x in uls]
+		
+		#for getting from the simulation spectrum
+		sim_l_idxs = [find_nearest(self.spectrum.frequency,x) for x in lls]
+		sim_u_idxs = [find_nearest(self.spectrum.frequency,x) for x in uls]
+		
+		print_freqs = []
+		print_ints = []
+		print_qns = []
+		print_eups = []
+		print_gus = []
+		print_gls = []
+		print_aijs = []
+		print_sijmus = []
+		
+		for x,y in zip(l_idxs,u_idxs):
+			print_freqs.append(self.mol.catalog.frequency[x:y])
+			for i in range(x,y):
+				qn_us = []
+				for qn_u in [self.mol.catalog.qn1up[i], self.mol.catalog.qn2up[i], self.mol.catalog.qn3up[i], self.mol.catalog.qn4up[i], self.mol.catalog.qn5up[i], self.mol.catalog.qn6up[i], self.mol.catalog.qn7up[i], self.mol.catalog.qn8up[i]]:
+					if qn_u is not None:
+						qn_us.append(qn_u)
+				qn_ls = []
+				for qn_l in [self.mol.catalog.qn1low[i], self.mol.catalog.qn2low[i], self.mol.catalog.qn3low[i], self.mol.catalog.qn4low[i], self.mol.catalog.qn5low[i], self.mol.catalog.qn6low[i], self.mol.catalog.qn7low[i], self.mol.catalog.qn8low[i], ]:
+					if qn_l is not None:
+						qn_ls.append(qn_l)
+				qn_u_str = _make_fmted_qnstr(qn_us)
+				qn_l_str = _make_fmted_qnstr(qn_ls)
+				print_qns.append(qn_u_str + ' -> ' + qn_l_str)
+			print_eups.append(self.mol.catalog.eup[x:y])
+			print_gus.append(self.mol.catalog.gup[x:y])
+			print_gls.append(self.mol.catalog.glow[x:y])
+			print_aijs.append(np.log10(self.mol.catalog.aij[x:y]))
+			print_sijmus.append(self.mol.catalog.sijmu[x:y])							 
+				
+		for x,y in zip(sim_l_idxs,sim_u_idxs):	
+			print_ints.append(self.spectrum.Tb[x:y])
+		
+		print_freqs = np.array([item for sublist in print_freqs for item in sublist])
+		print_ints = np.array([item for sublist in print_ints for item in sublist])
+		print_qns = np.array(print_qns)
+		print_eups = np.array([item for sublist in print_eups for item in sublist])
+		print_gus = np.array([item for sublist in print_gus for item in sublist])
+		print_gls = np.array([item for sublist in print_gls for item in sublist])
+		print_aijs = np.array([item for sublist in print_aijs for item in sublist])
+		print_sijmus = np.array([item for sublist in print_sijmus for item in sublist])	
+		
+		print_skyfreqs = []
+
+		#calc skyfreqs if needed
+		if vlsr is not None:
+			print_skyfreqs = np.array([x - vlsr*x/ckm for x in print_freqs])		
+			
+		#apply threshold if needs be
+		if threshold is not None:
+			mask = np.where(np.array(print_ints) > threshold)[0]
+			#make sure the mask isn't zero; if so, let the user know the threshold is set too high and let them know the maximum.
+			if len(mask) == 0:
+				print(f'ERROR: Threshold is set too high and no lines are found.  The maximum value in the range is {np.max(print_ints):.3e}. Exiting.')
+				return
+			
+		print_table = []
+		if vlsr is None:
+			headers = ['Frequency', 'Intensity', 'Quantum Numbers', 'E$_{\mathrm{u}}$ (K)', 'g$_{\mathrm{u}}$', 'g$_{\mathrm{l}}$', 'log(A$_{\mathrm{ij}}$)', r'S$_{\mathrm{ij}}\mathrm{\mu} ^2$']
+			if threshold is not None:
+				for a,b,c,d,e,f,g,h in zip(print_freqs[mask], print_ints[mask], print_qns[mask], print_eups[mask], print_gus[mask], print_gls[mask], print_aijs[mask], print_sijmus[mask]):
+					print_table.append([f'{a:.4f}',f'{b:.4f}',f'{c}',f'{d:.2f}',e,f,f'{g:.3f}',f'{h:.3f}'])
+				display(HTML(tabulate(print_table,
+								headers=headers,
+								disable_numparse=True, 
+								colalign=('right',
+											'right',
+											'center',
+											'right',
+											'right',
+											'right',
+											'right',
+											'right'	),
+								tablefmt='html')
+					))
+			else:	
+				for a,b,c,d,e,f,g,h in zip(print_freqs, print_ints, print_qns, print_eups, print_gus, print_gls, print_aijs, print_sijmus):
+					print_table.append([f'{a:.4f}',f'{b:.4f}',f'{c}',f'{d:.2f}',e,f,f'{g:.3f}',f'{h:.3f}'])
+				display(HTML(tabulate(print_table,
+								headers=headers,
+								disable_numparse=True, 
+								colalign=('right',
+											'right',
+											'center',
+											'right',
+											'right',
+											'right',
+											'right',
+											'right'	),
+								tablefmt='html')
+					))
+		
+		if vlsr is not None:
+			headers = ['Frequency', 'Sky Frequency', 'Intensity', 'Quantum Numbers', 'E$_{\mathrm{u}}$ (K)', 'g$_{\mathrm{u}}$', 'g$_{\mathrm{l}}$', 'log(A$_{\mathrm{ij}}$)', r'S$_{\mathrm{ij}}\mathrm{\mu} ^2$']
+			if threshold is not None:
+				for a,a2,b,c,d,e,f,g,h in zip(print_freqs[mask], print_skyfreqs[mask], print_ints[mask], print_qns[mask], print_eups[mask], print_gus[mask], print_gls[mask], print_aijs[mask], print_sijmus[mask]):
+					print_table.append([f'{a:.4f}',f'{a2:.4f}',f'{b:.4f}',f'{c}',f'{d:.2f}',e,f,f'{g:.3f}',f'{h:.3f}'])
+				display(HTML(tabulate(print_table,
+								headers=headers,
+								disable_numparse=True, 
+								colalign=('right',
+											'right',
+											'right',
+											'center',
+											'right',
+											'right',
+											'right',
+											'right',
+											'right'	),
+								tablefmt='html')
+					))
+			else:	
+				for a,a2,b,c,d,e,f,g,h in zip(print_freqs, print_skyfreqs, print_ints, print_qns, print_eups, print_gus, print_gls, print_aijs, print_sijmus):
+					print_table.append([f'{a:.4f}',f'{a2:.4f}',f'{b:.4f}',f'{c}',f'{d:.2f}',e,f,f'{g:.3f}',f'{h:.3f}'])
+				display(HTML(tabulate(print_table,
+								headers=headers,
+								disable_numparse=True, 
+								colalign=('right',
+											'right',
+											'right',
+											'center',
+											'right',
+											'right',
+											'right',
+											'right',
+											'right'	),
+								tablefmt='html')
+					))				
+
+		return
+	
 	def update(self):
 		self._set_arrays()
 		self._apply_voffset()

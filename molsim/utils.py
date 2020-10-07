@@ -274,7 +274,7 @@ def _get_res(freq_arr):
 	diffs = np.diff(freq_arr)
 	return stats.mode(diffs)[0][0]
 	
-def _make_fmted_qnstr(qns,qnstr_fmt):	
+def _make_fmted_qnstr(qns,qnstr_fmt=None):	
 	'''
 	Given a qnstr_fmt formatter declaration, turns a set of quantum numbers into a
 	human readable output.
@@ -286,6 +286,12 @@ def _make_fmted_qnstr(qns,qnstr_fmt):
 	'/#1/(/#2/)/#3[+=+ A,-=- A,= E]/ vt=/#4/'
 	
 	'''
+	
+	#if a qnstr_fmt is not given, return a nicely cleaned up string
+	if qnstr_fmt is None:
+		qn_bits = [f'{x:>3}' for x in qns]
+		qnstr = ' '
+		return qnstr.join(qn_bits)
 	
 	#Clean up the formatting input a bit
 	base_str = qnstr_fmt.split('/')
