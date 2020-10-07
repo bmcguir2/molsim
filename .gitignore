@@ -1,4 +1,8 @@
 molsim.pdf
+molsim.egg-info/
 molsim.drawio
+molsim.egg-info
 working/
 .DS_Store
+__pycache__
+.vscode
