@@ -1,8 +1,8 @@
 # molsim
 
-## Simulation of molecular spectra for astronomical observations
+## Simulation tools for radio molecular spectra
 
-`molsim` is a Python 3 package that provides an object-oriented interface for analyzing molecular spectra in high resolution astronomical observations. Key features of `molsim` include:
+`molsim` is a Python 3 package that provides an object-oriented interface for analyzing molecular spectra in high resolution astronomical observations and laboratory data. Key features of `molsim` include:
 
 1. Line profile simulation
 2. Velocity stacking
