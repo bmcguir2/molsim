@@ -516,7 +516,33 @@ def process_mcmc_json(json_file, molecule, observation, ll=0, ul=float('inf'), l
 		return sources, sims, sum1, json_dict
 	else:
 		return sources, sims, sum1	
-					
+
+
+def read_spcat_out(out_path):
+    with open(out_path) as read_file:
+        data = read_file.readlines()
+    for index, line in enumerate(data):
+        if line.startswith("TEMPERATURE"):
+            break
+    # drop the last line as well, which is "sorted ..."
+    data = data[(index + 1):]
+    output = dict()
+    for line in data:
+        split_line = line.split()
+        # the dictionary keys are not converted to float
+        # so that we can merge them later
+        output[split_line[0]] = float(split_line[1])
+    return output
+
+
+def spcat_out_qpart(name: str, out_path: str):
+    q_dict = read_spcat_out(out_path)
+    q_dict = {float(key): value for key, value in q_dict.items()}
+    with open(f"{name}.qpart", "w+") as write_file:
+        write_file.write("# form : interpolation\n")
+        for T, Q in q_dict.items():
+            write_file.write(f"{T:.1f} {Q:.4f}\n")
+
 
 def run_temperature(basename: str, int_contents: str, temperature: float):
     """
