@@ -8,6 +8,12 @@ from scipy import stats, signal
 import sys, os
 import json
 from ruamel.yaml import YAML
+from glob import glob
+from typing import List
+from multiprocessing import Pool
+from subprocess import Popen, PIPE, TimeoutExpired
+from tempfile import NamedTemporaryFile
+from shutil import copy2, which
 
 
 def load_yaml(yml_path: str) -> dict:
@@ -16,7 +22,7 @@ def load_yaml(yml_path: str) -> dict:
         input_dict = yaml.load(read_file)
     return input_dict
 
-  
+
 def find_nearest(arr,val):
 	idx = np.searchsorted(arr, val, side="left")
 	if idx > 0 and (idx == len(arr) or math.fabs(val - arr[idx-1]) \
@@ -510,8 +516,121 @@ def process_mcmc_json(json_file, molecule, observation, ll=0, ul=float('inf'), l
 		return sources, sims, sum1, json_dict
 	else:
 		return sources, sims, sum1	
-					
-				
+
+
+def read_spcat_out(out_path):
+    with open(out_path) as read_file:
+        data = read_file.readlines()
+    for index, line in enumerate(data):
+        if line.startswith("TEMPERATURE"):
+            break
+    # drop the last line as well, which is "sorted ..."
+    data = data[(index + 1):]
+    output = dict()
+    for line in data:
+        split_line = line.split()
+        # the dictionary keys are not converted to float
+        # so that we can merge them later
+        output[split_line[0]] = float(split_line[1])
+    return output
+
+
+def spcat_out_qpart(name: str, out_path: str):
+    q_dict = read_spcat_out(out_path)
+    q_dict = {float(key): value for key, value in q_dict.items()}
+    with open(f"{name}.qpart", "w+") as write_file:
+        write_file.write("# form : interpolation\n")
+        for T, Q in q_dict.items():
+            write_file.write(f"{T:.1f} {Q:.4f}\n")
+
+
+def run_temperature(basename: str, int_contents: str, temperature: float):
+    """
+    'Micro'function that runs SPCAT with a given base file name, the contents
+    of a .int file as a single string, and a target temperature.
+
+    This function will create a temporary file to run SPCAT and should
+    clean up after itself. The partition function values are parsed from
+    the standard output, so we don't actually care about the .out file.
+
+    Returns a dictionary containing the partition function at every
+    temperature simulated in this run (i.e. including the SPCAT defaults)
+    """
+    temp = NamedTemporaryFile().name
+    copy2(f"{basename}.var", f"{temp}.var")
+    with open(f"{temp}.int", "w+") as write_file:
+        write_file.write(
+            int_contents.format(T=temperature)
+        )
+    with Popen(["spcat", temp], stdout=PIPE) as proc:
+        try:
+            out, errs = proc.communicate(timeout=600)
+        except TimeoutExpired:
+            proc.kill()
+            out, errs = None
+        # parse the partition functions out of the standard output
+        if out is not None:
+            q_dict = read_spcat_stdout(out)
+        else:
+            q_dict = None
+    # cleanup after work
+    for file in glob(f"{temp}*"):
+        os.remove(file)
+    return q_dict
+
+
+def read_spcat_stdout(stdout):
+    """
+    This function simply parses the standard output of an SPCAT
+    call, and extracts the partition function at each temperature
+    simulated.
+    """
+    data = stdout.decode('utf-8').split("\n")
+    # skip all of the extra stuff and go straight to
+    # start reading the partition function
+    for index, line in enumerate(data):
+        if line.startswith("TEMPERATURE"):
+            break
+    # drop the last line as well, which is "sorted ..."
+    data = data[(index + 1):-2]
+    output = dict()
+    for line in data:
+        split_line = line.split()
+        # the dictionary keys are not converted to float
+        # so that we can merge them later
+        output[split_line[0]] = float(split_line[1])
+    return output
+
+
+def parallel_spcat_qrots(basename: str, *more_temps, nproc: int = 4):
+    if not which("spcat"):
+        raise FileNotFoundError("SPCAT not located in your PATH! Check `which spcat` in your command line.")
+    with open(f"{basename}.int", "r") as read_file:
+        int_contents = read_file.read()
+    var_file = f"{basename}.var"
+    # some default temperatures to start with in addition
+    # to the SPCAT ones
+    temps = [5., 10., 25., 50., 100., 150., 200.]
+    # user can provide any number more of temperatures
+    if more_temps:
+        temps.extend(more_temps)
+    final_dict = dict()
+    # runs SPCAT asynchronously
+    with Pool(processes=nproc) as pool:
+        results = [pool.apply_async(run_temperature, args=(basename, int_contents, T)) for T in temps]
+        for result in results:
+            final_dict.update(**result.get())
+    # convert the temperatures into floats
+    final_dict = {float(T): Q for T, Q in final_dict.items()}
+    # write the results to disk
+    with open(f"{basename}.qpart", "w+") as write_file:
+        write_file.write("#form : interpolation\n")
+        for T in sorted(final_dict.keys()):
+            Q = final_dict.get(T)
+            write_file.write(f"{float(T):.1f} {Q:.4f}\n")
+    print(f"Partition functions written to {basename}.qpart")
+
+  
 				
 	
 	
