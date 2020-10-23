@@ -34,7 +34,6 @@ def do_lsf(obs, mol, fit_vars, params=None, method='leastsq'):
 	params: dict
 		Non-variable parameters needed for simulation.  Default values are given.
 				
-		'res'			:	0.0014, #float (MHz)
 		'll'			:	[float('-inf')], #list (MHz)
 		'ul'			:	[float('inf')], #list (MHz)
 		'line_profile'	:	'Gaussian',	#str; must be known line profile method.
@@ -47,8 +46,7 @@ def do_lsf(obs, mol, fit_vars, params=None, method='leastsq'):
 	'''
 	
 	#set up the internal parameters dictionary
-	int_params = { 	'res'			:	0.0014,
-					'll'			:	[float('-inf')],
+	int_params = {  'll'			:	[float('-inf')],
 					'ul'			:	[float('inf')],
 					'line_profile'	:	'Gaussian',
 					'units'			:	'K',
@@ -71,8 +69,7 @@ def do_lsf(obs, mol, fit_vars, params=None, method='leastsq'):
 					vary = fit_vars[x]['vary'],
 					)
 	
-	return_sims = []
-	def residual(params, x, obs, mol0, ll0, ul0, line_profile0, res0, units, continuum):
+	def residual(params, x, obs, mol0, ll0, ul0, line_profile0, units, continuum):
 	
 		parvals = params.valuesdict()
 		size = parvals['size']
@@ -97,13 +94,12 @@ def do_lsf(obs, mol, fit_vars, params=None, method='leastsq'):
 							observation = obs,
 							source = source,
 							line_profile = line_profile0,
-							res = res0,
 							use_obs = True,
 							units = units)
 		
 		return_sims.append(sim)
 		return np.array(obs.spectrum.Tb - sim.spectrum.int_profile)
 	
-	results = lmfit.minimize(residual, params, method=method, args=(obs.spectrum.frequency, obs, mol, int_params['ll'], int_params['ul'], int_params['line_profile'], int_params['res'], int_params['units'], int_params['continuum']))
+	results = lmfit.minimize(residual, params, method=method, args=(obs.spectrum.frequency, obs, mol, int_params['ll'], int_params['ul'], int_params['line_profile'], int_params['units'], int_params['continuum']))
 
-	return results, return_sims
+	return results

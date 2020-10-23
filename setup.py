@@ -16,11 +16,11 @@ NAME = 'molsim'
 DESCRIPTION = 'A program for simulating observations of molecular rotational spectra'
 URL = 'https://github.com/bmcguir2/molsim'
 REQUIRES_PYTHON = '>=3.6.0'
-VERSION = '0.1.0'
+VERSION = '0.1.1'
 
 # What packages are required for this module to be executed?
 REQUIRED = [
-    'astropy', 'numpy', 'scipy', 'emcee', 'matplotlib'
+    'astropy', 'numpy', 'scipy', 'emcee', 'matplotlib', 'tabulate'
 ]
 
 # What packages are optional?
