@@ -11,6 +11,8 @@
 
 For details about the methodology, particularly with respect to MCMC simulations, please refer to [Loomis _et al._ 2020](https://arxiv.org/abs/2009.11900)
 
+If you use `molsim` for your analysis, please cite the Zenodo entry: [![DOI](https://zenodo.org/badge/253506425.svg)](https://zenodo.org/badge/latestdoi/253506425)
+
 ## Setup instructions
 
 For science-ready code, we recommend downloading one of the releases—these are verified to the best of our ability to be accurate. If there are any indications otherwise, please submit an issue!
