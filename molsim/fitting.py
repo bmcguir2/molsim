@@ -1,6 +1,8 @@
 import numpy as np
 import lmfit
 from molsim.classes import Source, Simulation, Spectrum, Continuum
+from molsim.utils import find_peaks, _get_res
+from molsim.constants import ckm
 
 def do_lsf(obs, mol, fit_vars, params=None, method='leastsq'):
 
@@ -103,3 +105,37 @@ def do_lsf(obs, mol, fit_vars, params=None, method='leastsq'):
 	results = lmfit.minimize(residual, params, method=method, args=(obs.spectrum.frequency, obs, mol, int_params['ll'], int_params['ul'], int_params['line_profile'], int_params['units'], int_params['continuum']))
 
 	return results
+	
+def find_fit_limits(freq_arr,int_arr,dV,min_sep,spread,sigma=3,kms=True):
+	
+	'''
+	Takes an input spectrum, finds the peaks, and then spits out limits that provide spread*dV on either side of the peaks for the fitting to be done.
+	'''
+	
+	#find the peak indices
+	peak_idx = find_peaks(	freq_arr = freq_arr,
+							int_arr = int_arr,
+							res = _get_res(freq_arr),
+							min_sep = min_sep,
+							is_sim = True,
+							sigma = sigma,
+							kms = kms,
+							)
+							
+	#convert peak_idx into frequencies
+	freqs = freq_arr[peak_idx]
+	
+	#convert those into ll and ul
+	ll = []
+	ul = []
+	for x in freqs:
+		span = spread*dV*x/ckm
+		ll.append(x-span)
+		ul.append(x+span)		
+	
+	return ll,ul
+	
+	
+	
+	
+		
