@@ -2,7 +2,7 @@ import numpy as np
 import re
 from numba import njit
 from molsim.constants import ccm, cm, ckm, h, k, kcm
-from molsim.classes import Workspace, Catalog, Transition, Level, Molecule, PartitionFunction, Continuum, Simulation, Spectrum, Observation
+from molsim.classes import Workspace, Catalog, Transition, Level, Molecule, PartitionFunction, Continuum, Simulation, Spectrum, Observation, Observatory
 from molsim.utils import _trim_arr, find_nearest, _make_gauss, _make_qnstr, _make_level_dict
 from molsim.stats import get_rms
 from molsim.file_io import _read_txt, _read_xy, _write_xy
@@ -460,10 +460,48 @@ def load_obs(filein=None,xunits='MHz',yunits='K',id=None,notes=None,spectrum_id=
 	#initialize an Observation object
 	obs = Observation(spectrum=Spectrum())
 	
+	type = type.lower()
+	
 	#read in the data if there is any
 	if filein is not None:
+		#if the file was previously a molsim formatted .npz file
 		if type == 'molsim':
 			obs.spectrum = _read_spectrum(filein)
+		#if the file is an alma ispec file, we get some of the info from the header	
+		if type == 'ispec':
+			#read in the file into a temporary array
+			raw_arr = _read_txt(filein)
+			#eliminate all empty lines
+			raw_arr = [x for x in raw_arr if x != '\n']
+			#separate out the comments that will have metadata, then make a dictionary
+			metadata_keys = [x.split(':')[0].strip('#').strip().lower() for x in raw_arr if x[0] == '#' and ':' in x]
+			#the extra joining here preserves the colons in coordinate designations
+			metadata_vals = [':'.join(x.split(':')[1:]).strip().lower() for x in raw_arr if x[0] == '#' and ':' in x]
+			metadata = dict(zip(metadata_keys,metadata_vals))
+			#separate out the data
+			x = np.array([float(line.split()[0].strip()) for line in raw_arr if line[0] != '#'])
+			y = np.array([float(line.split()[1].strip()) for line in raw_arr if line[0] != '#'])
+			#make sure the data is in increasing frequency order
+			sort_idx = np.argsort(x)
+			x = x[sort_idx]
+			y = y[sort_idx]
+			#sort through the metadata
+			#look for frequency units
+			if 'xlabel' in metadata.keys():
+				xunits = metadata['xlabel'].split('[')[1].strip(']')
+			#change to MHz if required
+			convert_dict = {'mhz' : 1.0,
+							'ghz' : 1000.,
+							'thz' : 1000000.,
+							'khz' : 0.001}
+			if xunits:
+				x *= convert_dict[xunits]
+			#look for intensity units
+			if 'ylabel' in metadata.keys():
+				yunits = metadata['ylabel'].split('[')[1].split(']')[0]
+			
+			obs.spectrum = Spectrum(frequency=x,Tb=y,notes=yunits)	
+						
 		else:
 			x,y = _read_xy(filein)
 			if xunits == 'GHz':
@@ -473,7 +511,7 @@ def load_obs(filein=None,xunits='MHz',yunits='K',id=None,notes=None,spectrum_id=
 			if yunits == 'K':
 				obs.spectrum.Tb = y
 			elif yunits.lower() == 'jy/beam':
-				obs.spectrum.Iv = y
+				obs.spectrum.Iv = y		
 	
 	if id is not None:
 		obs.id = id
@@ -527,7 +565,13 @@ def load_obs(filein=None,xunits='MHz',yunits='K',id=None,notes=None,spectrum_id=
 										eta_type = observatory_dict['eta_type'] if 'eta_type' in observatory_dict else 'Constant',
 										eta_params = observatory_dict['eta_params'] if 'eta_params' in observatory_dict else [1.],
 										atmo = observatory_dict['atmo'] if 'atmo' in observatory_dict else None,
-									)															
+									)	
+	elif type == 'ispec':
+		obs.observatory = Observatory(
+										name = 'ALMA',
+										sd = False,
+										array = True,
+									)																
 
 	return obs		
 
