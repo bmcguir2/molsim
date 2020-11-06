@@ -575,3 +575,60 @@ def load_obs(filein=None,xunits='MHz',yunits='K',id=None,notes=None,spectrum_id=
 
 	return obs		
 
+def load_multi_obs(fileins,xunits='MHz',yunits='K',id=None,notes=None,spectrum_id=None,spectrum_notes=None,source_dict=None,source=None,continuum_dict=None,continuum=None,observatory_dict=None,observatory=None,type='molsim'):
+	
+	'''
+	Combines multiple sources of input into a single observation.  The multiple sources must have the same metadata/units/etc.
+	'''
+	
+	type = type.lower()
+	
+	#make a list of component observations to combine
+	component_obs = []
+	
+	#read the individual parts in
+	for file in fileins:
+		component_obs.append(
+			load_obs(	file,
+						xunits=xunits,
+						yunits=yunits,
+						id=id,
+						notes=notes,
+						spectrum_id=spectrum_id,
+						spectrum_notes=spectrum_notes,
+						source_dict=source_dict,
+						source=source,
+						continuum_dict=continuum_dict,
+						continuum=continuum,
+						observatory_dict=observatory_dict,
+						observatory=observatory,
+						type=type,
+					)
+			)
+	
+	#combine the spectra
+	new_x = np.concatenate([x.spectrum.frequency for x in component_obs])
+	new_y = np.concatenate([x.spectrum.Tb for x in component_obs])
+	
+	#sort them
+	sort_idx = np.argsort(new_x)
+	new_x = new_x[sort_idx]
+	new_y = new_y[sort_idx]
+	
+	#make a new spectrum
+	new_spectrum = Spectrum(
+							frequency = new_x,
+							Tb = new_y,
+							)
+							
+	#stitch them back into one of those component_obs objects and return it
+	component_obs[0].spectrum = new_spectrum						
+	
+	return component_obs[0]
+	
+	
+	
+	
+	
+	
+	

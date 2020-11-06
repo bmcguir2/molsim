@@ -2,7 +2,7 @@ import sys, os
 sys.path.insert(0, '/Users/Brett/Dropbox/Programs')
 
 import numpy as np
-from molsim.file_handling import load_mol, load_obs
+from molsim.file_handling import load_mol, load_obs, load_multi_obs
 from molsim.file_io import _write_xy
 from molsim.constants import ccm, cm, ckm, h, k, kcm
 from molsim.fitting import do_lsf
