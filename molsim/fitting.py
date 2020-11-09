@@ -22,7 +22,12 @@ def do_lsf(obs, mol, fit_vars, params=None, method='leastsq'):
 	fit_vars: dict of dicts
 		The variables that will be fit.  Must contain all of the following:
 		
-		'size', 'dV', 'velocity', 'Tex', 'column'
+		'dV', 'velocity', 'Tex', 'column'
+		
+		may contain these, with the associated defaults:
+		
+		'size' (defaults to 1E20, does not vary)
+		'Tbg' (defaults to using 2.7 K or a provided Continuum)
 		
 		and for each entry, the following:
 		
@@ -40,6 +45,7 @@ def do_lsf(obs, mol, fit_vars, params=None, method='leastsq'):
 		'ul'			:	[float('inf')], #list (MHz)
 		'line_profile'	:	'Gaussian',	#str; must be known line profile method.
 		'units'			:	'K'; #str can be 'K', 'mK', 'Jy/beam'
+		'continuum'		:	None, #a continuum object; 2.7K thermal will be used if not provided
 		
 	method: str
 		The method to use; must be from those allowed by lmfit.  Defaults to 'leastsq' 
@@ -52,7 +58,7 @@ def do_lsf(obs, mol, fit_vars, params=None, method='leastsq'):
 					'ul'			:	[float('inf')],
 					'line_profile'	:	'Gaussian',
 					'units'			:	'K',
-					'continuum'		:	Continuum(),
+					'continuum'		:	None,
 					}					
 					
 	#override defaults with user-supplied values; warn user if they've mistyped something
@@ -70,6 +76,23 @@ def do_lsf(obs, mol, fit_vars, params=None, method='leastsq'):
 					max = fit_vars[x]['max'],
 					vary = fit_vars[x]['vary'],
 					)
+	parvals = params.valuesdict()
+	if 'Tbg' in parvals:
+		pass
+	else:
+		params.add(	'Tbg',
+					value = 2.7,
+					min = 2.7,
+					max = 2.71,
+					vary = False)
+	if 'size' in parvals:
+		pass
+	else:
+		params.add(	'size',
+					value = 1E20,
+					min = 1E19,
+					max = 1E21,
+					vary = False)
 	
 	def residual(params, x, obs, mol0, ll0, ul0, line_profile0, units, continuum):
 	
@@ -79,6 +102,12 @@ def do_lsf(obs, mol, fit_vars, params=None, method='leastsq'):
 		velocity = parvals['velocity']
 		Tex = parvals['Tex']
 		column = parvals['column']
+		Tbg = parvals['Tbg']
+		
+		if continuum is not None:
+			pass
+		else:
+			continuum = Continuum(params=Tbg)
 	
 		#generate a source object
 		source = Source(continuum = continuum,
@@ -99,8 +128,8 @@ def do_lsf(obs, mol, fit_vars, params=None, method='leastsq'):
 							use_obs = True,
 							units = units)
 		
-		return_sims.append(sim)
-		return np.array(obs.spectrum.Tb - sim.spectrum.int_profile)
+		#return_sims.append(sim)
+		return np.array(np.abs(obs.spectrum.Tb - sim.spectrum.int_profile))
 	
 	results = lmfit.minimize(residual, params, method=method, args=(obs.spectrum.frequency, obs, mol, int_params['ll'], int_params['ul'], int_params['line_profile'], int_params['units'], int_params['continuum']))
 

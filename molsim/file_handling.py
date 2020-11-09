@@ -468,7 +468,7 @@ def load_obs(filein=None,xunits='MHz',yunits='K',id=None,notes=None,spectrum_id=
 		if type == 'molsim':
 			obs.spectrum = _read_spectrum(filein)
 		#if the file is an alma ispec file, we get some of the info from the header	
-		if type == 'ispec':
+		elif type == 'ispec':
 			#read in the file into a temporary array
 			raw_arr = _read_txt(filein)
 			#eliminate all empty lines
@@ -500,8 +500,7 @@ def load_obs(filein=None,xunits='MHz',yunits='K',id=None,notes=None,spectrum_id=
 			if 'ylabel' in metadata.keys():
 				yunits = metadata['ylabel'].split('[')[1].split(']')[0]
 			
-			obs.spectrum = Spectrum(frequency=x,Tb=y,notes=yunits)	
-						
+			obs.spectrum = Spectrum(frequency=x,Tb=y,notes=yunits)							
 		else:
 			x,y = _read_xy(filein)
 			if xunits == 'GHz':
