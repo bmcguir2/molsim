@@ -629,8 +629,6 @@ def parallel_spcat_qrots(basename: str, *more_temps, nproc: int = 4):
             Q = final_dict.get(T)
             write_file.write(f"{float(T):.1f} {Q:.4f}\n")
     print(f"Partition functions written to {basename}.qpart")
-
-  
 				
 	
 	

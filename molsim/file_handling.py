@@ -488,7 +488,13 @@ def load_obs(filein=None,xunits='MHz',yunits='K',id=None,notes=None,spectrum_id=
 			#sort through the metadata
 			#look for frequency units
 			if 'xlabel' in metadata.keys():
-				xunits = metadata['xlabel'].split('[')[1].strip(']')
+				if '[' in metadata['xlabel']:
+					xunits = metadata['xlabel'].split('[')[1].strip(']')
+				elif '(' in metadata['xlabel']:
+					xunits = metadata['xlabel'].split('(')[1].strip(')')
+				else:
+					print('Unable to interpret frequency units from *.ispec file, assumed to be MHz')
+					xunits = 'mhz'
 			#change to MHz if required
 			convert_dict = {'mhz' : 1.0,
 							'ghz' : 1000.,
