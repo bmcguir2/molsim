@@ -19,9 +19,9 @@ For science-ready code, we recommend downloading one of the releases—these are
 
 For the latest build, either for testing or for contributing, please clone the `development` branch of this reposity.
 
-We recommend using `conda` for maintaining Python environments. Once you have acquired the code either from downloading a release or cloning the repository, you can create a new `conda` environment by running the following in the `molsim` directory:
+We recommend using `conda` for maintaining Python environments. Once you have acquired the code either from downloading a release or cloning the repository, you can create a new `conda` environment (called `molsim`) by running the following in the `molsim` directory:
 
-`conda create -f conda.yml`
+`conda env create -f conda.yml molsim`
 
 followed by:
 
