@@ -71,26 +71,30 @@ def _read_spcat(filein):
 	
 	#split everything out	
 	for x in raw_arr:
-		frequency.append(x[:13].strip())
-		freq_err.append(x[13:21].strip())
-		logint.append(x[21:29].strip())
-		dof.append(x[29:31].strip())
-		elow.append(x[31:41].strip())
-		gup.append(x[41:44].strip())
-		tag.append(x[44:51].strip())
-		qnformat.append(x[51:55].strip())
-		qn1.append(x[55:57].strip())
-		qn2.append(x[57:59].strip())
-		qn3.append(x[59:61].strip())
-		qn4.append(x[61:63].strip())
-		qn5.append(x[63:65].strip())
-		qn6.append(x[65:67].strip())
-		qn7.append(x[67:69].strip())
-		qn8.append(x[69:71].strip())
-		qn9.append(x[71:73].strip())
-		qn10.append(x[73:75].strip())
-		qn11.append(x[75:77].strip())
-		qn12.append(x[77:].strip())
+		#if there is a * in there, then the catalog was simulated too high for SPCAT format and we need to skip the line.
+		if '*' in x:
+			continue
+		else:
+			frequency.append(x[:13].strip())
+			freq_err.append(x[13:21].strip())
+			logint.append(x[21:29].strip())
+			dof.append(x[29:31].strip())
+			elow.append(x[31:41].strip())
+			gup.append(x[41:44].strip())
+			tag.append(x[44:51].strip())
+			qnformat.append(x[51:55].strip())
+			qn1.append(x[55:57].strip())
+			qn2.append(x[57:59].strip())
+			qn3.append(x[59:61].strip())
+			qn4.append(x[61:63].strip())
+			qn5.append(x[63:65].strip())
+			qn6.append(x[65:67].strip())
+			qn7.append(x[67:69].strip())
+			qn8.append(x[69:71].strip())
+			qn9.append(x[71:73].strip())
+			qn10.append(x[73:75].strip())
+			qn11.append(x[75:77].strip())
+			qn12.append(x[77:].strip())
 		
 	#now go through and fix everything into the appropriate formats and make numpy arrays as needed
 	
@@ -108,7 +112,7 @@ def _read_spcat(filein):
 	tag = np.array(tag)
 	tag = tag.astype(np.int)
 	qnformat = np.array(qnformat)
-	qnformat = qnformat.astype(np.int)
+	qnformat = qnformat.astype(np.int)	
 	
 	#convert elow to Kelvin
 		

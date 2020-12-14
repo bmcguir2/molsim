@@ -89,7 +89,7 @@ def _make_level_dict(qn1low,qn2low,qn3low,qn4low,qn5low,qn6low,qn7low,qn8low,qn1
 	
 	#do it again to fill in energy levels that were upper states and didn't get hit
 	for x in range(len(frequency)):
-		qnstr_up = qn_list_up[x]
+		qnstr_up = qn_list_up[x]	
 		if level_dict[qnstr_up] is None:
 			#calculate the energy.  Move the transition from MHz -> cm-1 -> K
 			freq_cm = (frequency[x]*1E6/ccm)
@@ -111,7 +111,7 @@ def _make_level_dict(qn1low,qn2low,qn3low,qn4low,qn5low,qn6low,qn7low,qn8low,qn1
 	
 	#go grab the degeneracies	
 	for x in range(len(frequency)):	
-		qnstr_up = qn_list_up[x]
+		qnstr_up = qn_list_up[x]	
 		if level_dict[qnstr_up]['g'] is None:
 			level_dict[qnstr_up]['g'] = gup[x]
 			

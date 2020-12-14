@@ -1127,7 +1127,9 @@ class Simulation(object):
 					mol = None, #Molecule object associated with this simulation
 					units = 'K', #units for the simulation; accepts 'K', 'mK', 'Jy/beam'
 					notes = None, #notes
-                    use_obs = False # flag for line profile simulation to be done with observations
+                    use_obs = False, # flag for line profile simulation to be done with observations
+                    add_noise = False, #flag for whether to add noise 
+                    noise = None, # Noise level in native units of the simulation to add
 				):
 				
 		self.spectrum = spectrum
@@ -1149,6 +1151,8 @@ class Simulation(object):
 		self.gup = None
 		self.eup = None
 		self.use_obs = use_obs
+		self.add_noise = add_noise
+		self.noise = noise
 		
 		self._set_arrays()
 		self._apply_voffset()
@@ -1158,7 +1162,9 @@ class Simulation(object):
 		self.spectrum.Tb = self._calc_Tb(self.spectrum.frequency,self.spectrum.tau,self.spectrum.Tbg,self.source.Tex)
 		self._make_lines()
 		self._beam_correct()
+		self._apply_eta()
 		self._set_units()
+		self._add_noise()
 		
 		return	
 	
@@ -1240,7 +1246,13 @@ class Simulation(object):
 				self.spectrum.Tb,self.beam_dilution = _apply_beam(self.spectrum.frequency,self.spectrum.Tb,self.source.size,self.observation.observatory.dish,return_beam=True)
 				self.spectrum.int_profile = _apply_beam(self.spectrum.freq_profile,self.spectrum.int_profile,self.source.size,self.observation.observatory.dish,return_beam=False)
 		return	
-  
+		
+	def _apply_eta(self):
+		if self.observation.observatory.eta is not None:
+				self.spectrum.Tb *= self.observation.observatory.eta
+				self.spectrum.int_profile *= self.observation.observatory.eta
+		return
+
 	def _make_lines(self):
 		if self.line_profile is None:
 			return
@@ -1313,6 +1325,30 @@ class Simulation(object):
 			return
 			
 	
+		return
+
+	def _add_noise(self):
+		
+		'''
+		Adds Gaussian noise to the simulation.
+		'''
+		
+		#check if user has specified to use noise or not, and if so, if they have specified the noise level to use
+		if self.add_noise is False:
+			return
+		if self.add_noise is True and self.noise is None:
+			print('WARNING: User specified to add noise to this simulation, but did not provide a noise level.')
+			return
+		
+		#initiate the random number generator
+		rng = np.random.default_rng()
+		
+		#generate a noise array the same length as the simulation,
+		noise_arr = rng.normal(0,self.noise,len(self.spectrum.int_profile))
+		
+		#add the noise to the simulation
+		self.spectrum.int_profile += noise_arr
+		
 		return
 				
 	def print_lines(self,ll=None,ul=None,threshold=None,use_profile=False,dV=None,vlsr=None,file_out=None,latex_out=False,txt_out=False):
@@ -1528,6 +1564,7 @@ class Simulation(object):
 		self._make_lines()
 		self._beam_correct()
 		self._set_units()
+		self._add_noise()
 		return											
 																
 class Trace(object):
