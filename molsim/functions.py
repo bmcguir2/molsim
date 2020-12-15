@@ -8,7 +8,7 @@ from datetime import date
 import matplotlib.pyplot as plt
 import matplotlib
 
-def sum_spectra(sims,thin=True,Tex=None,Tbg=None,res=None,name='sum'):
+def sum_spectra(sims,thin=True,Tex=None,Tbg=None,res=None,noise=None,name='sum'):
 
 	'''
 	Adds all the spectra in the simulations list and returns a spectrum object.  By default,
@@ -65,6 +65,18 @@ def sum_spectra(sims,thin=True,Tex=None,Tbg=None,res=None,name='sum'):
 		int_arr = (J_T - J_Tbg)*(1 - np.exp(-int_arr))
 		sum_spectrum.int_profile = int_arr
 
+	#add in noise, if requested
+	if noise is not None:
+		#initiate the random number generator
+		rng = np.random.default_rng()
+		
+		#generate a noise array the same length as the simulation,
+		noise_arr = rng.normal(0,noise,len(sum_spectrum.int_profile))
+		
+		#add it in
+		sum_spectrum.int_profile += noise_arr
+
+	
 	return sum_spectrum
 	
 def resample_obs(x_arr,y_arr,res,return_spectrum=False):

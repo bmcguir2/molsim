@@ -1153,18 +1153,25 @@ class Simulation(object):
 		self.use_obs = use_obs
 		self.add_noise = add_noise
 		self.noise = noise
-		
+		self.lines_in_range = True
+				
 		self._set_arrays()
-		self._apply_voffset()
-		self._calc_tau()
-		self._calc_bg()
-		self._calc_Iv()
-		self.spectrum.Tb = self._calc_Tb(self.spectrum.frequency,self.spectrum.tau,self.spectrum.Tbg,self.source.Tex)
-		self._make_lines()
-		self._beam_correct()
-		self._apply_eta()
-		self._set_units()
-		self._add_noise()
+		self._check_coverage()
+		if self.lines_in_range is False:
+			self.spectrum.freq_profile = np.array([])
+			self.spectrum.int_profile = np.array([])
+			return
+		else:
+			self._apply_voffset()
+			self._calc_tau()
+			self._calc_bg()
+			self._calc_Iv()
+			self.spectrum.Tb = self._calc_Tb(self.spectrum.frequency,self.spectrum.tau,self.spectrum.Tbg,self.source.Tex)
+			self._make_lines()
+			self._beam_correct()
+			self._apply_eta()
+			self._set_units()
+			self._add_noise()
 		
 		return	
 	
@@ -1190,6 +1197,15 @@ class Simulation(object):
 		self.gup = self.mol.catalog.gup[mask]
 		self.eup = self.mol.catalog.eup[mask]
 		return
+		
+	def _check_coverage(self):
+		'''
+		Checks to see if any lines remain after trimming and if there aren't, sets the flag to False so that it doesn't try to compute further.
+		'''
+		if len(self.spectrum.frequency) == 0:
+			self.lines_in_range = False
+			return
+			
 		
 	def _apply_voffset(self):
 		self.spectrum.frequency = _apply_vlsr(self.spectrum.freq0,self.source.velocity)
