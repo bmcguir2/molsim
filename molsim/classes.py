@@ -1470,7 +1470,10 @@ class Simulation(object):
 			print_sijmus.append(self.mol.catalog.sijmu[x:y])							 
 				
 		for x,y in zip(sim_l_idxs,sim_u_idxs):	
-			print_ints.append(self.spectrum.Tb[x:y])
+			if x == y:
+				print_ints.append(self.spectrum.Tb[x])
+			else:
+				print_ints.append(self.spectrum.Tb[x:y])
 		
 		print_freqs = np.array([item for sublist in print_freqs for item in sublist])
 		print_ints = np.array([item for sublist in print_ints for item in sublist])
