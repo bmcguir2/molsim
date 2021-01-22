@@ -1471,7 +1471,7 @@ class Simulation(object):
 				
 		for x,y in zip(sim_l_idxs,sim_u_idxs):	
 			if x == y:
-				print_ints.append(self.spectrum.Tb[x])
+				print_ints.append([self.spectrum.Tb[x]])
 			else:
 				print_ints.append(self.spectrum.Tb[x:y])
 		
