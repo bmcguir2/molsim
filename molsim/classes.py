@@ -1450,7 +1450,7 @@ class Simulation(object):
 		print_sijmus = []
 		
 		for x,y in zip(l_idxs,u_idxs):
-			print_freqs.append(self.mol.catalog.frequency[x:y])
+			print_freqs.append(self.mol.catalog.frequency[x:y]) if x != y else print_freqs.append([self.mol.catalog.frequency[x]])
 			for i in range(x,y):
 				qn_us = []
 				for qn_u in [self.mol.catalog.qn1up[i], self.mol.catalog.qn2up[i], self.mol.catalog.qn3up[i], self.mol.catalog.qn4up[i], self.mol.catalog.qn5up[i], self.mol.catalog.qn6up[i], self.mol.catalog.qn7up[i], self.mol.catalog.qn8up[i]]:
@@ -1463,17 +1463,14 @@ class Simulation(object):
 				qn_u_str = _make_fmted_qnstr(qn_us)
 				qn_l_str = _make_fmted_qnstr(qn_ls)
 				print_qns.append(qn_u_str + ' -> ' + qn_l_str)
-			print_eups.append(self.mol.catalog.eup[x:y])
-			print_gus.append(self.mol.catalog.gup[x:y])
-			print_gls.append(self.mol.catalog.glow[x:y])
-			print_aijs.append(np.log10(self.mol.catalog.aij[x:y]))
-			print_sijmus.append(self.mol.catalog.sijmu[x:y])							 
+			print_eups.append(self.mol.catalog.eup[x:y]) if x != y else print_eups.append([self.mol.catalog.eup[x]])
+			print_gus.append(self.mol.catalog.gup[x:y]) if x != y else print_gus.append([self.mol.catalog.gup[x]])
+			print_gls.append(self.mol.catalog.glow[x:y]) if x != y else print_gls.append([self.mol.catalog.glow[x]])
+			print_aijs.append(np.log10(self.mol.catalog.aij[x:y])) if x != y else print_aijs.append(np.log10([self.mol.catalog.aij[x]]))
+			print_sijmus.append(self.mol.catalog.sijmu[x:y]) if x != y else	print_sijmus.append([self.mol.catalog.sijmu[x]])		 				 
 				
 		for x,y in zip(sim_l_idxs,sim_u_idxs):	
-			if x == y:
-				print_ints.append([self.spectrum.Tb[x]])
-			else:
-				print_ints.append(self.spectrum.Tb[x:y])
+			print_ints.append(self.spectrum.Tb[x:y]) if x != y else print_ints.append([self.spectrum.Tb[x]])
 		
 		print_freqs = np.array([item for sublist in print_freqs for item in sublist])
 		print_ints = np.array([item for sublist in print_ints for item in sublist])
