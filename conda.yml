@@ -15,3 +15,7 @@ dependencies:
   - ipywidgets
   - xarray
   - dask
+  - arviz
+  - numexpr
+  - tqdm
+  - h5py
