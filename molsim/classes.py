@@ -1465,7 +1465,6 @@ class Simulation(object):
 				for qn_l in [self.mol.catalog.qn1low[i], self.mol.catalog.qn2low[i], self.mol.catalog.qn3low[i], self.mol.catalog.qn4low[i], self.mol.catalog.qn5low[i], self.mol.catalog.qn6low[i], self.mol.catalog.qn7low[i], self.mol.catalog.qn8low[i], ]:
 					if qn_l is not None:
 						qn_ls.append(qn_l)
-				print(f'At {self.mol.catalog.frequency[i]:.4f} I think the qns are {qn_us} and {qn_ls}')		
 				qn_u_str = _make_fmted_qnstr(qn_us)
 				qn_l_str = _make_fmted_qnstr(qn_ls)
 				print_freqs.append([self.mol.catalog.frequency[i]])
