@@ -1450,10 +1450,13 @@ class Simulation(object):
 		print_sijmus = []
 		
 		idx_count = 0 #to track where we are in lls,uls
+		idx_used = [] #to track if a line has already been included so it's not double printed
 		for x,y in zip(l_idxs,u_idxs):
-			#print_freqs.append(self.mol.catalog.frequency[x:y]) if x != y else print_freqs.append([self.mol.catalog.frequency[x]])
-			if x == y:
-				i = x
+			for i in range(x,y+1):
+				if i in idx_used:
+					continue
+				if self.mol.catalog.frequency[i] < lls[idx_count] or self.mol.catalog.frequency[i] > uls[idx_count]:
+					continue
 				qn_us = []
 				for qn_u in [self.mol.catalog.qn1up[i], self.mol.catalog.qn2up[i], self.mol.catalog.qn3up[i], self.mol.catalog.qn4up[i], self.mol.catalog.qn5up[i], self.mol.catalog.qn6up[i], self.mol.catalog.qn7up[i], self.mol.catalog.qn8up[i]]:
 					if qn_u is not None:
@@ -1462,6 +1465,7 @@ class Simulation(object):
 				for qn_l in [self.mol.catalog.qn1low[i], self.mol.catalog.qn2low[i], self.mol.catalog.qn3low[i], self.mol.catalog.qn4low[i], self.mol.catalog.qn5low[i], self.mol.catalog.qn6low[i], self.mol.catalog.qn7low[i], self.mol.catalog.qn8low[i], ]:
 					if qn_l is not None:
 						qn_ls.append(qn_l)
+				print(f'At {self.mol.catalog.frequency[i]:.4f} I think the qns are {qn_us} and {qn_ls}')		
 				qn_u_str = _make_fmted_qnstr(qn_us)
 				qn_l_str = _make_fmted_qnstr(qn_ls)
 				print_freqs.append([self.mol.catalog.frequency[i]])
@@ -1470,32 +1474,8 @@ class Simulation(object):
 				print_gus.append([self.mol.catalog.gup[i]])
 				print_gls.append([self.mol.catalog.glow[i]])
 				print_aijs.append(np.log10([self.mol.catalog.aij[i]]))
-				print_sijmus.append([self.mol.catalog.sijmu[i]])				
-			else:
-				for i in range(x,y+1):
-					#make sure that the line doesn't accidentally fall outside the searched range, which can happen if the closest line to an upper or lower limit is on the wrong side of that limit.
-					if lls[idx_count] <= self.mol.catalog.frequency[i] <= uls[idx_count]:
-						pass
-					else:
-						continue
-					qn_us = []
-					for qn_u in [self.mol.catalog.qn1up[i], self.mol.catalog.qn2up[i], self.mol.catalog.qn3up[i], self.mol.catalog.qn4up[i], self.mol.catalog.qn5up[i], self.mol.catalog.qn6up[i], self.mol.catalog.qn7up[i], self.mol.catalog.qn8up[i]]:
-						if qn_u is not None:
-							qn_us.append(qn_u)
-					qn_ls = []
-					for qn_l in [self.mol.catalog.qn1low[i], self.mol.catalog.qn2low[i], self.mol.catalog.qn3low[i], self.mol.catalog.qn4low[i], self.mol.catalog.qn5low[i], self.mol.catalog.qn6low[i], self.mol.catalog.qn7low[i], self.mol.catalog.qn8low[i], ]:
-						if qn_l is not None:
-							qn_ls.append(qn_l)
-					qn_u_str = _make_fmted_qnstr(qn_us)
-					qn_l_str = _make_fmted_qnstr(qn_ls)
-					print_freqs.append([self.mol.catalog.frequency[i]])
-					print_qns.append(qn_u_str + ' -> ' + qn_l_str)
-					print_qns.append(qn_u_str + ' -> ' + qn_l_str)	
-					print_eups.append([self.mol.catalog.eup[i]])
-					print_gus.append([self.mol.catalog.gup[i]])
-					print_gls.append([self.mol.catalog.glow[i]])
-					print_aijs.append(np.log10([self.mol.catalog.aij[i]]))
-					print_sijmus.append([self.mol.catalog.sijmu[i]])						
+				print_sijmus.append([self.mol.catalog.sijmu[i]])
+				idx_used.append(i)						
 			idx_count += 1	 				 
 		
 		for x,y in zip(sim_l_idxs,sim_u_idxs):	
