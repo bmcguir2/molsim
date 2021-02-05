@@ -1449,8 +1449,9 @@ class Simulation(object):
 		print_aijs = []
 		print_sijmus = []
 		
+		idx_count = 0 #to track where we are in lls,uls
 		for x,y in zip(l_idxs,u_idxs):
-			print_freqs.append(self.mol.catalog.frequency[x:y]) if x != y else print_freqs.append([self.mol.catalog.frequency[x]])
+			#print_freqs.append(self.mol.catalog.frequency[x:y]) if x != y else print_freqs.append([self.mol.catalog.frequency[x]])
 			if x == y:
 				i = x
 				qn_us = []
@@ -1463,9 +1464,20 @@ class Simulation(object):
 						qn_ls.append(qn_l)
 				qn_u_str = _make_fmted_qnstr(qn_us)
 				qn_l_str = _make_fmted_qnstr(qn_ls)
+				print_freqs.append([self.mol.catalog.frequency[i]])
 				print_qns.append(qn_u_str + ' -> ' + qn_l_str)	
+				print_eups.append([self.mol.catalog.eup[i]])
+				print_gus.append([self.mol.catalog.gup[i]])
+				print_gls.append([self.mol.catalog.glow[i]])
+				print_aijs.append(np.log10([self.mol.catalog.aij[i]]))
+				print_sijmus.append([self.mol.catalog.sijmu[i]])				
 			else:
-				for i in range(x,y):
+				for i in range(x,y+1):
+					#make sure that the line doesn't accidentally fall outside the searched range, which can happen if the closest line to an upper or lower limit is on the wrong side of that limit.
+					if lls[idx_count] <= self.mol.catalog.frequency[i] <= uls[idx_count]:
+						pass
+					else:
+						continue
 					qn_us = []
 					for qn_u in [self.mol.catalog.qn1up[i], self.mol.catalog.qn2up[i], self.mol.catalog.qn3up[i], self.mol.catalog.qn4up[i], self.mol.catalog.qn5up[i], self.mol.catalog.qn6up[i], self.mol.catalog.qn7up[i], self.mol.catalog.qn8up[i]]:
 						if qn_u is not None:
@@ -1476,16 +1488,20 @@ class Simulation(object):
 							qn_ls.append(qn_l)
 					qn_u_str = _make_fmted_qnstr(qn_us)
 					qn_l_str = _make_fmted_qnstr(qn_ls)
+					print_freqs.append([self.mol.catalog.frequency[i]])
 					print_qns.append(qn_u_str + ' -> ' + qn_l_str)
-			print_eups.append(self.mol.catalog.eup[x:y]) if x != y else print_eups.append([self.mol.catalog.eup[x]])
-			print_gus.append(self.mol.catalog.gup[x:y]) if x != y else print_gus.append([self.mol.catalog.gup[x]])
-			print_gls.append(self.mol.catalog.glow[x:y]) if x != y else print_gls.append([self.mol.catalog.glow[x]])
-			print_aijs.append(np.log10(self.mol.catalog.aij[x:y])) if x != y else print_aijs.append(np.log10([self.mol.catalog.aij[x]]))
-			print_sijmus.append(self.mol.catalog.sijmu[x:y]) if x != y else	print_sijmus.append([self.mol.catalog.sijmu[x]])		 				 
-				
-		for x,y in zip(sim_l_idxs,sim_u_idxs):	
-			print_ints.append(self.spectrum.Tb[x:y]) if x != y else print_ints.append([self.spectrum.Tb[x]])
+					print_qns.append(qn_u_str + ' -> ' + qn_l_str)	
+					print_eups.append([self.mol.catalog.eup[i]])
+					print_gus.append([self.mol.catalog.gup[i]])
+					print_gls.append([self.mol.catalog.glow[i]])
+					print_aijs.append(np.log10([self.mol.catalog.aij[i]]))
+					print_sijmus.append([self.mol.catalog.sijmu[i]])						
+			idx_count += 1	 				 
 		
+		for x,y in zip(sim_l_idxs,sim_u_idxs):	
+			print_ints.append(self.spectrum.Tb[x:y+1]) if x != y else print_ints.append([self.spectrum.Tb[x]])
+		
+		#given bug fix refactors above, this could be removed by changing the way things are added above (as small lists)
 		print_freqs = np.array([item for sublist in print_freqs for item in sublist])
 		print_ints = np.array([item for sublist in print_ints for item in sublist])
 		print_qns = np.array(print_qns)
