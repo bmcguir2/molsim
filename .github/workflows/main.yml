@@ -33,6 +33,7 @@ jobs:
         run: |
           $CONDA/bin/conda env update -f conda.yml --name base
           $CONDA/bin/conda install flake8 pytest
+          $CONDA/bin/pip install --upgrade pip
       - name: Install molsim into environment
         run: |
           pip install -e .[dev]
