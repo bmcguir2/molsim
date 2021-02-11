@@ -20,12 +20,12 @@ VERSION = '0.1.1'
 
 # What packages are required for this module to be executed?
 REQUIRED = [
-    'astropy', 'numpy', 'scipy', 'emcee', 'matplotlib', 'tabulate', 'ruamel.yaml', 'lmfit'
+    'astropy', 'numpy', 'scipy', 'emcee', 'matplotlib', 'tabulate', 'ruamel.yaml', 'lmfit', 'loguru', 'tqdm'
 ]
 
 # What packages are optional?
 EXTRAS = {
-    # 'fancy feature': ['django'],
+    "dev": ["pytest", "pytest-pep8", "flake8", "black"]
 }
 
 # The rest you shouldn't have to touch too much :)
