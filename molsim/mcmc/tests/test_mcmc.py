@@ -6,8 +6,8 @@ import numpy as np
 
 def test_likelihoods():
     source_size = UniformLikelihood.from_values("ss", 0.0, 400.0)
-    ncol = UniformLikelihood.from_values("ncol", 0.0, 1e16)
-    vlsr = UniformLikelihood.from_values("vlsr", 0.0, 10.0)
+    _ = UniformLikelihood.from_values("ncol", 0.0, 1e16)
+    _ = UniformLikelihood.from_values("vlsr", 0.0, 10.0)
     Tex = GaussianLikelihood.from_values("tex", 5.8, 0.5, 0.0, 10.0)
     dV = GaussianLikelihood.from_values("dV", 0.1, 1e-1, 0.0, 0.3)
 
@@ -22,7 +22,8 @@ def test_likelihoods():
 
 
 def test_single_component():
-    seed = np.random.seed(42)
+    # make the sampling deterministic
+    _ = np.random.seed(42)
 
     source_size = UniformLikelihood.from_values("ss", 0.0, 400.0)
     ncol = UniformLikelihood.from_values("ncol", 0.0, 1e16)
@@ -52,7 +53,8 @@ def test_single_component():
 
 
 def test_multi_component():
-    seed = np.random.seed(42)
+    # make the sampling deterministic
+    _ = np.random.seed(42)
 
     source_sizes = [UniformLikelihood.from_values("ss", 0.0, 400.0) for _ in range(4)]
     vlsrs = [UniformLikelihood.from_values("vlsr", 0.0, 10.0) for _ in range(4)]
@@ -75,7 +77,7 @@ def test_multi_component():
 
     model._get_components()
 
-    # check the intialization routine is still working deterministically when asked to be
+    # check the intialization routine is still working deterministically when asked
     initial = model.sample_prior()
     static = [
         149.81604753894499,
