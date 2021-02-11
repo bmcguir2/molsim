@@ -28,7 +28,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v2.2.1
         with:
-          python-version: 3.79
+          python-version: 3.7.9
       - name: Install dependencies with anaconda
         run: |
           $CONDA/bin/conda env update -f conda.yml --name base
