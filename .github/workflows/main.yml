@@ -38,5 +38,5 @@ jobs:
           pip install -e .[dev]
       - name: Run CI actions
         run: |
-          $CONDA/bin/flake8
+          # $CONDA/bin/flake8
           $CONDA/bin/pytest
