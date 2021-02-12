@@ -28,6 +28,8 @@ def sum_spectra(sims,thin=True,Tex=None,Tbg=None,res=None,noise=None,name='sum')
 	#first we find out the limits of the total frequency coverage so we can make an
 	#appropriate array to resample onto
 	total_freq = np.concatenate([x.spectrum.freq_profile for x in sims])
+	#eliminate all duplicate entries
+	total_freq = np.array(list(set(total_freq)))
 	total_freq.sort()
 	lls,uls = find_limits(total_freq,spacing_tolerance=2,padding=0)
 		
