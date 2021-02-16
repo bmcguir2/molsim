@@ -280,7 +280,6 @@ class MultiComponent(SingleComponent):
         nominal_vlsr: float = 0.0,
     ):
         super().__init__(source_sizes, vlsrs, Ncols, Tex, dV, observation, molecule)
-        assert len(source_sizes) == len(vlsrs) == len(Ncols)
         self.components = list()
         # these are not used in preference of `self.components` instead
         self.source_size = self.vlsr = self.Ncol = self._distributions = None
