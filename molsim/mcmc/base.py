@@ -11,6 +11,7 @@ import json
 import numpy as np
 import emcee
 import arviz
+from molsim import __version__
 from loguru import logger
 
 # this makes sure that the full range of parameters are shown
@@ -280,11 +281,6 @@ class EmceeHelper(object):
         self.chain = None
         self._positions = None
         self.sampler = None
-        logger.info("MCMC analysis using emcee and Molsim")
-        logger.info(
-            f"NumPy version: {np.__version__}, Emcee version: {emcee.__version__}"
-        )
-        logger.info(f"Initial parameters: {initial}")
 
     @property
     def posterior(self):
@@ -303,6 +299,17 @@ class EmceeHelper(object):
             [description]
         """
         return arviz.convert_to_inference_data(self.chain)
+
+    def _boiler_plate_logging(self):
+        logger.info("----------------------------------------------------------")
+        logger.info("MCMC analysis using emcee and Molsim")
+        logger.info(
+            f"NumPy version: {np.__version__}, Emcee version: {emcee.__version__}"
+        )
+        logger.info(
+            f"ArViz version: {arviz.__version__}, Molsim version: {__version__}"
+        )
+        logger.info("----------------------------------------------------------")
 
     @staticmethod
     def likelihood_checks(model: AbstractModel, parameters: np.ndarray):
@@ -350,6 +357,9 @@ class EmceeHelper(object):
         scale: Union[float, None] = 1e-2,
         restart: bool = False
     ):
+        logger.add(f"emcee_sampling.log", rotation="100 MB", colorize=False)
+        # do the usual stuffs
+        self._boiler_plate_logging()
         logger.info(f"Performing sampling with model:")
         logger.info(f"{model}")
         if restart:
@@ -372,8 +382,9 @@ class EmceeHelper(object):
                 scrambler = np.ones_like(positions)
                 scrambler += np.random.uniform(-scale, scale, (walkers, self.ndim))
                 positions *= scrambler
-        self.likelihood_checks(model, initial)
+        logger.info(f"Seed position: {initial}")
         logger.info(f"Starting positions: {positions}")
+        self.likelihood_checks(model, initial)
         # run the MCMC sampling
         if workers > 1:
             logger.info(f"Using multiprocessing for sampling with {workers} processes.")
