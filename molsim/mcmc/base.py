@@ -361,6 +361,7 @@ class EmceeHelper(object):
         # do the usual stuffs
         self._boiler_plate_logging()
         logger.info(f"Performing sampling with model:")
+        logger.info(f"Number of iterations: {iterations}")
         logger.info(f"{model}")
         if restart:
             # if we're restarting, just take the last step
@@ -420,8 +421,9 @@ class EmceeHelper(object):
         self.sampler = sampler
         self.chain = sampler.chain
         self.positions = sampler.get_last_sample()
-        report = arviz.summary(self.posterior.posterior.isel(draw=slice(-30, None)))
-        logger.info("Summary of last 30 steps of sampling:")
+        last_positions = int(iterations * 0.1)
+        report = arviz.summary(self.posterior.posterior.isel(draw=slice(-last_positions, None)))
+        logger.info(f"Summary of last {last_positions} (10%) steps of sampling:")
         logger.info(report)
 
     def save_posterior(self, filename: str) -> None:
@@ -431,7 +433,7 @@ class EmceeHelper(object):
 
     @classmethod
     def from_netcdf(cls, netcdf_path: str, restart: bool = False):
-        logger.info(f"Loading NetCDF chain; restarti = {restart}")
+        logger.info(f"Loading NetCDF chain; restart = {restart}")
         samples = arviz.from_netcdf(netcdf_path)
         # if we're restarting sampling, take the last position
         if restart:
