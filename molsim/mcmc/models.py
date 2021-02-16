@@ -31,7 +31,6 @@ class SingleComponent(AbstractModel):
     dV: AbstractDistribution
     observation: Observation
     molecule: Molecule
-    nominal_vlsr: float = 0.0
 
     def __post_init__(self):
         self._distributions = [
@@ -253,7 +252,7 @@ class SingleComponent(AbstractModel):
                     # load in the observed data
                     cls_dict[key] = load(input_dict[key])
                 else:
-                    cls_dict[key] = input_dict.get(key, 0.0)
+                    logger.warning(f"{key} is not recognized, and therefore ignored.")
         return cls(**cls_dict)
 
 
@@ -277,7 +276,6 @@ class MultiComponent(SingleComponent):
         dV: AbstractDistribution,
         observation: Observation,
         molecule: Molecule,
-        nominal_vlsr: float = 0.0,
     ):
         super().__init__(source_sizes, vlsrs, Ncols, Tex, dV, observation, molecule)
         self.components = list()
@@ -286,7 +284,7 @@ class MultiComponent(SingleComponent):
         for ss, vlsr, Ncol in zip(source_sizes, vlsrs, Ncols):
             self.components.append(
                 SingleComponent(
-                    ss, vlsr, Ncol, Tex, dV, observation, molecule, nominal_vlsr
+                    ss, vlsr, Ncol, Tex, dV, observation, molecule,
                 )
             )
 
@@ -351,9 +349,6 @@ class MultiComponent(SingleComponent):
         # load in the observed data
         cls_dict["observation"] = load(input_dict["observation"])
         cls_dict["molecule"] = load(input_dict["molecule"])
-        cls_dict["nominal_vlsr"] = input_dict.get("nominal_vlsr", 0.0)
-        if cls_dict["nominal_vlsr"] == 0.0:
-            logger.warning("Nominal VLSR is set to zero; make sure this is correct!")
         return cls(**cls_dict)
 
     def __len__(self) -> int:
@@ -421,10 +416,9 @@ class TMC1FourComponent(MultiComponent):
         dV: AbstractDistribution,
         observation: Observation,
         molecule: Molecule,
-        nominal_vlsr: float = 0.0,
     ):
         super().__init__(
-            source_sizes, vlsrs, Ncols, Tex, dV, observation, molecule, nominal_vlsr
+            source_sizes, vlsrs, Ncols, Tex, dV, observation, molecule,
         )
 
     def compute_prior_likelihood(self, parameters: np.ndarray) -> float:
