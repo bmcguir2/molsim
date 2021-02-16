@@ -92,6 +92,9 @@ class SingleComponent(AbstractModel):
             NumPy 1D array corresponding to the simulated spectrum
         """
         size, vlsr, ncol, Tex, dV = parameters
+        # Assume that the value is in log space, if it's below 1000
+        if ncol <= 1e3:
+            ncol = 10**ncol
         source = Source("", vlsr, size, column=ncol, Tex=Tex, dV=dV)
         if not hasattr(self, "simulation"):
             min_freq, max_freq = find_limits(self.observation.spectrum.frequency)

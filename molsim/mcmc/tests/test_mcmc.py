@@ -116,3 +116,69 @@ def test_multi_component():
     ]
     likelihood = model.compute_prior_likelihood(parameters)
     assert np.round(abs(likelihood - 4.579927708578582)) == 0.0
+
+
+def test_log_column():
+    # make the sampling deterministic
+    _ = np.random.seed(42)
+
+    source_sizes = [UniformLikelihood.from_values("ss", 0.0, 400.0) for _ in range(4)]
+    vlsrs = [UniformLikelihood.from_values("vlsr", 0.0, 10.0) for _ in range(4)]
+    ncols = [UniformLikelihood.from_values("ncol", 0., 14.) for _ in range(4)]
+    Tex = GaussianLikelihood.from_values("tex", 5.8, 0.5, 0.0, 10.0)
+    dV = GaussianLikelihood.from_values("dV", 0.1, 1e-1, 0.0, 0.3)
+
+    model = MultiComponent(
+        source_sizes,
+        vlsrs,
+        ncols,
+        Tex,
+        dV,
+        None,
+        None,
+    )
+
+    # should be 14 parameters total; 3 * 4 components + 2
+    assert len(model) == 14
+
+    model._get_components()
+
+    # check the intialization routine is still working deterministically when asked
+    initial = model.sample_prior()
+    static = [
+        149.81604753894499,
+        62.39780813448106,
+        8.233797718320979,
+        73.36180394137352,
+        9.50714306409916,
+        0.5808361216819946,
+        9.699098521619943,
+        3.0424224295953772,
+        10.247915185359671, 
+        12.126466040849092, 
+        11.654196971205904, 
+        7.3465900428513295,
+        4.937541083743484,
+        0.043771247075902735,
+    ]
+    assert np.allclose(initial, static)
+
+    # make sure the combined likelihood looks reasonable
+    parameters = [
+        100.0,
+        96,
+        20,
+        45,
+        5.0,
+        5.6,
+        6.44,
+        4.3,
+        10.24,
+        12.125,
+        11.65,
+        7.347,
+        5.87,
+        0.09216,
+    ]
+    likelihood = model.compute_prior_likelihood(parameters)
+    assert np.round(abs(likelihood - 4.579927708578582)) == 0.0
