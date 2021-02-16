@@ -269,8 +269,8 @@ class AbstractModel(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def prior_constraint(self, parameters: np.ndarray):
-        pass
+    def prior_constraint(self, parameters: np.ndarray) -> float:
+        raise NotImplementedError
 
 
 class EmceeHelper(object):

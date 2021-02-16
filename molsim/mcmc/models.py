@@ -1,5 +1,4 @@
-from typing import Type, Dict, Union, Callable, List, Tuple
-from pathlib import Path
+from typing import Type, Dict, Union, Callable, List, Tuple, Iterable
 from dataclasses import dataclass
 
 import numpy as np
@@ -126,8 +125,25 @@ class SingleComponent(AbstractModel):
         intensity = self.simulation.spectrum.int_profile
         return intensity
 
-    def prior_constraint(self, parameters: np.ndarray):
-        pass
+    def prior_constraint(self, parameters: np.ndarray) -> float:
+        """
+        Function that will apply a constrain on the prior. This function
+        should be overwritten in child models, say for example in the
+        TMC-1 four component case, where we want to constrain parameter
+        space to certain regions.
+
+        Parameters
+        ----------
+        parameters : np.ndarray
+            NumPy 1D array containing parameter values
+
+        Returns
+        -------
+        float
+            Return zero if parameters pass the constraint, otherwise
+            return -np.inf
+        """
+        return 0.
 
     def compute_prior_likelihood(self, parameters: np.ndarray) -> float:
         """
@@ -144,6 +160,7 @@ class SingleComponent(AbstractModel):
         float
             The total prior log likelihood
         """
+        lnlikelihood = self.prior_constraint(parameters)
         lnlikelihood = sum(
             [
                 dist.ln_likelihood(value)
@@ -399,13 +416,33 @@ class MultiComponent(SingleComponent):
             combined_intensity += component.simulate_spectrum(subparams)
         return combined_intensity
 
+    def prior_constraint(self, parameters: np.ndarray) -> float:
+        """
+        Applies a constraint on the model parameters as a whole.
+        The idea is that for more complex models, this method should
+        be overridden, rather than having to redefine the likelihood
+        calculation itself.
+        
+        Another way of thinking about this would be to use decorators,
+        but that may be more complicated than what is needed here.
+
+        Parameters
+        ----------
+        parameters : np.ndarray
+            NumPy 1D array containing parameter values
+
+        Returns
+        -------
+        float
+            Returns 0 because no constraint is applied
+        """
+        return 0.
+
     def compute_prior_likelihood(self, parameters: np.ndarray) -> float:
+        lnlikelihood = self.prior_constraint(parameters)
         for index, component in enumerate(self.components):
             subparams = self._get_component_parameters(parameters, index)
-            if index == 0:
-                lnlikelihood = component.compute_prior_likelihood(subparams)
-            else:
-                lnlikelihood += component.compute_prior_likelihood(subparams)
+            lnlikelihood += component.compute_prior_likelihood(subparams)
         return lnlikelihood
 
 
@@ -424,7 +461,23 @@ class TMC1FourComponent(MultiComponent):
             source_sizes, vlsrs, Ncols, Tex, dV, observation, molecule,
         )
 
-    def compute_prior_likelihood(self, parameters: np.ndarray) -> float:
+    def prior_constraint(self, parameters: np.ndarray) -> float:
+        """
+        Applies the TMC-1 four component velocity constraint, where we
+        make sure that the four velocity components do not stray too
+        far from one another.
+
+        Parameters
+        ----------
+        parameters : np.ndarray
+            NumPy 1D array containing parameter values
+
+        Returns
+        -------
+        float
+            Return zero if the constraints are met, otherwise negative
+            infinity.
+        """
         vlsr1, vlsr2, vlsr3, vlsr4 = parameters[[4, 5, 6, 7]]
         if (
             (vlsr1 < (vlsr2 - 0.05))
@@ -434,14 +487,9 @@ class TMC1FourComponent(MultiComponent):
             and (vlsr3 < (vlsr2 + 0.3))
             and (vlsr4 < (vlsr3 + 0.3))
         ):
-            for index, component in enumerate(self.components):
-                subparams = self._get_component_parameters(parameters, index)
-                if index == 0:
-                    lnlikelihood = component.compute_prior_likelihood(subparams)
-                else:
-                    lnlikelihood += component.compute_prior_likelihood(subparams)
-            return lnlikelihood
-        return -np.inf
+            return 0.
+        else:
+            return -np.inf
 
 
 class CospatialTMC1(TMC1FourComponent):
@@ -553,8 +601,26 @@ class CospatialTMC1(TMC1FourComponent):
             ])
         return subparams
 
-    def compute_prior_likelihood(self, parameters: np.ndarray) -> float:
-        # modifies this slightly to match the number of parameters expected
+    def prior_constraint(self, parameters: np.ndarray) -> float:
+        """
+        Applies the TMC-1 four component velocity constraint, where we
+        make sure that the four velocity components do not stray too
+        far from one another. This is modified to match the correct
+        indices for the parameters (given there is only one source size).
+        
+        Not the cleanest way to do this, but probably the most straightforward.
+
+        Parameters
+        ----------
+        parameters : np.ndarray
+            NumPy 1D array containing parameter values
+
+        Returns
+        -------
+        float
+            Return zero if the constraints are met, otherwise negative
+            infinity.
+        """
         vlsr1, vlsr2, vlsr3, vlsr4 = parameters[[1, 2, 3, 4]]
         if (
             (vlsr1 < (vlsr2 - 0.05))
@@ -564,11 +630,6 @@ class CospatialTMC1(TMC1FourComponent):
             and (vlsr3 < (vlsr2 + 0.3))
             and (vlsr4 < (vlsr3 + 0.3))
         ):
-            for index, component in enumerate(self.components):
-                subparams = self._get_component_parameters(parameters, index)
-                if index == 0:
-                    lnlikelihood = component.compute_prior_likelihood(subparams)
-                else:
-                    lnlikelihood += component.compute_prior_likelihood(subparams)
-            return lnlikelihood
-        return -np.inf
+            return 0.
+        else:
+            return -np.inf
