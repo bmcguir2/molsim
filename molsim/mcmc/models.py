@@ -552,3 +552,23 @@ class CospatialTMC1(TMC1FourComponent):
             parameters[-2], parameters[-1]
             ])
         return subparams
+
+    def compute_prior_likelihood(self, parameters: np.ndarray) -> float:
+        # modifies this slightly to match the number of parameters expected
+        vlsr1, vlsr2, vlsr3, vlsr4 = parameters[[1, 2, 3, 4]]
+        if (
+            (vlsr1 < (vlsr2 - 0.05))
+            and (vlsr2 < (vlsr3 - 0.05))
+            and (vlsr3 < (vlsr4 - 0.05))
+            and (vlsr2 < (vlsr1 + 0.3))
+            and (vlsr3 < (vlsr2 + 0.3))
+            and (vlsr4 < (vlsr3 + 0.3))
+        ):
+            for index, component in enumerate(self.components):
+                subparams = self._get_component_parameters(parameters, index)
+                if index == 0:
+                    lnlikelihood = component.compute_prior_likelihood(subparams)
+                else:
+                    lnlikelihood += component.compute_prior_likelihood(subparams)
+            return lnlikelihood
+        return -np.inf
