@@ -161,7 +161,7 @@ class SingleComponent(AbstractModel):
             The total prior log likelihood
         """
         lnlikelihood = self.prior_constraint(parameters)
-        lnlikelihood = sum(
+        lnlikelihood += sum(
             [
                 dist.ln_likelihood(value)
                 for dist, value in zip(self._distributions, parameters)
