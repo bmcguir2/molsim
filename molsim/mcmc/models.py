@@ -442,3 +442,113 @@ class TMC1FourComponent(MultiComponent):
                     lnlikelihood += component.compute_prior_likelihood(subparams)
             return lnlikelihood
         return -np.inf
+
+
+class CospatialTMC1(TMC1FourComponent):
+    """
+    Implementation of a multi component model. This type of model extends
+    the parameters expected with parameters for each component like so:
+    
+    [source_size, vlsr1, vlsr2,...Tex, dV]
+    
+    So that there is an arbitrary number of components, providing each
+    component has a common source size, and independent radial velocity
+    and column density.
+    """
+
+    def __init__(
+        self,
+        source_size: AbstractDistribution,
+        vlsrs: List[AbstractDistribution],
+        Ncols: List[AbstractDistribution],
+        Tex: AbstractDistribution,
+        dV: AbstractDistribution,
+        observation: Observation,
+        molecule: Molecule,
+    ):
+        # make four source sizes drawn from the same distribution
+        source_sizes = [source_size] * len(vlsrs)
+        # initialize the base class
+        super().__init__(source_sizes, vlsrs, Ncols, Tex, dV, observation, molecule)
+
+    def get_names(self):
+        names = ["SourceSize"]
+        n_components = len(self.components)
+        for parameter in ["VLSR", "NCol"]:
+            names.extend([parameter + f"_{i}" for i in range(n_components)])
+        names.extend(["Tex", "dV"])
+        return names
+
+    @classmethod
+    def from_yml(cls, yml_path: str):
+        input_dict = load_yaml(yml_path)
+        cls_dict = dict()
+        vlsrs, Ncols = list(), list()
+        # make sure the number of components is the same
+        assert (
+            len(input_dict["vlsrs"])
+            == len(input_dict["Ncols"])
+        )
+        n_components = len(input_dict["vlsrs"])
+        # parse in all the different parameters
+        for param_list, parameter in zip(
+            [vlsrs, Ncols], ["vlsrs", "Ncols"]
+        ):
+            for index in range(n_components):
+                size_params = input_dict[parameter][index]
+                size_params["name"] = f"{parameter}_{index}"
+                if "mu" in size_params:
+                    dist = GaussianLikelihood
+                elif "value" in size_params:
+                    dist = DeltaLikelihood
+                else:
+                    dist = UniformLikelihood
+                param_list.append(dist.from_values(**size_params))
+            cls_dict[parameter] = param_list
+        # the three stragglers
+        for key in ["source_size", "Tex", "dV"]:
+            input_dict[key]["name"] = key
+            if "mu" in input_dict[key]:
+                dist = GaussianLikelihood
+            elif "value" in input_dict[key]:
+                dist = DeltaLikelihood
+            else:
+                dist = UniformLikelihood
+            cls_dict[key] = dist.from_values(**input_dict[key])
+        # load in the observed data
+        cls_dict["observation"] = load(input_dict["observation"])
+        cls_dict["molecule"] = load(input_dict["molecule"])
+        return cls(**cls_dict)
+
+    def __len__(self) -> int:
+        # VLSR and NCol for each source, shared SS, Tex, and dv
+        return len(self.components) * 2 + 3
+
+    def sample_prior(self):
+        vlsrs = list()
+        ncols = list()
+        for index, component in enumerate(self.components):
+            # grab values from the prior
+            values = component.sample_prior()
+            vlsrs.append(values[1])
+            ncols.append(values[2])
+            if index != len(self.components):
+                final = values[-2:]
+        # get the source size from only one distribution
+        params = [self.components[0].sample_prior()[0]]
+        for array in [vlsrs, ncols, final]:
+            params.extend(array)
+        return params
+
+    def _get_component_parameters(
+        self, parameters: np.ndarray, component: int
+    ) -> np.ndarray:
+        """
+        Get the parameters of each component. This is somewhat ugly as the number of
+        parameters is fewer than the usual four component model.
+        """
+        subparams = np.asarray([
+            parameters[0], parameters[component + 1], parameters[component + (1 + 4)],
+            parameters[-2], parameters[-1]
+            ])
+        return subparams
