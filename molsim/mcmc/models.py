@@ -664,7 +664,7 @@ class CompositeModel(AbstractModel):
         # index out, plus one for the number of parameters
         return max([index for sublist in self.param_indices for index in sublist]) + 1
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         output_string = f"Composite model\nNumber of parameters: {len(self)}\n"
         for model in self.models:
             output_string += f"Model: {model}\n"
@@ -692,8 +692,8 @@ class CompositeModel(AbstractModel):
         """
         return parameters[self.param_indices[index]]
 
-    @lru_cache(maxsize=2, typed=True)
     @property
+    @lru_cache(maxsize=2, typed=True)
     def frequency(self) -> np.ndarray:
         """
         Returns a common frequency grid for all the models considered. This allows
@@ -713,7 +713,6 @@ class CompositeModel(AbstractModel):
         frequency.sort()
         return frequency
 
-    @lru_cache(maxsize=2, typed=True)
     def simulate_spectrum(self, parameters: np.ndarray) -> np.ndarray:
         """
         Simulate the composite spectrum for multiple models. This uses
@@ -816,6 +815,57 @@ class CompositeModel(AbstractModel):
                 parameters[param_index] = subparam
         return parameters
 
+    @classmethod
+    def from_yml(cls, yml_path: str):
+        """
+        Creates a composite model from a YAML input. As one can imagine,
+        the format of this YAML is substantially different from the
+        non-composite models. The structure of the YAML should be like:
+        
+        ```
+        param_indices: [[1, 2, 3,], [1, 2, 3]]
+        model_A:
+           model: TMC1FourComponent
+           yml_path: model_A.yml
+        model_B:
+           model: CospatialTMC1
+           yml_path: model_B.yml
+        ```
+        
+        The `model` subkeys should correspond to the name of a model class,
+        which is used to grab the correct one to instantiate. It basically
+        then relies on each `submodel.from_yml` method to create the submodel
+        and then append it to full model list.
+
+        Parameters
+        ----------
+        yml_path : str
+            Path to the composite model YAML specification
+
+        Raises
+        ------
+        KeyError
+            If the parameter indices are not found in the composite
+            YAML specification.
+        NameError
+            If the model name specified 
+        """
+        yml_data = load_yaml(yml_path)
+        # get the parameter indices and remove it from the dictionary
+        param_indices = yml_data.pop("param_indices", None)
+        if not param_indices:
+            raise KeyError("param_indices not specified in YAML file.")
+        models = list()
+        for index, subdict in enumerate(yml_data.values()):
+            # this tries to get the class
+            model_type = globals()[subdict.get("model")]
+            if not model_type:
+                raise NameError(f"Model type for model {index + 1} is not implemented: {subdict.get('model')}")
+            # construct the submodel, and throw it in the pile
+            submodel = model_type.from_yml(subdict.get("yml_path"))
+            models.append(submodel)
+        return cls(param_indices, *models)
+
 
 class TMC1MethylChains(CompositeModel):
     """
@@ -844,3 +894,61 @@ class TMC1MethylChains(CompositeModel):
         ]
         super().__init__(param_indices, A_state, E_state, **kwargs)
 
+    def get_names(self):
+        names = ["SourceSize"]
+        # four velocity components
+        names.extend([f"VLSR{i+1}" for i in range(4)])
+        # 8 column densities
+        for state in ["A", "E"]:
+            names.extend([f"Ncol{i+1}_{state}" for i in range(4)])
+        names.extend(["Tex_A", "Tex_E", "dV"])
+        return names
+
+    @classmethod
+    def from_yml(cls, yml_path: str):
+        """
+        Creates a composite model from a YAML input. As one can imagine,
+        the format of this YAML is substantially different from the
+        non-composite models. The structure of the YAML should be like:
+        
+        ```
+        param_indices: [[1, 2, 3,], [1, 2, 3]]
+        model_A:
+           model: TMC1FourComponent
+           yml_path: model_A.yml
+        model_B:
+           model: CospatialTMC1
+           yml_path: model_B.yml
+        ```
+        
+        The `model` subkeys should correspond to the name of a model class,
+        which is used to grab the correct one to instantiate. It basically
+        then relies on each `submodel.from_yml` method to create the submodel
+        and then append it to full model list.
+
+        Parameters
+        ----------
+        yml_path : str
+            Path to the composite model YAML specification
+
+        Raises
+        ------
+        KeyError
+            If the parameter indices are not found in the composite
+            YAML specification.
+        NameError
+            If the model name specified 
+        """
+        yml_data = load_yaml(yml_path)
+        # for this type of model, we don't care about the param indices
+        _ = yml_data.pop("param_indices", None)
+        models = list()
+        for index, subdict in enumerate(yml_data.values()):
+            # this tries to get the class
+            model_type = globals()[subdict.get("model")]
+            if not model_type:
+                raise NameError(f"Model type for model {index + 1} is not implemented: {subdict.get('model')}")
+            # construct the submodel, and throw it in the pile
+            submodel = model_type.from_yml(subdict.get("yml_path"))
+            models.append(submodel)
+        return cls(*models)
