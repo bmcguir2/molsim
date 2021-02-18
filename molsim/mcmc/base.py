@@ -494,9 +494,30 @@ class EmceeHelper(object):
         return rng.choice(samples, nsamples, axis=0)
 
     def posterior_to_json(
-        self, name: str, model: AbstractModel, return_dict: bool = False
+        self, name: str, model: Type[AbstractModel], return_dict: bool = False
     ) -> Union[dict, None]:
+        """
+        Function for exporting the model results to JSON format, typically
+        for use with some other functionality in `molsim`.
+        
+        TODO: make this function compatible with `CompositeModel`s
+
+        Parameters
+        ----------
+        name : str
+            [description]
+        model : Type[AbstractModel]
+            Class or subclass of `AbstractModel` to convert to JSON
+        return_dict : bool, optional
+            [description], by default False
+
+        Returns
+        -------
+        Union[dict, None]
+            [description]
+        """
         summary = self.summary(model)
+        #TODO `components` is not defined for `CompositeModel` subclasses
         n_components = len(model.components)
         output = dict()
         for parameter in ["SourceSize", "VLSR", "NCol"]:
