@@ -56,7 +56,7 @@ def sum_spectra(sims,thin=True,Tex=None,Tbg=None,res=None,noise=None,name='sum')
 			return
 		#Otherwise if we have a continuum object, we use that to calculate the Tbg at each point in freq_arr generated above
 		if isinstance(Tbg, Continuum):
-			sum_Tbg = Tbg(freq_arr)
+			sum_Tbg = Tbg.Tbg(freq_arr)
 		else:
 			sum_Tbg = Tbg
 		
