@@ -33,6 +33,6 @@ which will then install `molsim` into your Anaconda/Python installation. For dev
 
 The large majority of `molsim` was written by @bmcguir2, building on top of earlier code (`simulate_lte`).
 
-The `mcmc` module was written by @laserkelvin, based heavily on earlier code by Dr. Ryan Loomis (see [his repo here](https://github.com/ryanaloomis/TMC1_mcmc_fitting)), which was used for the DR1 GOTHAM data analysis.
+The `mcmc` module was written by @laserkelvin, based heavily on earlier code by @ryanaloomis (see [his repo here](https://github.com/ryanaloomis/TMC1_mcmc_fitting)), which was used for the DR1 GOTHAM data analysis.
 
 Any issues, please submit an issue, reporting what you think should happen and what actually happens.
