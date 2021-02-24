@@ -1,6 +1,6 @@
 import numpy as np
 from molsim.constants import h, k, ckm
-from molsim.classes import Spectrum
+from molsim.classes import Spectrum, Continuum
 from molsim.utils import find_limits, _get_res, _find_nans, find_peaks, find_nearest, _find_ones
 from molsim.stats import get_rms
 from molsim.file_handling import load_mol
@@ -49,10 +49,21 @@ def sum_spectra(sims,thin=True,Tex=None,Tbg=None,res=None,noise=None,name='sum')
 		sum_spectrum.int_profile = int_arr
 		
 	if thin is False:
+	
+		#Check to see if the user has specified a Tbg
+		if Tbg is None:
+			print('If summing for the optically thick condition, either a constant Tbg or an appropriate Continuum object must be provided.  Operation aborted.')
+			return
+		#Otherwise if we have a continuum object, we use that to calculate the Tbg at each point in freq_arr generated above
+		if isinstance(Tbg, Continuum):
+			sum_Tbg = Tbg(freq_arr)
+		else:
+			sum_Tbg = Tbg
+		
 		#if it's not gonna be thin, then we add up all the taus and apply the corrections
 		for x in sims:
 			int_arr0 = np.interp(freq_arr,x.spectrum.freq_profile,x.spectrum.tau_profile,left=0.,right=0.)
-			int_arr += int_arr0
+			int_arr += int_arr0	
 			
 		#now we apply the corrections at the specified Tex
 		J_T = ((h*freq_arr*10**6/k)*
@@ -61,7 +72,7 @@ def sum_spectra(sims,thin=True,Tex=None,Tbg=None,res=None,noise=None,name='sum')
 			  )
 		J_Tbg = ((h*freq_arr*10**6/k)*
 			  (np.exp(((h*freq_arr*10**6)/
-			  (k*Tbg))) -1)**-1
+			  (k*sum_Tbg))) -1)**-1
 			  )			  
 			
 		int_arr = (J_T - J_Tbg)*(1 - np.exp(-int_arr))
