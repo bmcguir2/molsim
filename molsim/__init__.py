@@ -17,3 +17,4 @@ from . import utils
 from . import plotting
 from . import analysis
 from . import mcmc
+from . import stack
