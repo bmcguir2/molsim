@@ -648,7 +648,7 @@ def velocity_stack(
 
 
 def velocity_stack_pipeline(
-    simulation: Simulation,
+    spectrum: Spectrum,
     observation: Observation,
     vel_width: float = 40.0,
     resolution: float = 0.0014,
@@ -668,8 +668,9 @@ def velocity_stack_pipeline(
 
     Parameters
     ----------
-    simulation : Simulation
-        Instance of a `molsim.Simulation` object
+    spectrum : Spectrum
+        Instance of a `molsim.Spectrum` object, which
+        is produced from a `Simulation`
     observation : Observation
         Instance of a `molsim.Observation` object
     vel_width : float, optional
@@ -692,7 +693,7 @@ def velocity_stack_pipeline(
         wraps the results
     """
     obs_x, obs_y = observation.spectrum.frequency, observation.spectrum.Tb
-    sim_x, sim_y = simulation.freq_profile, simulation.int_profile
+    sim_x, sim_y = spectrum.freq_profile, spectrum.int_profile
     # find the peaks in the simulated spectrum to use as the frequency
     # center. This is used because it's more resilient to weird lineshapes.
     peak_indices = find_peaks(
