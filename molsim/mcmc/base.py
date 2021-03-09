@@ -1,4 +1,4 @@
-from typing import Tuple, Union, Type, NamedTuple, Callable, List
+from typing import Tuple, Union, Type, NamedTuple, List, Type
 from collections import namedtuple
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -9,6 +9,7 @@ import sys
 import json
 
 import numpy as np
+import pandas as pd
 import emcee
 import arviz
 from molsim import __version__
@@ -328,7 +329,7 @@ class EmceeHelper(object):
             )
         logger.info(f"Passed—{ln:.4f}")
 
-    def summary(self, model: AbstractModel) -> "DataFrame":
+    def summary(self, model: AbstractModel) -> Type[pd.DataFrame]:
         """
         Generate a summary table of the posterior, using a model to get the names
         of the parameters.
@@ -461,6 +462,19 @@ class EmceeHelper(object):
                 pass
             else:
                 raise NotImplementedError(f"Unrecognized parameter type! {dist_type}")
+    
+    @property
+    def posterior_mean(self) -> np.ndarray:
+        """
+        Return the posterior mean as averaged over all chains and
+        all draws. This assumes you have rejected
+
+        Returns
+        -------
+        np.ndarray
+            [description]
+        """
+        return self.posterior.mean(dim=["chain", "draw"]).to_array()[0]
 
     def sample_posterior(
         self, nsamples: int, nparams: int = 14, rng: np.random.Generator = None
