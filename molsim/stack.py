@@ -233,17 +233,13 @@ class SpectrumChunk:
             dv, vel_roi, and rms_sigma
         """
         # unpack the arguments
-        dv, vel_roi, rms_sigma = parameters
+        dv, vel_roi, rms_sigma, bias = parameters
         # isolate the ROI and work out the peak intensity. We will mask
         # everything else with NaN above this
         roi_mask = np.logical_and(
             -dv * vel_roi <= self.velocity, dv * vel_roi >= self.velocity
         )
-        threshold = get_rms(self._intensity) * rms_sigma
-        # if the calculated threshold is small, then it's a simulation
-        # and we'll eliminate all flux outside of the region of interest
-        if threshold <= 1e-3:
-            threshold = -1.0
+        threshold = (get_rms(self._intensity) * rms_sigma) + bias
         # find the intersection outside our ROI, and high intensity
         blank_mask = (~roi_mask) * (self._intensity >= threshold)
         self._mask = blank_mask
@@ -442,6 +438,13 @@ class VelocityStack(object):
     @lru_cache(maxsize=None)
     def centers(self) -> np.ndarray:
         return np.array([chunk.center for chunk in self.obs_chunks])
+
+    def plot(self):
+        fig, ax = plt.subplots()
+        ax.plot(self.velocity, self.intensity, label="Obs.", alpha=0.7)
+        ax.fill_between(self.velocity, self.sim_intensity, label="Sim.", alpha=0.6)
+        ax.plot(self.velocity, self.matched_filter, label="Matched Filter")
+        ax.legend()
 
     @lru_cache(maxsize=None)
     def is_centered(self, dv: float = 0.12, vel_roi: float = 10.0) -> bool:
@@ -704,8 +707,14 @@ def velocity_stack_pipeline(
     sim_chunks = generate_spectrum_chunks(sim_x, sim_y, centers, vel_width, n_workers)
     # for each chunk, set the velocity mask to protect the intensity of each ROI
     for chunks in zip(obs_chunks, sim_chunks):
-        for chunk in chunks:
-            chunk.mask = (dv, vel_roi, rms_sigma)
+        # this shifts the threshold for flux masking; for simulations
+        # we impose a large negative offset to zero everything out
+        for chunk_type, chunk in enumerate(chunks):
+            if chunk_type == 0:
+                bias = 0.
+            else:
+                bias = -10.
+            chunk.mask = (dv, vel_roi, rms_sigma, bias)
     # the simulated data is used to weight the stacking
     expected_intensities = sim_y[peak_indices]
     max_expected = expected_intensities.max()
