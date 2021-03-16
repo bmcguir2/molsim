@@ -474,7 +474,7 @@ class EmceeHelper(object):
         np.ndarray
             [description]
         """
-        return self.posterior.mean(dim=["chain", "draw"]).to_array()[0]
+        return self.posterior.posterior.mean(dim=["chain", "draw"]).to_array()[0].values
 
     def sample_posterior(
         self, nsamples: int, nparams: int = 14, rng: np.random.Generator = None
