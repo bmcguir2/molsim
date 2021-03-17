@@ -1,5 +1,5 @@
-from typing import Type, Dict, Union, Callable, List, Tuple
-from pathlib import Path
+from typing import Type, Dict, Union, Callable, List, Tuple, Iterable
+from functools import lru_cache
 from dataclasses import dataclass
 
 import numpy as np
@@ -24,6 +24,12 @@ from molsim.file_handling import load_mol
 
 @dataclass
 class SingleComponent(AbstractModel):
+    """
+    Simplest concrete implementation of an `AbstractModel`,
+    corresponding to a single value for each modeling parameter.
+    Each model parameter expects an `AbstractDistribution` object,
+    which corresponds to the prior distribution over parameters.
+    """
     source_size: AbstractDistribution
     vlsr: AbstractDistribution
     Ncol: AbstractDistribution
@@ -31,7 +37,6 @@ class SingleComponent(AbstractModel):
     dV: AbstractDistribution
     observation: Observation
     molecule: Molecule
-    nominal_vlsr: float = 0.0
 
     def __post_init__(self):
         self._distributions = [
@@ -57,7 +62,17 @@ class SingleComponent(AbstractModel):
             output += f"{dist}\n"
         return output
 
-    def sample_prior(self):
+    def sample_prior(self) -> np.ndarray:
+        """
+        Draw samples from each respective prior distribution to
+        return an array of parameters.
+
+        Returns
+        -------
+        np.ndarray
+            NumPy 1D array of parameter values drawn from the
+            respective prior.
+        """
         initial = np.array([param.sample() for param in self._distributions])
         return initial
 
@@ -71,12 +86,12 @@ class SingleComponent(AbstractModel):
         with figuring out which catalog entries to simulate. After the first
         pass, the instance is re-used with the `Source` object updated with
         the new parameters.
-        
+
         The nuance in this function is with `scale`: during the preprocess
         step, we assume that the observation frequency is not shifted to the
         source reference. To simulate with molsim, we identify where the catalog
         overlaps with our frequency windows, and because it is unshifted this
-        causes molsim to potentially ignore a lot of lines (particularly 
+        causes molsim to potentially ignore a lot of lines (particularly
         high frequency ones). The `scale` parameter scales the input VLSR
         as to make sure that we cover everything as best as we can.
 
@@ -93,6 +108,9 @@ class SingleComponent(AbstractModel):
             NumPy 1D array corresponding to the simulated spectrum
         """
         size, vlsr, ncol, Tex, dV = parameters
+        # Assume that the value is in log space, if it's below 1000
+        if ncol <= 1e3:
+            ncol = 10 ** ncol
         source = Source("", vlsr, size, column=ncol, Tex=Tex, dV=dV)
         if not hasattr(self, "simulation"):
             min_freq, max_freq = find_limits(self.observation.spectrum.frequency)
@@ -124,8 +142,25 @@ class SingleComponent(AbstractModel):
         intensity = self.simulation.spectrum.int_profile
         return intensity
 
-    def prior_constraint(self, parameters: np.ndarray):
-        pass
+    def prior_constraint(self, parameters: np.ndarray) -> float:
+        """
+        Function that will apply a constrain on the prior. This function
+        should be overwritten in child models, say for example in the
+        TMC-1 four component case, where we want to constrain parameter
+        space to certain regions.
+
+        Parameters
+        ----------
+        parameters : np.ndarray
+            NumPy 1D array containing parameter values
+
+        Returns
+        -------
+        float
+            Return zero if parameters pass the constraint, otherwise
+            return -np.inf
+        """
+        return 0.0
 
     def compute_prior_likelihood(self, parameters: np.ndarray) -> float:
         """
@@ -142,7 +177,8 @@ class SingleComponent(AbstractModel):
         float
             The total prior log likelihood
         """
-        lnlikelihood = sum(
+        lnlikelihood = self.prior_constraint(parameters)
+        lnlikelihood += sum(
             [
                 dist.ln_likelihood(value)
                 for dist, value in zip(self._distributions, parameters)
@@ -201,10 +237,10 @@ class SingleComponent(AbstractModel):
         """
         Obtain a maximum likelihood estimate, given an initial starting point in
         parameter space. Because of the often highly covariant nature of models,
-        
-        Additional kwargs are passed into `scipy.optimize.minimize`, and can be 
+
+        Additional kwargs are passed into `scipy.optimize.minimize`, and can be
         used to overwrite things like the optimization method.
-        
+
         The `Result` object from `scipy.optimize` is returned, which holds the
         MLE parameters as the attribute `x`, and the likelihood value as `fun`.
 
@@ -253,7 +289,7 @@ class SingleComponent(AbstractModel):
                     # load in the observed data
                     cls_dict[key] = load(input_dict[key])
                 else:
-                    cls_dict[key] = input_dict.get(key, 0.0)
+                    logger.warning(f"{key} is not recognized, and therefore ignored.")
         return cls(**cls_dict)
 
 
@@ -261,9 +297,9 @@ class MultiComponent(SingleComponent):
     """
     Implementation of a multi component model. This type of model extends
     the parameters expected with parameters for each component like so:
-    
+
     [source_size1, source_size2, vlsr1, vlsr2,...Tex, dV]
-    
+
     So that there is an arbitrary number of components, providing each
     component has a source size, radial velocity, and column density.
     """
@@ -277,17 +313,21 @@ class MultiComponent(SingleComponent):
         dV: AbstractDistribution,
         observation: Observation,
         molecule: Molecule,
-        nominal_vlsr: float = 0.0,
     ):
         super().__init__(source_sizes, vlsrs, Ncols, Tex, dV, observation, molecule)
-        assert len(source_sizes) == len(vlsrs) == len(Ncols)
         self.components = list()
         # these are not used in preference of `self.components` instead
         self.source_size = self.vlsr = self.Ncol = self._distributions = None
         for ss, vlsr, Ncol in zip(source_sizes, vlsrs, Ncols):
             self.components.append(
                 SingleComponent(
-                    ss, vlsr, Ncol, Tex, dV, observation, molecule, nominal_vlsr
+                    ss,
+                    vlsr,
+                    Ncol,
+                    Tex,
+                    dV,
+                    observation,
+                    molecule,
                 )
             )
 
@@ -352,9 +392,6 @@ class MultiComponent(SingleComponent):
         # load in the observed data
         cls_dict["observation"] = load(input_dict["observation"])
         cls_dict["molecule"] = load(input_dict["molecule"])
-        cls_dict["nominal_vlsr"] = input_dict.get("nominal_vlsr", 0.0)
-        if cls_dict["nominal_vlsr"] == 0.0:
-            logger.warning("Nominal VLSR is set to zero; make sure this is correct!")
         return cls(**cls_dict)
 
     def __len__(self) -> int:
@@ -402,13 +439,33 @@ class MultiComponent(SingleComponent):
             combined_intensity += component.simulate_spectrum(subparams)
         return combined_intensity
 
+    def prior_constraint(self, parameters: np.ndarray) -> float:
+        """
+        Applies a constraint on the model parameters as a whole.
+        The idea is that for more complex models, this method should
+        be overridden, rather than having to redefine the likelihood
+        calculation itself.
+
+        Another way of thinking about this would be to use decorators,
+        but that may be more complicated than what is needed here.
+
+        Parameters
+        ----------
+        parameters : np.ndarray
+            NumPy 1D array containing parameter values
+
+        Returns
+        -------
+        float
+            Returns 0 because no constraint is applied
+        """
+        return 0.0
+
     def compute_prior_likelihood(self, parameters: np.ndarray) -> float:
+        lnlikelihood = self.prior_constraint(parameters)
         for index, component in enumerate(self.components):
             subparams = self._get_component_parameters(parameters, index)
-            if index == 0:
-                lnlikelihood = component.compute_prior_likelihood(subparams)
-            else:
-                lnlikelihood += component.compute_prior_likelihood(subparams)
+            lnlikelihood += component.compute_prior_likelihood(subparams)
         return lnlikelihood
 
 
@@ -422,13 +479,34 @@ class TMC1FourComponent(MultiComponent):
         dV: AbstractDistribution,
         observation: Observation,
         molecule: Molecule,
-        nominal_vlsr: float = 0.0,
     ):
         super().__init__(
-            source_sizes, vlsrs, Ncols, Tex, dV, observation, molecule, nominal_vlsr
+            source_sizes,
+            vlsrs,
+            Ncols,
+            Tex,
+            dV,
+            observation,
+            molecule,
         )
 
-    def compute_prior_likelihood(self, parameters: np.ndarray) -> float:
+    def prior_constraint(self, parameters: np.ndarray) -> float:
+        """
+        Applies the TMC-1 four component velocity constraint, where we
+        make sure that the four velocity components do not stray too
+        far from one another.
+
+        Parameters
+        ----------
+        parameters : np.ndarray
+            NumPy 1D array containing parameter values
+
+        Returns
+        -------
+        float
+            Return zero if the constraints are met, otherwise negative
+            infinity.
+        """
         vlsr1, vlsr2, vlsr3, vlsr4 = parameters[[4, 5, 6, 7]]
         if (
             (vlsr1 < (vlsr2 - 0.05))
@@ -438,11 +516,498 @@ class TMC1FourComponent(MultiComponent):
             and (vlsr3 < (vlsr2 + 0.3))
             and (vlsr4 < (vlsr3 + 0.3))
         ):
-            for index, component in enumerate(self.components):
-                subparams = self._get_component_parameters(parameters, index)
-                if index == 0:
-                    lnlikelihood = component.compute_prior_likelihood(subparams)
+            return 0.0
+        else:
+            return -np.inf
+
+
+class CospatialTMC1(TMC1FourComponent):
+    """
+    Implementation of a multi component model. This type of model extends
+    the parameters expected with parameters for each component like so:
+
+    [source_size, vlsr1, vlsr2,...Tex, dV]
+
+    So that there is an arbitrary number of components, providing each
+    component has a common source size, and independent radial velocity
+    and column density.
+    """
+
+    def __init__(
+        self,
+        source_size: AbstractDistribution,
+        vlsrs: List[AbstractDistribution],
+        Ncols: List[AbstractDistribution],
+        Tex: AbstractDistribution,
+        dV: AbstractDistribution,
+        observation: Observation,
+        molecule: Molecule,
+    ):
+        # make four source sizes drawn from the same distribution
+        source_sizes = [source_size] * len(vlsrs)
+        # initialize the base class
+        super().__init__(source_sizes, vlsrs, Ncols, Tex, dV, observation, molecule)
+
+    def get_names(self):
+        names = ["SourceSize"]
+        n_components = len(self.components)
+        for parameter in ["VLSR", "NCol"]:
+            names.extend([parameter + f"_{i}" for i in range(n_components)])
+        names.extend(["Tex", "dV"])
+        return names
+
+    @classmethod
+    def from_yml(cls, yml_path: str):
+        input_dict = load_yaml(yml_path)
+        cls_dict = dict()
+        vlsrs, Ncols = list(), list()
+        # make sure the number of components is the same
+        assert len(input_dict["vlsrs"]) == len(input_dict["Ncols"])
+        n_components = len(input_dict["vlsrs"])
+        # parse in all the different parameters
+        for param_list, parameter in zip([vlsrs, Ncols], ["vlsrs", "Ncols"]):
+            for index in range(n_components):
+                size_params = input_dict[parameter][index]
+                size_params["name"] = f"{parameter}_{index}"
+                if "mu" in size_params:
+                    dist = GaussianLikelihood
+                elif "value" in size_params:
+                    dist = DeltaLikelihood
                 else:
-                    lnlikelihood += component.compute_prior_likelihood(subparams)
-            return lnlikelihood
-        return -np.inf
+                    dist = UniformLikelihood
+                param_list.append(dist.from_values(**size_params))
+            cls_dict[parameter] = param_list
+        # the three stragglers
+        for key in ["source_size", "Tex", "dV"]:
+            input_dict[key]["name"] = key
+            if "mu" in input_dict[key]:
+                dist = GaussianLikelihood
+            elif "value" in input_dict[key]:
+                dist = DeltaLikelihood
+            else:
+                dist = UniformLikelihood
+            cls_dict[key] = dist.from_values(**input_dict[key])
+        # load in the observed data
+        cls_dict["observation"] = load(input_dict["observation"])
+        cls_dict["molecule"] = load(input_dict["molecule"])
+        return cls(**cls_dict)
+
+    def __len__(self) -> int:
+        # VLSR and NCol for each source, shared SS, Tex, and dv
+        return len(self.components) * 2 + 3
+
+    def sample_prior(self) -> np.ndarray:
+        """
+        Draw samples from each respective prior distribution to
+        return an array of parameters. This version of the code
+        will loop through each model component, but taking only
+        the source size from one of the components.
+
+        Returns
+        -------
+        np.ndarray
+            NumPy 1D array of parameter values drawn from the
+            respective prior.
+        """
+        vlsrs = list()
+        ncols = list()
+        for index, component in enumerate(self.components):
+            # grab values from the prior
+            values = component.sample_prior()
+            vlsrs.append(values[1])
+            ncols.append(values[2])
+            if index != len(self.components):
+                final = values[-2:]
+        # get the source size from only one distribution
+        params = [self.components[0].sample_prior()[0]]
+        for array in [vlsrs, ncols, final]:
+            params.extend(array)
+        return np.asarray(params)
+
+    def _get_component_parameters(
+        self, parameters: np.ndarray, component: int
+    ) -> np.ndarray:
+        """
+        Get the parameters of each component. This is somewhat ugly as the number of
+        parameters is fewer than the usual four component model.
+        """
+        subparams = np.asarray(
+            [
+                parameters[0],
+                parameters[component + 1],
+                parameters[component + (1 + 4)],
+                parameters[-2],
+                parameters[-1],
+            ]
+        )
+        return subparams
+
+    def prior_constraint(self, parameters: np.ndarray) -> float:
+        """
+        Applies the TMC-1 four component velocity constraint, where we
+        make sure that the four velocity components do not stray too
+        far from one another. This is modified to match the correct
+        indices for the parameters (given there is only one source size).
+
+        Not the cleanest way to do this, but probably the most straightforward.
+
+        TODO: probably better to implement this as a decorator
+
+        Parameters
+        ----------
+        parameters : np.ndarray
+            NumPy 1D array containing parameter values
+
+        Returns
+        -------
+        float
+            Return zero if the constraints are met, otherwise negative
+            infinity.
+        """
+        vlsr1, vlsr2, vlsr3, vlsr4 = parameters[[1, 2, 3, 4]]
+        if (
+            (vlsr1 < (vlsr2 - 0.05))
+            and (vlsr2 < (vlsr3 - 0.05))
+            and (vlsr3 < (vlsr4 - 0.05))
+            and (vlsr2 < (vlsr1 + 0.3))
+            and (vlsr3 < (vlsr2 + 0.3))
+            and (vlsr4 < (vlsr3 + 0.3))
+        ):
+            return 0.0
+        else:
+            return -np.inf
+
+
+class CompositeModel(AbstractModel):
+    """
+    Implements an abstract composite model. Using this by
+    itself will not work as parameter sharing is not implemented
+    correctly, but basically lays out the recipe for implementing
+    real composite models.
+    """
+
+    def __init__(self, param_indices: List[List[int]], *models, **kwargs) -> None:
+        """
+        Parameters
+        ----------
+        param_indices : List[List[int]]
+            Nested list of integers corresponding to the
+            parameter indices of each model. The top list
+            should be the same length as the number of models,
+            and each sublist should have the same number of
+            indices as expected by each model.
+        """
+        assert len(param_indices) == len(list(models))
+        super().__init__()
+        self.models = list(models)
+        self.param_indices = param_indices
+
+    def __len__(self) -> int:
+        # do a messy flattened list comprehension and get the largest
+        # index out, plus one for the number of parameters
+        return max([index for sublist in self.param_indices for index in sublist]) + 1
+
+    def __repr__(self) -> str:
+        output_string = f"Composite model\nNumber of parameters: {len(self)}\n"
+        for model in self.models:
+            output_string += f"Model: {model}\n"
+        return output_string
+
+    def model_parameter(self, parameters: np.ndarray, index: int) -> np.ndarray:
+        """
+        Get the model parameters associated with a particular submodel.
+        All this function does is cross reference the model index with
+        the `param_indices` attribute, and returns the parameter values
+        associated with that particular model.
+
+        Parameters
+        ----------
+        parameters : np.ndarray
+            NumPy 1D array containing the full parameter values
+        index : int
+            Model index number
+
+        Returns
+        -------
+        np.ndarray
+            NumPy 1D array containing the parameters
+            for the specified submodel
+        """
+        return parameters[self.param_indices[index]]
+
+    @property
+    @lru_cache(maxsize=2, typed=True)
+    def frequency(self) -> np.ndarray:
+        """
+        Returns a common frequency grid for all the models considered. This allows
+        for a combined simulation to be performed.
+
+        This property should also be cached, as to prevent constant recalculation
+        of the frequency grid.
+
+        Returns
+        -------
+        np.ndarray
+            NumPy 1D array of frequencies
+        """
+        frequency = [model.observation.spectrum.frequency for model in self.models]
+        # get unique values of frequency and then sort
+        frequency = np.unique(np.concatenate(frequency))
+        frequency.sort()
+        return frequency
+
+    def simulate_spectrum(self, parameters: np.ndarray) -> np.ndarray:
+        """
+        Simulate the composite spectrum for multiple models. This uses
+        the `param_indices` attribute to properly allocate parameters
+        to each model.
+
+        Parameters
+        ----------
+        parameters : np.ndarray
+            NumPy 1D array containing all of the model parameters.
+
+        Returns
+        -------
+        np.ndarray
+            NumPy 1D array containing the simulated intensities combined
+            from each model.
+        """
+        spectrum = np.zeros_like(self.frequency)
+        for index, model in enumerate(self.models):
+            # retrieve the correct parameters
+            subparams = self.model_parameter(parameters, index)
+            temp_spectrum = model.simulate_spectrum(subparams)
+            # add the interpolated spectrum
+            spectrum += np.interp(
+                self.frequency,
+                model.observation.spectrum.frequency,
+                temp_spectrum,
+                left=0.0,
+                right=0.0,
+            )
+        return spectrum
+
+    def compute_prior_likelihood(self, parameters: np.ndarray) -> float:
+        """
+        Compute the composite prior likelihood, combined from all of
+        the submodels. Note that this function applies a top-level
+        prior constraint implemented in `CompositeModel`, in addition
+        to the submodel constraints.
+
+        Parameters
+        ----------
+        parameters : np.ndarray
+            NumPy 1D array containing the full sampled parameters
+
+        Returns
+        -------
+        float
+            Prior log likelihood summed over all submodels
+        """
+        likelihood = self.prior_constraint(parameters)
+        for index, model in enumerate(self.models):
+            subparams = self.model_parameter(parameters, index)
+            likelihood += model.compute_prior_likelihood(subparams)
+        return likelihood
+
+    def compute_log_likelihood(self, parameters: np.ndarray) -> float:
+        """
+        Compute the composite log likelihood, combined from all of
+        the models.
+
+        Parameters
+        ----------
+        parameters : np.ndarray
+            NumPy 1D array containing the full sampled parameters
+
+        Returns
+        -------
+        float
+            Log likelihood summed over all submodels
+        """
+        likelihood = sum(
+            [
+                model.compute_log_likelihood(parameters[indices])
+                for indices, model in zip(self.param_indices, self.models)
+            ]
+        )
+        return likelihood
+
+    def prior_constraint(self, parameters: np.ndarray) -> float:
+        """
+        Apply a composite model constraint. Because of how the models
+        are implemented, the submodels can have their own independent
+        prior constraints, and this is applied prior to those.
+
+        Parameters
+        ----------
+        parameters : np.ndarray
+            NumPy 1D array containing parameters
+        """
+        return 0.0
+
+    def sample_prior(self) -> np.ndarray:
+        """
+        Sample from the priors of each submodel, and ensure that the
+        number of parameters that come up match what is actually
+        expected.
+
+        Returns
+        -------
+        np.ndarray
+            NumPy 1D array with parameter values
+        """
+        parameters = np.zeros(len(self))
+        # loop over each model, sample from their prior, and organize those
+        # parameters according to the `param_indices` dictate
+        for index, model in enumerate(self.models):
+            param_indices = self.param_indices[index]
+            subparams = model.sample_prior()
+            # loop over each subparameter, and allocate to the correct parameter element
+            for param_index, subparam in zip(param_indices, subparams):
+                parameters[param_index] = subparam
+        return parameters
+
+    @classmethod
+    def from_yml(cls, yml_path: str):
+        """
+        Creates a composite model from a YAML input. As one can imagine,
+        the format of this YAML is substantially different from the
+        non-composite models. The structure of the YAML should be like:
+
+        ```
+        param_indices: [[1, 2, 3,], [1, 2, 3]]
+        model_A:
+           model: TMC1FourComponent
+           yml_path: model_A.yml
+        model_B:
+           model: CospatialTMC1
+           yml_path: model_B.yml
+        ```
+
+        The `model` subkeys should correspond to the name of a model class,
+        which is used to grab the correct one to instantiate. It basically
+        then relies on each `submodel.from_yml` method to create the submodel
+        and then append it to full model list.
+
+        Parameters
+        ----------
+        yml_path : str
+            Path to the composite model YAML specification
+
+        Raises
+        ------
+        KeyError
+            If the parameter indices are not found in the composite
+            YAML specification.
+        NameError
+            If the model name specified
+        """
+        yml_data = load_yaml(yml_path)
+        # get the parameter indices and remove it from the dictionary
+        param_indices = yml_data.pop("param_indices", None)
+        if not param_indices:
+            raise KeyError("param_indices not specified in YAML file.")
+        models = list()
+        for index, subdict in enumerate(yml_data.values()):
+            # this tries to get the class
+            model_type = globals()[subdict.get("model")]
+            if not model_type:
+                raise NameError(
+                    f"Model type for model {index + 1} is not implemented: {subdict.get('model')}"
+                )
+            # construct the submodel, and throw it in the pile
+            submodel = model_type.from_yml(subdict.get("yml_path"))
+            models.append(submodel)
+        return cls(param_indices, *models)
+
+
+class TMC1MethylChains(CompositeModel):
+    """
+    Single source, shared velocity components, shared linewidth,
+    different Ncol and Tex.
+
+    [ss, vlsr1, vlsr2, vlsr3, vlsr4, NcolA_1, NcolA_2, NcolA_3, NcolA_4,
+    NcolB_1, NcolB_2, NcolB_3, NcolB_4, TexA, TexB, dv
+    ]
+
+    16 parameters :P
+
+    The idea here would be to just have the composite model do the
+    managing, and just pass the correct parameters to the correct
+    model; everything else behaves the same as they would otherwise.
+    All this child model of `CompositeModel` does is prescribe the
+    parameter indices.
+
+    `A_state` and `E_state` are expected to be instances of `Cospatial`
+    models.
+    """
+
+    def __init__(self, A_state, E_state, **kwargs) -> None:
+        param_indices = [
+            [0, 1, 2, 3, 4, 5, 6, 7, 8, 13, 15],
+            [0, 1, 2, 3, 4, 9, 10, 11, 12, 14, 15],
+        ]
+        super().__init__(param_indices, A_state, E_state, **kwargs)
+
+    def get_names(self):
+        names = ["SourceSize"]
+        # four velocity components
+        names.extend([f"VLSR{i+1}" for i in range(4)])
+        # 8 column densities
+        for state in ["A", "E"]:
+            names.extend([f"Ncol{i+1}_{state}" for i in range(4)])
+        names.extend(["Tex_A", "Tex_E", "dV"])
+        return names
+
+    @classmethod
+    def from_yml(cls, yml_path: str):
+        """
+        Creates a composite model from a YAML input. As one can imagine,
+        the format of this YAML is substantially different from the
+        non-composite models. The structure of the YAML should be like:
+
+        ```
+        param_indices: [[1, 2, 3,], [1, 2, 3]]
+        model_A:
+           model: TMC1FourComponent
+           yml_path: model_A.yml
+        model_B:
+           model: CospatialTMC1
+           yml_path: model_B.yml
+        ```
+
+        The `model` subkeys should correspond to the name of a model class,
+        which is used to grab the correct one to instantiate. It basically
+        then relies on each `submodel.from_yml` method to create the submodel
+        and then append it to full model list.
+
+        Parameters
+        ----------
+        yml_path : str
+            Path to the composite model YAML specification
+
+        Raises
+        ------
+        KeyError
+            If the parameter indices are not found in the composite
+            YAML specification.
+        NameError
+            If the model name specified
+        """
+        yml_data = load_yaml(yml_path)
+        # for this type of model, we don't care about the param indices
+        _ = yml_data.pop("param_indices", None)
+        models = list()
+        for index, subdict in enumerate(yml_data.values()):
+            # this tries to get the class
+            model_type = globals()[subdict.get("model")]
+            if not model_type:
+                raise NameError(
+                    f"Model type for model {index + 1} is not implemented: {subdict.get('model')}"
+                )
+            # construct the submodel, and throw it in the pile
+            submodel = model_type.from_yml(subdict.get("yml_path"))
+            models.append(submodel)
+        return cls(*models)

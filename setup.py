@@ -20,7 +20,7 @@ VERSION = '0.1.1'
 
 # What packages are required for this module to be executed?
 REQUIRED = [
-    'astropy', 'numpy', 'scipy', 'emcee', 'matplotlib', 'tabulate', 'ruamel.yaml', 'lmfit', 'loguru', 'tqdm'
+    'astropy', 'numpy', 'scipy', 'emcee', 'matplotlib', 'tabulate', 'ruamel.yaml', 'lmfit', 'loguru', 'tqdm', 'joblib'
 ]
 
 # What packages are optional?
