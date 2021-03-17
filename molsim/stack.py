@@ -8,6 +8,7 @@ from molsim.constants import ckm
 from matplotlib import pyplot as plt
 from joblib import Parallel, delayed
 import numpy as np
+import h5py
 
 
 class StackComponent(object):
@@ -126,6 +127,22 @@ class SpectrumChunk:
         # set the default mask to take all values
         self._mask = np.ones_like(self.frequency, dtype=bool)
 
+    def frequency_in_window(self, frequency: float) -> bool:
+        """
+        Checks whether a frequency is present in this chunk.
+
+        Parameters
+        ----------
+        frequency : float
+            Frequency to check for within the window.
+
+        Returns
+        -------
+        bool
+            True if the frequency is contained in the chunk.
+        """
+        return self.frequency.min() <= frequency <= self.frequency.max()
+
     def interpolate_intensity(self, new_velocity) -> np.ndarray:
         """
         Interpolates the weighted and masked intensity of this spectrum
@@ -214,11 +231,13 @@ class SpectrumChunk:
     def mask(self, parameters: Tuple[float]) -> None:
         """
         Sets the mask used for calculating intensities. The `parameters`
-        argument is a three-tuple, containing the line width `dv`, the
+        argument is a five-tuple, containing the line width `dv`, the
         multiplier term `vel_roi` for determining how many channels to
         protect its intensity (`dv * vel_roi`), and the `rms_sigma` as
         the number of sigma away from the RMS to mask for intensity
-        calculations.
+        calculations, a `bias` value that can control the thresholding
+        with intensity, and `freqs` as a NumPy 1D array of frequency
+        values that need to be manually blocked.
 
         This is coded this way because setter methods can only take a
         single argument.
@@ -226,23 +245,50 @@ class SpectrumChunk:
         For the intensity check, we actually use the larger of two
         numbers: either some multiple of the RMS, or a small number
         used for when the RMS is zero, which happens to be simulations.
+        
+        Finally, the `freq_mask` is added to the full mask because
+        it corresponds to regions where we know there are definitely
+        coincidences due to the same molecule. 
+        The main use case here is using the knowledge of the simulation 
+        to blank off regions that will have flux but aren't large enough
+        to be picked off in intensity. For prolate tops, these are K-ladders
+        that are too weak to be seen, but are actually still there.
+        
+        The final mask, i.e. the one that is set as an attribute, corresponds
+        to regions (i.e. where the mask is True) that will be set to NaN.
 
         Parameters
         ----------
         parameters : Tuple[float]
-            dv, vel_roi, and rms_sigma
+            dv, vel_roi, rms_sigma, bias, and freqs
         """
         # unpack the arguments
-        dv, vel_roi, rms_sigma, bias = parameters
+        dv, vel_roi, rms_sigma, bias, freqs = parameters
         # isolate the ROI and work out the peak intensity. We will mask
         # everything else with NaN above this
         roi_mask = np.logical_and(
             -dv * vel_roi <= self.velocity, dv * vel_roi >= self.velocity
         )
         threshold = (get_rms(self._intensity) * rms_sigma) + bias
-        # find the intersection outside our ROI, and high intensity
-        blank_mask = (~roi_mask) * (self._intensity >= threshold)
-        self._mask = blank_mask
+        # freqs is either None, or a NumPy 1D array of frequencies
+        if freqs is not None:
+            assert type(freqs) == np.ndarray
+            # convert frequencies into equivalent velocity
+            vels = (freqs - self.center) * ckm / self.center
+            # mask regions corresponding to known interloping frequencies
+            # from the same molecule
+            freq_mask = np.sum([
+                np.logical_and(
+                    (-dv * vel_roi) + vel <= self.velocity, (dv * vel_roi) + vel >= self.velocity
+                ) for vel in vels
+            ], axis=0).astype(bool)
+        else:
+            freq_mask = np.zeros_like(roi_mask, dtype=bool)
+        # combine the intensity and frequency masks
+        blank_mask = (self._intensity >= threshold) + freq_mask
+        # the ROI needs to be protected no matter what, so we set that
+        # region to False always
+        self._mask = blank_mask * (~roi_mask)
 
     @property
     def weight(self) -> float:
@@ -336,6 +382,12 @@ class SpectrumChunk:
 
 
 class VelocityStack(object):
+    """
+    This class wraps the results of a velocity stack, basically
+    providing an interface to the chunks that go into the stack,
+    how much each contributes to the stack, and a quick way
+    to visualize the results.
+    """
     def __init__(
         self,
         velocity: np.ndarray,
@@ -437,14 +489,31 @@ class VelocityStack(object):
     @property
     @lru_cache(maxsize=None)
     def centers(self) -> np.ndarray:
+        """
+        Returns the frequency centers of each observational chunk.
+
+        Returns
+        -------
+        np.ndarray
+            NumPy 1D array of frequency centers
+        """
         return np.array([chunk.center for chunk in self.obs_chunks])
 
     def plot(self):
+        """
+        Plot the matched filter spectrum, alongside the velocity
+        stacks of the observation and simulation.
+
+        Returns
+        -------
+        2-tuple of matplotlib figure and axis objects
+        """
         fig, ax = plt.subplots()
         ax.plot(self.velocity, self.intensity, label="Obs.", alpha=0.7)
         ax.fill_between(self.velocity, self.sim_intensity, label="Sim.", alpha=0.6)
         ax.plot(self.velocity, self.matched_filter, label="Matched Filter")
         ax.legend()
+        return (fig, ax)
 
     @lru_cache(maxsize=None)
     def is_centered(self, dv: float = 0.12, vel_roi: float = 10.0) -> bool:
@@ -583,7 +652,8 @@ def _make_chunk(
     Returns
     -------
     Union[None, Type[SpectrumChunk]]
-        [description]
+        Returns a SpectrumChunk if there are more than two elements
+        in the array after masking, otherwise None
     """
     lower, upper = center - width, center + width
     mask = np.logical_and(frequency >= lower, frequency <= upper)
@@ -700,21 +770,29 @@ def velocity_stack_pipeline(
     # find the peaks in the simulated spectrum to use as the frequency
     # center. This is used because it's more resilient to weird lineshapes.
     peak_indices = find_peaks(
-        sim_x, sim_y, resolution, min_sep=vel_width * dv, is_sim=True, sigma=rms_sigma
+        sim_x, sim_y, resolution, min_sep=vel_roi * dv, is_sim=True, sigma=rms_sigma
     )
     centers = sim_x[peak_indices]
     obs_chunks = generate_spectrum_chunks(obs_x, obs_y, centers, vel_width, n_workers)
     sim_chunks = generate_spectrum_chunks(sim_x, sim_y, centers, vel_width, n_workers)
     # for each chunk, set the velocity mask to protect the intensity of each ROI
     for chunks in zip(obs_chunks, sim_chunks):
-        # this shifts the threshold for flux masking; for simulations
-        # we impose a large negative offset to zero everything out
         for chunk_type, chunk in enumerate(chunks):
             if chunk_type == 0:
                 bias = 0.
+                # find which windows we should definitely mask because
+                # we know there's something there
+                coin_mask = np.asarray([chunk.frequency_in_window(freq) for freq in centers])
+                coincidences = centers[coin_mask]
+                # sometimes we don't have coincidences and that's okay
+                if coincidences.sum() < 1:
+                    coincidences = None
             else:
+                # this shifts the threshold for flux masking; for simulations
+                # we impose a large negative offset to zero everything out
                 bias = -10.
-            chunk.mask = (dv, vel_roi, rms_sigma, bias)
+                coincidences = None
+            chunk.mask = (dv, vel_roi, rms_sigma, bias, coincidences)
     # the simulated data is used to weight the stacking
     expected_intensities = sim_y[peak_indices]
     max_expected = expected_intensities.max()
