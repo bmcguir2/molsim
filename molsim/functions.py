@@ -8,7 +8,7 @@ from datetime import date
 import matplotlib.pyplot as plt
 import matplotlib
 
-def sum_spectra(sims,thin=True,Tex=None,Tbg=None,res=None,noise=None,name='sum'):
+def sum_spectra(sims,thin=True,Tex=None,Tbg=None,res=None,noise=None,override_freqs=None,name='sum'):
 
 	'''
 	Adds all the spectra in the simulations list and returns a spectrum object.  By default,
@@ -18,6 +18,11 @@ def sum_spectra(sims,thin=True,Tex=None,Tbg=None,res=None,noise=None,name='sum')
 	co-adds with optically thick transmission, as it is not a full non-LTE radiative
 	transfer program.  If a resolution is not specified, the highest resolution of the
 	input datasets will be used.
+	
+	If the user wants back the summed spectra on an exact set of frequencies, they can specify
+	that array (a numpy array) as override_freqs.
+	
+	
 	'''
 
 		
@@ -25,16 +30,24 @@ def sum_spectra(sims,thin=True,Tex=None,Tbg=None,res=None,noise=None,name='sum')
 	if res is None:
 		res = min([x.res for x in sims])
 		
-	#first we find out the limits of the total frequency coverage so we can make an
-	#appropriate array to resample onto
-	total_freq = np.concatenate([x.spectrum.freq_profile for x in sims])
-	#eliminate all duplicate entries
-	total_freq = np.array(list(set(total_freq)))
-	total_freq.sort()
-	lls,uls = find_limits(total_freq,spacing_tolerance=2,padding=0)
+	
+	#check if override_freqs has been specified, and if so, use that.
+	if override_freqs is not None:
+		freq_arr = override_freqs
 		
-	#now make a resampled array
-	freq_arr = np.concatenate([np.arange(ll,ul,res) for ll,ul in zip(lls,uls)])	
+	else:	
+		#first we find out the limits of the total frequency coverage so we can make an
+		#appropriate array to resample onto
+		total_freq = np.concatenate([x.spectrum.freq_profile for x in sims])
+		#eliminate all duplicate entries
+		total_freq = np.array(list(set(total_freq)))
+		total_freq.sort()
+		lls,uls = find_limits(total_freq,spacing_tolerance=2,padding=0)
+		
+		#now make a resampled array
+		freq_arr = np.concatenate([np.arange(ll,ul,res) for ll,ul in zip(lls,uls)])	
+	
+	#now make an identical array to hold intensities
 	int_arr = np.zeros_like(freq_arr)	
 	
 	#make a spectrum to output
