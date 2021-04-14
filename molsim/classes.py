@@ -1433,12 +1433,12 @@ class Simulation(object):
 			uls = self.ul
 			
 		#for getting from catalogs	
-		l_idxs = [find_nearest(self.mol.catalog.frequency,x) for x in lls]
-		u_idxs = [find_nearest(self.mol.catalog.frequency,x) for x in uls]
+		l_idxs = np.searchsorted(self.mol.catalog.frequency, lls)
+		u_idxs = np.searchsorted(self.mol.catalog.frequency, uls)
 		
 		#for getting from the simulation spectrum
-		sim_l_idxs = [find_nearest(self.spectrum.frequency,x) for x in lls]
-		sim_u_idxs = [find_nearest(self.spectrum.frequency,x) for x in uls]
+		sim_l_idxs = np.searchsorted(self.spectrum.frequency, lls)
+		sim_u_idxs = np.searchsorted(self.spectrum.frequency, uls)
 		
 		print_freqs = []
 		print_ints = []
@@ -1452,11 +1452,8 @@ class Simulation(object):
 		idx_count = 0 #to track where we are in lls,uls
 		idx_used = [] #to track if a line has already been included so it's not double printed
 		for x,y in zip(l_idxs,u_idxs):
-			for i in range(x,y+1):
-				if i in idx_used:
-					continue
-				if self.mol.catalog.frequency[i] < lls[idx_count] or self.mol.catalog.frequency[i] > uls[idx_count]:
-					continue
+			print_freqs.append(self.mol.catalog.frequency[x:y])
+			for i in range(x,y):
 				qn_us = []
 				for qn_u in [self.mol.catalog.qn1up[i], self.mol.catalog.qn2up[i], self.mol.catalog.qn3up[i], self.mol.catalog.qn4up[i], self.mol.catalog.qn5up[i], self.mol.catalog.qn6up[i], self.mol.catalog.qn7up[i], self.mol.catalog.qn8up[i]]:
 					if qn_u is not None:
@@ -1467,18 +1464,15 @@ class Simulation(object):
 						qn_ls.append(qn_l)
 				qn_u_str = _make_fmted_qnstr(qn_us)
 				qn_l_str = _make_fmted_qnstr(qn_ls)
-				print_freqs.append([self.mol.catalog.frequency[i]])
-				print_qns.append(qn_u_str + ' -> ' + qn_l_str)	
-				print_eups.append([self.mol.catalog.eup[i]])
-				print_gus.append([self.mol.catalog.gup[i]])
-				print_gls.append([self.mol.catalog.glow[i]])
-				print_aijs.append(np.log10([self.mol.catalog.aij[i]]))
-				print_sijmus.append([self.mol.catalog.sijmu[i]])
-				idx_used.append(i)						
-			idx_count += 1	 				 
-		
+				print_qns.append(qn_u_str + ' -> ' + qn_l_str)
+			print_eups.append(self.mol.catalog.eup[x:y])
+			print_gus.append(self.mol.catalog.gup[x:y])
+			print_gls.append(self.mol.catalog.glow[x:y])
+			print_aijs.append(np.log10(self.mol.catalog.aij[x:y]))
+			print_sijmus.append(self.mol.catalog.sijmu[x:y])
+				
 		for x,y in zip(sim_l_idxs,sim_u_idxs):	
-			print_ints.append(self.spectrum.Tb[x:y+1]) if x != y else print_ints.append([self.spectrum.Tb[x]])
+			print_ints.append(self.spectrum.Tb[x:y])
 		
 		#given bug fix refactors above, this could be removed by changing the way things are added above (as small lists)
 		print_freqs = np.array([item for sublist in print_freqs for item in sublist])
