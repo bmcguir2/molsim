@@ -36,7 +36,7 @@ jobs:
           $CONDA/bin/pip install --upgrade pip
       - name: Install molsim into environment
         run: |
-          pip install -e .[dev]
+          $CONDA/bin/pip install -e .[dev]
       - name: Run CI actions
         run: |
           # $CONDA/bin/flake8

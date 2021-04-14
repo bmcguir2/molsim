@@ -424,7 +424,8 @@ def load_mol(filein,type='molsim',catdict=None,id=None,name=None,formula=None,
 	#now we have to load the transitions in	and make transition objects	
 		
 	#make the molecule
-	mol = Molecule(levels=levels,catalog=cat)
+	mol = Molecule(levels=levels,catalog=cat,name=name,formula=formula, elements=elements,
+	mass=mass, A=A, B=B, C=C, muA=muA, muB=muB, muC=muC, mu=mu)
 	
 	#make a partition function object and assign it to the molecule
 	#if there's no other info, assume we're state counting

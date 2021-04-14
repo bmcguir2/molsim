@@ -11,7 +11,7 @@
 
 For details about the methodology, particularly with respect to MCMC simulations, please refer to [Loomis _et al._ 2020](https://arxiv.org/abs/2009.11900)
 
-If you use `molsim` for your analysis, please cite the Zenodo entry: [![DOI](https://zenodo.org/badge/253506425.svg)](https://zenodo.org/badge/latestdoi/253506425)
+If you use `molsim` for your analysis, please cite the Zenodo entry: [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.4560750.svg)](https://doi.org/10.5281/zenodo.4560750)
 
 ## Setup instructions
 
@@ -43,6 +43,6 @@ The backslashes are required to escape the `[]` characters for `zsh`, although y
 
 The large majority of `molsim` was written by @bmcguir2, building on top of earlier code (`simulate_lte`).
 
-The `mcmc` module was written by @laserkelvin, based heavily on earlier code by Dr. Ryan Loomis (see [his repo here](https://github.com/ryanaloomis/TMC1_mcmc_fitting)), which was used for the DR1 GOTHAM data analysis.
+The `mcmc` module was written by @laserkelvin, based heavily on earlier code by @ryanaloomis (see [his repo here](https://github.com/ryanaloomis/TMC1_mcmc_fitting)), which was used for the DR1 GOTHAM data analysis.
 
 Any issues, please submit an issue, reporting what you think should happen and what actually happens.
