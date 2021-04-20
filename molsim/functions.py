@@ -104,9 +104,9 @@ def sum_spectra(sims,thin=True,Tex=None,Tbg=None,res=None,noise=None,override_fr
 			
 			#loop through the simulations and extract the lls, uls, and omegas (from the synthesized beams)
 			for sim in sims:
-				omegas.append(sim.observation.observatory.synth_beam[0]*sim.observation.observatory.synth_beam[1])
 				for ll in sim.ll:
 					omegas_lls.append(ll)
+					omegas.append(sim.observation.observatory.synth_beam[0]*sim.observation.observatory.synth_beam[1])
 				for ul in sim.ul:
 					omegas_uls.append(ul)
 				
@@ -128,7 +128,7 @@ def sum_spectra(sims,thin=True,Tex=None,Tbg=None,res=None,noise=None,override_fr
 			
 			#now we can do the actual conversion to Planck scale Jy/beam.  We can only operate on non-zero values.
 			mask = np.where(int_arr != 0)[0]
-			int_arr[mask] = (3.92E-8 * (freq_arr[mask]*1E-3)**3 *omega_arr[mask]/ (np.exp(0.048*freq_arr[mask]*1E-3/int_arr[mask]) - 1))
+			int_arr[mask] = (3.92E-8 * (freq_arr[mask]*1E-3)**3 *omega_arr[mask] / (np.exp(0.048*freq_arr[mask]*1E-3/int_arr[mask]) - 1))
 					
 		sum_spectrum.int_profile = int_arr
 			
