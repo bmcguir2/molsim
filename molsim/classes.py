@@ -1579,7 +1579,7 @@ class Simulation(object):
 		self._calc_tau()
 		self._calc_bg()
 		self._calc_Iv()
-		self.spectrum.Tb = self._calc_Tb(self.spectrum.frequency,self.spectrum.tau,self.spectrum.Tbg)
+		self.spectrum.Tb = self._calc_Tb(self.spectrum.frequency,self.spectrum.tau,self.spectrum.Tbg,self.source.Tex)
 		self._make_lines()
 		self._beam_correct()
 		self._set_units()
