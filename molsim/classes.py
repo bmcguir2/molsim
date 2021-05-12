@@ -983,6 +983,16 @@ class Continuum(object):
 			print('WARNING: Unrecognized type ("{}") specified for continuum generation.' \
 			' Will use 2.7 K CMB instead.' .format(self.type))
 			self.params = 2.7
+		# check to see if a file was provided for interpolation
+		if self.cont_file is not None and self.type == 'interpolation':
+			freqs = []
+			temps = []
+			with open(self.cont_file, 'r') as input:
+				for line in input:
+					freqs.append(float(line.split()[0].strip()))
+					temps.append(float(line.split()[1].strip()))
+			self.freqs = np.array(freqs)
+			self.temps = np.array(temps)
 		return
 		
 	def Tbg(self,freq):
@@ -999,6 +1009,9 @@ class Continuum(object):
 			for x in self.params:
 				tbg_arr[np.where(np.logical_and(freq>=x[0], freq<=x[1]))[0]] = x[2]
 			return tbg_arr
+			
+		if self.type == 'interpolation':
+			return np.interp(freq,self.freqs,self.temps)	
 				
 	def Ibg(self,freq):			
 		'''
