@@ -157,19 +157,24 @@ def find_limits(freq_arr,spacing_tolerance=100,padding=0):
 	# 	print('The input array has no data.')
 	# 	return
 
-	#first, calculate the most common data point spacing as the mode of the spacings
-	#this won't be perfect if the data aren't uniformly sampled
-	#get the differences
-	diffs = np.diff(freq_arr)
-	spacing = stats.mode(diffs)[0][0]
-	
-	gaps = np.where(abs(diffs) > spacing*spacing_tolerance)
-	
-	ll = np.concatenate((np.array([freq_arr[0]]),freq_arr[gaps[0][:]+1]))
-	ul = np.concatenate((freq_arr[gaps[0][:]],np.array([freq_arr[-1]])))
-	
-	ll -= padding*ll/ckm
-	ul += padding*ul/ckm
+	# this algorithm compares each gap against the average spacing of spacing_tolerance nearby points
+	# if the gap is larger than spacing_tolerance * average spacing in both directions, it is considered as the actual gap
+	# simplifying it gives the following expressions
+
+	t = spacing_tolerance
+	center = freq_arr[t+1:-t] - freq_arr[t:-t-1]
+	left = freq_arr[t:-t-1] - freq_arr[:-2*t-1]
+	right = freq_arr[2*t+1:] - freq_arr[t+1:-t]
+
+	gaps = np.concatenate(([-1], np.where(np.logical_and(center > left, center > right))[0] + t, [-1]))
+
+	ll = freq_arr[gaps[:-1]+1]
+	ul = freq_arr[gaps[1:]]
+
+	# the original expressions require 1 addition, 1 multiplication and 1 division operations per element, i.e. 3N operations, plus memory allocation and deallocation of temporary array
+	# the following use 1 multiplication per element plus 1 addition and 1 division, i.e. N+2 operations, without allocating temporary array
+	ll *= 1 - padding/ckm
+	ul *= 1 + padding/ckm
 	
 	return ll,ul
 	
