@@ -1225,10 +1225,12 @@ class Simulation(object):
 								self.source.dV*1000 * self.mol.q(self.source.Tex)
 							)
 					)
-		#Set the tau to 0 if it exceeds the tau_threshold so as to to not impact the fit
+		#Set the tau (intensity) of a transition to 0 if it exceeds the tau_threshold. 
+		#Implemented to exclude optically thick transitions from least-squares fitting routine
 		if tau_threshold is not None:
 			self.spectrum.tau[self.spectrum.tau>=self.tau_threshold] = 0.
-		#Set the tau to 0 if it falls below the eup_threshold
+		#Set the tau (intensity) of a transition to 0 if it falls below the eup_threshold. 
+		#Implemented as an alternate method of excluding particularly abundant transitions from a least-squares fit
 		if eup_threshold is not None:
 			self.spectrum.tau[self.eup<=self.eup_threshold] = 0.
 		
