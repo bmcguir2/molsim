@@ -1130,6 +1130,8 @@ class Simulation(object):
                     use_obs = False, # flag for line profile simulation to be done with observations
                     add_noise = False, #flag for whether to add noise 
                     noise = None, # Noise level in native units of the simulation to add
+                    tau_threshold = 1000., #Set upper threshold at which to ignore lines for fitting (Samer)
+                    eup_threshold = 0. #Set lower eup threshold [K] at which to exclude transitions (Samer)
 				):
 				
 		self.spectrum = spectrum
@@ -1154,6 +1156,8 @@ class Simulation(object):
 		self.add_noise = add_noise
 		self.noise = noise
 		self.lines_in_range = True
+		self.tau_threshold = tau_threshold
+		self.eup_threshold = eup_threshold
 				
 		self._set_arrays()
 		self._check_coverage()
@@ -1221,6 +1225,11 @@ class Simulation(object):
 								self.source.dV*1000 * self.mol.q(self.source.Tex)
 							)
 					)
+		#Set the tau to 0 if it exceeds the tau_threshold so as to to not impact the fit (Samer)
+		self.spectrum.tau[self.spectrum.tau>=self.tau_threshold] = 0.
+		#Set the tau to 0 if it exceeds the eup_threshold (Samer)
+		self.spectrum.tau[self.eup<=self.eup_threshold] = 0.
+		
 		return
 		
 	def _calc_bg(self):
@@ -1367,7 +1376,7 @@ class Simulation(object):
 		
 		return
 				
-	def print_lines(self,ll=None,ul=None,threshold=None,use_profile=False,dV=None,vlsr=None,file_out=None,latex_out=False,txt_out=False):
+	def print_lines(self,ll=None,ul=None,threshold=None,use_profile=False,dV=None,vlsr=None,file_out=None,latex_out=False,txt_out=False,eup_threshold=None):
 	
 		'''
 		Prints all the lines within the simulation, optionally with constraints or output to a file.
@@ -1407,6 +1416,9 @@ class Simulation(object):
 		
 		txt_out: bool
 			Set to True to print a plain text tab-delimited table to file_out.  Cannot be used with latex_out.
+			
+		eup_threshold: float
+			Only lines with upper-state energy above this threshold will be printed.
 		
 		'''
 		
@@ -1433,12 +1445,15 @@ class Simulation(object):
 			uls = self.ul
 			
 		#for getting from catalogs	
-		l_idxs = np.searchsorted(self.mol.catalog.frequency, lls)
-		u_idxs = np.searchsorted(self.mol.catalog.frequency, uls)
+		#make a temporary copy of self.mol.catalog.frequency
+		#shift that array appropriately by the vlsr
+		#then find l_idxs and u_idxs using the commands below, but operating on your new shifted array
+		l_idxs = np.searchsorted((self.mol.catalog.frequency + self.source.velocity*self.mol.catalog.frequency/ckm), lls)
+		u_idxs = np.searchsorted((self.mol.catalog.frequency + self.source.velocity*self.mol.catalog.frequency/ckm), uls,side='right')
 		
 		#for getting from the simulation spectrum
 		sim_l_idxs = np.searchsorted(self.spectrum.frequency, lls)
-		sim_u_idxs = np.searchsorted(self.spectrum.frequency, uls)
+		sim_u_idxs = np.searchsorted(self.spectrum.frequency, uls,side='right')
 		
 		print_freqs = []
 		print_ints = []
@@ -1489,19 +1504,36 @@ class Simulation(object):
 		#calc skyfreqs if needed
 		if vlsr is not None:
 			print_skyfreqs = np.array([x - vlsr*x/ckm for x in print_freqs])		
-			
+		
 		#apply threshold if needs be
+		int_mask = []
 		if threshold is not None:
-			mask = np.where(np.array(print_ints) > threshold)[0]
+			int_mask = np.where(np.array(print_ints) > threshold)[0]
 			#make sure the mask isn't zero; if so, let the user know the threshold is set too high and let them know the maximum.
-			if len(mask) == 0:
+			if len(int_mask) == 0:
 				print(f'ERROR: Threshold is set too high and no lines are found.  The maximum value in the range is {np.max(print_ints):.3e}. Exiting.')
 				return
+		
+		#apply eup_threshold
+		eup_mask = []
+		if eup_threshold is not None:
+			eup_mask = np.where(np.array(print_eups) > eup_threshold)[0]
+			if len(eup_mask) == 0:
+				print(f'ERROR: Eup_threshold is set too high and no lines are found.  The maximum value in the range is {np.max(print_eups):.3e}. Exiting.')
+				return
+		print('print_freqs: ', print_freqs.size)
+		print('print_ints: ', print_ints.size)
+		print('print_eups: ', print_eups.size)
+		print('print_qns: ', print_qns.size)
+		print('print_aijs: ', print_aijs.size)
+		#Combine intensity and eup threshold masks
+		masks = np.concatenate([int_mask, eup_mask])
+		mask = np.unique(masks).astype(int)
 			
 		print_table = []
 		if vlsr is None:
 			headers = ['Frequency', 'Intensity', 'Quantum Numbers', 'E$_{\mathrm{u}}$ (K)', 'g$_{\mathrm{u}}$', 'g$_{\mathrm{l}}$', 'log(A$_{\mathrm{ij}}$)', r'S$_{\mathrm{ij}}\mathrm{\mu} ^2$']
-			if threshold is not None:
+			if threshold is not None or eup_threshold is not None:
 				for a,b,c,d,e,f,g,h in zip(print_freqs[mask], print_ints[mask], print_qns[mask], print_eups[mask], print_gus[mask], print_gls[mask], print_aijs[mask], print_sijmus[mask]):
 					print_table.append([f'{a:.4f}',f'{b:.4f}',f'{c}',f'{d:.2f}',e,f,f'{g:.3f}',f'{h:.3f}'])
 				display(HTML(tabulate(print_table,
@@ -1536,7 +1568,7 @@ class Simulation(object):
 		
 		if vlsr is not None:
 			headers = ['Frequency', 'Sky Frequency', 'Intensity', 'Quantum Numbers', 'E$_{\mathrm{u}}$ (K)', 'g$_{\mathrm{u}}$', 'g$_{\mathrm{l}}$', 'log(A$_{\mathrm{ij}}$)', r'S$_{\mathrm{ij}}\mathrm{\mu} ^2$']
-			if threshold is not None:
+			if threshold is not None or eup_threshold is not None:
 				for a,a2,b,c,d,e,f,g,h in zip(print_freqs[mask], print_skyfreqs[mask], print_ints[mask], print_qns[mask], print_eups[mask], print_gus[mask], print_gls[mask], print_aijs[mask], print_sijmus[mask]):
 					print_table.append([f'{a:.4f}',f'{a2:.4f}',f'{b:.4f}',f'{c}',f'{d:.2f}',e,f,f'{g:.3f}',f'{h:.3f}'])
 				display(HTML(tabulate(print_table,
