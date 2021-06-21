@@ -1130,8 +1130,8 @@ class Simulation(object):
                     use_obs = False, # flag for line profile simulation to be done with observations
                     add_noise = False, #flag for whether to add noise 
                     noise = None, # Noise level in native units of the simulation to add
-                    tau_threshold = 1000., #Set upper threshold at which to ignore lines for fitting (Samer)
-                    eup_threshold = 0. #Set lower eup threshold [K] at which to exclude transitions (Samer)
+                    tau_threshold = 1e6., #Set upper threshold at which to ignore lines for fitting
+                    eup_threshold = 0. #Set lower eup threshold [K] at which to exclude transitions
 				):
 				
 		self.spectrum = spectrum
