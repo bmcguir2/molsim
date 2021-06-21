@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 
 
-def sum_spectra(sims,thin=True,Tex=None,Tbg=None,res=None,noise=None,override_freqs=None,planck=False,name='sum',tau_threshold=1000.):
+def sum_spectra(sims,thin=True,Tex=None,Tbg=None,res=None,noise=None,override_freqs=None,planck=False,name='sum'):
 
 	'''
 	Adds all the spectra in the simulations list and returns a spectrum object.  By default,
@@ -76,10 +76,6 @@ def sum_spectra(sims,thin=True,Tex=None,Tbg=None,res=None,noise=None,override_fr
 
 		#if it's not gonna be thin, then we add up all the taus and apply the corrections
 		for x in sims:
-			#Find all of the indices that have a tau > tau_threshold
-			tau_mask = np.where(x.spectrum.tau_profile>=tau_threshold)[0]
-			#Set these taus equal to 0 so they don't impact the fit
-			x.spectrum.tau_profile[tau_mask] = 0
 			int_arr0 = np.interp(freq_arr,x.spectrum.freq_profile,x.spectrum.tau_profile,left=0.,right=0.)
 			int_arr += int_arr0	
 		
