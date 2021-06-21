@@ -1230,7 +1230,7 @@ class Simulation(object):
 		if tau_threshold is not None:
 			self.spectrum.tau[self.spectrum.tau>=self.tau_threshold] = 0.
 		#Set the tau (intensity) of a transition to 0 if it falls below the eup_threshold. 
-		#Lines that have lower state energies are populated more and therefore are more optically thick, this is another method of excluding them
+		#Set optical depth for low energy transitions to zero, as they tend to be optically thick
 		if eup_threshold is not None:
 			self.spectrum.tau[self.eup<=self.eup_threshold] = 0.
 		
