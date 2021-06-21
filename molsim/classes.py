@@ -1130,8 +1130,8 @@ class Simulation(object):
                     use_obs = False, # flag for line profile simulation to be done with observations
                     add_noise = False, #flag for whether to add noise 
                     noise = None, # Noise level in native units of the simulation to add
-                    tau_threshold = 1e6., #Set upper threshold at which to ignore lines for fitting
-                    eup_threshold = 0. #Set lower eup threshold [K] at which to exclude transitions
+                    tau_threshold = None, #Set upper threshold at which to ignore lines for fitting
+                    eup_threshold = None #Set lower eup threshold [K] at which to exclude transitions
 				):
 				
 		self.spectrum = spectrum
@@ -1226,9 +1226,11 @@ class Simulation(object):
 							)
 					)
 		#Set the tau to 0 if it exceeds the tau_threshold so as to to not impact the fit
-		self.spectrum.tau[self.spectrum.tau>=self.tau_threshold] = 0.
+		if tau_threshold is not None:
+			self.spectrum.tau[self.spectrum.tau>=self.tau_threshold] = 0.
 		#Set the tau to 0 if it falls below the eup_threshold
-		self.spectrum.tau[self.eup<=self.eup_threshold] = 0.
+		if eup_threshold is not None:
+			self.spectrum.tau[self.eup<=self.eup_threshold] = 0.
 		
 		return
 		
