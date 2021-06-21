@@ -1225,9 +1225,9 @@ class Simulation(object):
 								self.source.dV*1000 * self.mol.q(self.source.Tex)
 							)
 					)
-		#Set the tau to 0 if it exceeds the tau_threshold so as to to not impact the fit (Samer)
+		#Set the tau to 0 if it exceeds the tau_threshold so as to to not impact the fit
 		self.spectrum.tau[self.spectrum.tau>=self.tau_threshold] = 0.
-		#Set the tau to 0 if it exceeds the eup_threshold (Samer)
+		#Set the tau to 0 if it falls below the eup_threshold
 		self.spectrum.tau[self.eup<=self.eup_threshold] = 0.
 		
 		return
