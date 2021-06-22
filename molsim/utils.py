@@ -29,7 +29,15 @@ def find_nearest(arr,val):
 		 < math.fabs(val - arr[idx])):
 		return idx-1
 	else:
-		return idx 
+		return idx
+		
+def find_nearest_vectorized(arr,val_arr):
+    idxs = np.searchsorted(arr, val_arr, side="left")
+    for i in range(len(val_arr)):
+        if idxs[i] > 0 and (idxs[i] == len(arr) or math.fabs(val_arr[i] - arr[idxs[i]-1]) \
+                           < math.fabs(val_arr[i] - arr[idxs[i]])):
+            idxs[i] = idxs[i]-1
+        return list(idxs)
 
 def _trim_arr(arr,lls,uls,key_arr=None,return_idxs=False,ll_idxs=None,ul_idxs=None,return_mask=False):
 	'''
@@ -198,8 +206,8 @@ def _find_limit_idx(freq_arr,spacing_tolerance=100,padding=25):
 	ll -= padding*ll/ckm
 	ul += padding*ul/ckm
 	
-	ll = [find_nearest(freq_arr,x) for x in ll]
-	ul = [find_nearest(freq_arr,x) for x in ul]
+	ll = find_nearest_vectorized(freq_arr,ll)
+	ul = find_nearest_vectorized(freq_arr,ul)
 	
 	return ll,ul
 	
@@ -263,7 +271,7 @@ def find_peaks(freq_arr,int_arr,res,min_sep,is_sim=False,sigma=3,kms=True):
 	indices = signal.find_peaks(int_new,distance=chan_sep)
 
 	if kms is True:
-		indices = [find_nearest(freq_arr,freq_new[x]) for x in indices[0]] #if we had to re-sample things
+		indices = find_nearest_vectorized(freq_arr,freq_new[indices[0]]) #if we had to re-sample things
 		
 	if is_sim is True:
 		return np.asarray(indices)
