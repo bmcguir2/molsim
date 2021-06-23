@@ -271,7 +271,7 @@ def find_peaks(freq_arr,int_arr,res,min_sep,is_sim=False,sigma=3,kms=True):
 	indices = signal.find_peaks(int_new,distance=chan_sep)
 
 	if kms is True:
-		indices = find_nearest_vectorized(freq_arr,freq_new[indices[0]]) #if we had to re-sample things
+		indices = [find_nearest(freq_arr,freq_new[x]) for x in indices[0]] #if we had to re-sample things
 		
 	if is_sim is True:
 		return np.asarray(indices)
