@@ -3,7 +3,7 @@ from numba import njit
 import math
 from molsim.constants import ccm, cm, ckm, h, k, kcm 
 from molsim.stats import get_rms
-from molsim.utils import _trim_arr, find_nearest, _make_gauss, _apply_vlsr, _apply_beam, _make_fmted_qnstr
+from molsim.utils import _trim_arr, find_nearest, find_nearest_vectorized, _make_gauss, _apply_vlsr, _apply_beam, _make_fmted_qnstr
 from molsim.file_io import _read_txt, _read_xy
 from scipy.interpolate import interp1d
 from astropy import units
@@ -1240,11 +1240,11 @@ class Simulation(object):
 					)
 		#Set the tau (intensity) of a transition to 0 if it exceeds the tau_threshold. 
 		#Implemented to exclude optically thick transitions from least-squares fitting routine
-		if tau_threshold is not None:
+		if self.tau_threshold is not None:
 			self.spectrum.tau[self.spectrum.tau>=self.tau_threshold] = 0.
 		#Set the tau (intensity) of a transition to 0 if it falls below the eup_threshold. 
 		#Set optical depth for low energy transitions to zero, as they tend to be optically thick
-		if eup_threshold is not None:
+		if self.eup_threshold is not None:
 			self.spectrum.tau[self.eup<=self.eup_threshold] = 0.
 		
 		return
@@ -1323,14 +1323,14 @@ class Simulation(object):
 			if self.use_obs and self._cache:
 				l_idxs = self._cache.get("l_idxs")
 				if l_idxs is None:
-					l_idxs = [find_nearest(freq_arr,x) for x in lls_raw]
-					u_idxs = [find_nearest(freq_arr,x) for x in uls_raw]
+					l_idxs = find_nearest_vectorized(freq_arr,lls_raw)
+					u_idxs = find_nearest_vectorized(freq_arr,uls_raw)
 					self._cache["l_idxs"] = l_idxs
 					self._cache["u_idxs"] = u_idxs
 				u_idxs = self._cache.get("u_idxs")
 			else:
-				l_idxs = [find_nearest(freq_arr,x) for x in lls_raw]
-				u_idxs = [find_nearest(freq_arr,x) for x in uls_raw]		
+				l_idxs = find_nearest_vectorized(freq_arr,lls_raw)
+				u_idxs = find_nearest_vectorized(freq_arr,uls_raw)
 			for x,y,ll,ul in zip(self.spectrum.frequency,self.spectrum.tau,l_idxs,u_idxs):
 				tau_arr[ll:ul] += _make_gauss(x,y,freq_arr[ll:ul],self.source.dV,ckm)
 			self.spectrum.tau_profile = tau_arr

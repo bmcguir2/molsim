@@ -29,7 +29,15 @@ def find_nearest(arr,val):
 		 < math.fabs(val - arr[idx])):
 		return idx-1
 	else:
-		return idx 
+		return idx
+		
+def find_nearest_vectorized(arr,val_arr):
+    idxs = np.searchsorted(arr, val_arr, side="left")
+    for i in range(len(val_arr)):
+        if idxs[i] > 0 and (idxs[i] == len(arr) or math.fabs(val_arr[i] - arr[idxs[i]-1]) \
+                           < math.fabs(val_arr[i] - arr[idxs[i]])):
+            idxs[i] = idxs[i]-1
+        return list(idxs)
 
 def _trim_arr(arr,lls,uls,key_arr=None,return_idxs=False,ll_idxs=None,ul_idxs=None,return_mask=False):
 	'''
@@ -198,8 +206,8 @@ def _find_limit_idx(freq_arr,spacing_tolerance=100,padding=25):
 	ll -= padding*ll/ckm
 	ul += padding*ul/ckm
 	
-	ll = [find_nearest(freq_arr,x) for x in ll]
-	ul = [find_nearest(freq_arr,x) for x in ul]
+	ll = find_nearest_vectorized(freq_arr,ll)
+	ul = find_nearest_vectorized(freq_arr,ul)
 	
 	return ll,ul
 	
