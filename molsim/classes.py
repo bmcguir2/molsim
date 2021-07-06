@@ -1207,7 +1207,8 @@ class Simulation(object):
 				self.ul = self.ul.tolist()
 			else:
 				self.ul = [self.ul]
-		mask = _trim_arr(self.mol.catalog.frequency,self.ll,self.ul,return_mask=True)
+		#SAMER
+		mask = _trim_arr(self.mol.catalog.frequency - self.source.velocity*self.mol.catalog.frequency/ckm,self.ll,self.ul,return_mask=True)
 		self.spectrum.frequency = self.mol.catalog.frequency[mask]
 		self.spectrum.freq0 = np.copy(self.spectrum.frequency)
 		self.aij = self.mol.catalog.aij[mask]
@@ -1393,7 +1394,7 @@ class Simulation(object):
 		
 		return
 				
-	def print_lines(self,ll=None,ul=None,threshold=None,use_profile=False,dV=None,vlsr=None,file_out=None,latex_out=False,txt_out=False,eup_threshold=None):
+	def print_lines(self,ll=None,ul=None,threshold=0.,use_profile=False,dV=None,vlsr=None,file_out=None,latex_out=False,txt_out=False,eup_threshold=0.):
 	
 		'''
 		Prints all the lines within the simulation, optionally with constraints or output to a file.
@@ -1465,12 +1466,12 @@ class Simulation(object):
 		#make a temporary copy of self.mol.catalog.frequency
 		#shift that array appropriately by the vlsr
 		#then find l_idxs and u_idxs using the commands below, but operating on your new shifted array
-		l_idxs = np.searchsorted((self.mol.catalog.frequency + self.source.velocity*self.mol.catalog.frequency/ckm), lls)
-		u_idxs = np.searchsorted((self.mol.catalog.frequency + self.source.velocity*self.mol.catalog.frequency/ckm), uls,side='right')
+		l_idxs = np.searchsorted((self.mol.catalog.frequency - self.source.velocity*self.mol.catalog.frequency/ckm), lls)
+		u_idxs = np.searchsorted((self.mol.catalog.frequency - self.source.velocity*self.mol.catalog.frequency/ckm), uls)
 		
 		#for getting from the simulation spectrum
 		sim_l_idxs = np.searchsorted(self.spectrum.frequency, lls)
-		sim_u_idxs = np.searchsorted(self.spectrum.frequency, uls,side='right')
+		sim_u_idxs = np.searchsorted(self.spectrum.frequency, uls)
 		
 		print_freqs = []
 		print_ints = []
@@ -1483,6 +1484,7 @@ class Simulation(object):
 		
 		idx_count = 0 #to track where we are in lls,uls
 		idx_used = [] #to track if a line has already been included so it's not double printed
+		
 		for x,y in zip(l_idxs,u_idxs):
 			print_freqs.append(self.mol.catalog.frequency[x:y])
 			for i in range(x,y):
@@ -1522,30 +1524,27 @@ class Simulation(object):
 		if vlsr is not None:
 			print_skyfreqs = np.array([x - vlsr*x/ckm for x in print_freqs])		
 		
-		#apply threshold if needs be
-		int_mask = []
-		if threshold is not None:
-			int_mask = np.where(np.array(print_ints) > threshold)[0]
-			#make sure the mask isn't zero; if so, let the user know the threshold is set too high and let them know the maximum.
-			if len(int_mask) == 0:
-				print(f'ERROR: Threshold is set too high and no lines are found.  The maximum value in the range is {np.max(print_ints):.3e}. Exiting.')
-				return
+# 		apply threshold if needs be
+# 		int_mask = []
+# 		if threshold is not None:
+# 			int_mask = np.where(np.array(print_ints) > threshold)[0]
+# 			make sure the mask isn't zero; if so, let the user know the threshold is set too high and let them know the maximum.
+# 			if len(int_mask) == 0:
+# 				print(f'ERROR: Threshold is set too high and no lines are found.  The maximum value in the range is {np.max(print_ints):.3e}. Exiting.')
+# 				return
+# 		
+# 		apply eup_threshold
+# 		eup_mask = []
+# 		if eup_threshold is not None:
+# 			eup_mask = np.where(np.array(print_eups) > eup_threshold)[0]
+# 			if len(eup_mask) == 0:
+# 				print(f'ERROR: Eup_threshold is set too high and no lines are found.  The maximum value in the range is {np.max(print_eups):.3e}. Exiting.')
+# 				return
 		
-		#apply eup_threshold
-		eup_mask = []
-		if eup_threshold is not None:
-			eup_mask = np.where(np.array(print_eups) > eup_threshold)[0]
-			if len(eup_mask) == 0:
-				print(f'ERROR: Eup_threshold is set too high and no lines are found.  The maximum value in the range is {np.max(print_eups):.3e}. Exiting.')
-				return
-		print('print_freqs: ', print_freqs.size)
-		print('print_ints: ', print_ints.size)
-		print('print_eups: ', print_eups.size)
-		print('print_qns: ', print_qns.size)
-		print('print_aijs: ', print_aijs.size)
-		#Combine intensity and eup threshold masks
-		masks = np.concatenate([int_mask, eup_mask])
-		mask = np.unique(masks).astype(int)
+		int_mask = print_ints > threshold if threshold is not None else np.full(print_ints.size, True)
+		eup_mask = print_eups > eup_threshold if eup_threshold is not None else np.full(print_eups.size, True)
+		mask = int_mask * eup_mask
+			
 			
 		print_table = []
 		if vlsr is None:
