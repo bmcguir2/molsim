@@ -1393,7 +1393,7 @@ class Simulation(object):
 		
 		return
 				
-	def print_lines(self,ll=None,ul=None,threshold=0.,use_profile=False,dV=None,vlsr=None,file_out=None,latex_out=False,txt_out=False,eup_threshold=0.):
+	def print_lines(self,ll=None,ul=None,threshold=None,use_profile=False,dV=None,vlsr=None,file_out=None,latex_out=False,txt_out=False,eup_threshold=None):
 	
 		'''
 		Prints all the lines within the simulation, optionally with constraints or output to a file.
