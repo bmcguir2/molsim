@@ -1207,7 +1207,6 @@ class Simulation(object):
 				self.ul = self.ul.tolist()
 			else:
 				self.ul = [self.ul]
-		#SAMER
 		mask = _trim_arr(self.mol.catalog.frequency - self.source.velocity*self.mol.catalog.frequency/ckm,self.ll,self.ul,return_mask=True)
 		self.spectrum.frequency = self.mol.catalog.frequency[mask]
 		self.spectrum.freq0 = np.copy(self.spectrum.frequency)
