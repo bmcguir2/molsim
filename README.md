@@ -17,13 +17,17 @@ If you use `molsim` for your analysis, please cite the Zenodo entry: [![DOI](htt
 
 For science-ready code, we recommend downloading one of the releases—these are verified to the best of our ability to be accurate. If there are any indications otherwise, please submit an issue!
 
-For the latest build, either for testing or for contributing, please clone the `development` branch of this reposity.
+For the latest build, either for testing or for contributing, please clone the `development` branch of this repository.
 
 We recommend using `conda` for maintaining Python environments. Once you have acquired the code either from downloading a release or cloning the repository, you can create a new `conda` environment (called `molsim`) by running the following in the `molsim` directory:
 
 `conda env create -n molsim -f conda.yml`
 
 followed by:
+
+`conda activate molsim`
+
+to change the Anaconda environment, and then
 
 `pip install .`
 
@@ -38,6 +42,15 @@ followed by:
 `pip install -e .\[dev\]`
 
 The backslashes are required to escape the `[]` characters for `zsh`, although you may not have that issue on other shells/OS'. This will install `molsim` as a softlink so that changes are updated on the fly, while the `[dev]` option installs additional packages such as `pytest`, and `black` for formatting.
+
+### Use with notebook environments
+
+A common way to interact with notebook environments is to have a `base` environment installation of `jupyter`. To use the Python kernel installed as part of the `molsim` environment with the `base` environment, using these steps:
+
+1. `conda activate molsim`
+2. `python -m ipykernel install --user --name molsim --display-name "molsim-jupyter"`
+
+This links the IPython kernel with the `jupyter` installation. You'll then be able to start a notebook with the environment called "molsim-jupyter".
 
 ## Contributions
 
