@@ -1,4 +1,4 @@
-from typing import Tuple, Union, Type, NamedTuple, Callable, List
+from typing import Tuple, Union, Type, NamedTuple, List, Type
 from collections import namedtuple
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -9,8 +9,10 @@ import sys
 import json
 
 import numpy as np
+import pandas as pd
 import emcee
 import arviz
+from molsim import __version__
 from loguru import logger
 
 # this makes sure that the full range of parameters are shown
@@ -268,8 +270,8 @@ class AbstractModel(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def prior_constraint(self, parameters: np.ndarray):
-        pass
+    def prior_constraint(self, parameters: np.ndarray) -> float:
+        raise NotImplementedError
 
 
 class EmceeHelper(object):
@@ -280,11 +282,6 @@ class EmceeHelper(object):
         self.chain = None
         self._positions = None
         self.sampler = None
-        logger.info("MCMC analysis using emcee and Molsim")
-        logger.info(
-            f"NumPy version: {np.__version__}, Emcee version: {emcee.__version__}"
-        )
-        logger.info(f"Initial parameters: {initial}")
 
     @property
     def posterior(self):
@@ -304,6 +301,17 @@ class EmceeHelper(object):
         """
         return arviz.convert_to_inference_data(self.chain)
 
+    def _boiler_plate_logging(self):
+        logger.info("----------------------------------------------------------")
+        logger.info("MCMC analysis using emcee and Molsim")
+        logger.info(
+            f"NumPy version: {np.__version__}, Emcee version: {emcee.__version__}"
+        )
+        logger.info(
+            f"ArViz version: {arviz.__version__}, Molsim version: {__version__}"
+        )
+        logger.info("----------------------------------------------------------")
+
     @staticmethod
     def likelihood_checks(model: AbstractModel, parameters: np.ndarray):
         logger.info(f"Performing prior log likelihood check.")
@@ -321,7 +329,7 @@ class EmceeHelper(object):
             )
         logger.info(f"Passed—{ln:.4f}")
 
-    def summary(self, model: AbstractModel) -> "DataFrame":
+    def summary(self, model: AbstractModel) -> Type[pd.DataFrame]:
         """
         Generate a summary table of the posterior, using a model to get the names
         of the parameters.
@@ -350,7 +358,11 @@ class EmceeHelper(object):
         scale: Union[float, None] = 1e-2,
         restart: bool = False
     ):
+        logger.add(f"emcee_sampling.log", rotation="100 MB", colorize=False)
+        # do the usual stuffs
+        self._boiler_plate_logging()
         logger.info(f"Performing sampling with model:")
+        logger.info(f"Number of iterations: {iterations}")
         logger.info(f"{model}")
         if restart:
             # if we're restarting, just take the last step
@@ -372,8 +384,9 @@ class EmceeHelper(object):
                 scrambler = np.ones_like(positions)
                 scrambler += np.random.uniform(-scale, scale, (walkers, self.ndim))
                 positions *= scrambler
-        self.likelihood_checks(model, initial)
+        logger.info(f"Seed position: {initial}")
         logger.info(f"Starting positions: {positions}")
+        self.likelihood_checks(model, initial)
         # run the MCMC sampling
         if workers > 1:
             logger.info(f"Using multiprocessing for sampling with {workers} processes.")
@@ -409,8 +422,9 @@ class EmceeHelper(object):
         self.sampler = sampler
         self.chain = sampler.chain
         self.positions = sampler.get_last_sample()
-        report = arviz.summary(self.posterior.posterior.isel(draw=slice(-30, None)))
-        logger.info("Summary of last 30 steps of sampling:")
+        last_positions = int(iterations * 0.1)
+        report = arviz.summary(self.posterior.posterior.isel(draw=slice(-last_positions, None)))
+        logger.info(f"Summary of last {last_positions} (10%) steps of sampling:")
         logger.info(report)
 
     def save_posterior(self, filename: str) -> None:
@@ -420,7 +434,7 @@ class EmceeHelper(object):
 
     @classmethod
     def from_netcdf(cls, netcdf_path: str, restart: bool = False):
-        logger.info(f"Loading NetCDF chain; restarti = {restart}")
+        logger.info(f"Loading NetCDF chain; restart = {restart}")
         samples = arviz.from_netcdf(netcdf_path)
         # if we're restarting sampling, take the last position
         if restart:
@@ -448,6 +462,19 @@ class EmceeHelper(object):
                 pass
             else:
                 raise NotImplementedError(f"Unrecognized parameter type! {dist_type}")
+    
+    @property
+    def posterior_mean(self) -> np.ndarray:
+        """
+        Return the posterior mean as averaged over all chains and
+        all draws. This assumes you have rejected
+
+        Returns
+        -------
+        np.ndarray
+            [description]
+        """
+        return self.posterior.posterior.mean(dim=["chain", "draw"]).to_array()[0].values
 
     def sample_posterior(
         self, nsamples: int, nparams: int = 14, rng: np.random.Generator = None
@@ -481,9 +508,30 @@ class EmceeHelper(object):
         return rng.choice(samples, nsamples, axis=0)
 
     def posterior_to_json(
-        self, name: str, model: AbstractModel, return_dict: bool = False
+        self, name: str, model: Type[AbstractModel], return_dict: bool = False
     ) -> Union[dict, None]:
+        """
+        Function for exporting the model results to JSON format, typically
+        for use with some other functionality in `molsim`.
+        
+        TODO: make this function compatible with `CompositeModel`s
+
+        Parameters
+        ----------
+        name : str
+            [description]
+        model : Type[AbstractModel]
+            Class or subclass of `AbstractModel` to convert to JSON
+        return_dict : bool, optional
+            [description], by default False
+
+        Returns
+        -------
+        Union[dict, None]
+            [description]
+        """
         summary = self.summary(model)
+        #TODO `components` is not defined for `CompositeModel` subclasses
         n_components = len(model.components)
         output = dict()
         for parameter in ["SourceSize", "VLSR", "NCol"]:

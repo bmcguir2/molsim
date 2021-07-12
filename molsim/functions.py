@@ -1,6 +1,6 @@
 import numpy as np
 from molsim.constants import h, k, ckm
-from molsim.classes import Spectrum
+from molsim.classes import Spectrum, Continuum
 from molsim.utils import find_limits, _get_res, _find_nans, find_peaks, find_nearest, _find_ones
 from molsim.stats import get_rms
 from molsim.file_handling import load_mol
@@ -8,7 +8,8 @@ from datetime import date
 import matplotlib.pyplot as plt
 import matplotlib
 
-def sum_spectra(sims,thin=True,Tex=None,Tbg=None,res=None,noise=None,name='sum'):
+
+def sum_spectra(sims,thin=True,Tex=None,Tbg=None,res=None,noise=None,override_freqs=None,planck=False,name='sum'):
 
 	'''
 	Adds all the spectra in the simulations list and returns a spectrum object.  By default,
@@ -18,6 +19,11 @@ def sum_spectra(sims,thin=True,Tex=None,Tbg=None,res=None,noise=None,name='sum')
 	co-adds with optically thick transmission, as it is not a full non-LTE radiative
 	transfer program.  If a resolution is not specified, the highest resolution of the
 	input datasets will be used.
+	
+	If the user wants back the summed spectra on an exact set of frequencies, they can specify
+	that array (a numpy array) as override_freqs.
+	
+	
 	'''
 
 		
@@ -25,33 +31,54 @@ def sum_spectra(sims,thin=True,Tex=None,Tbg=None,res=None,noise=None,name='sum')
 	if res is None:
 		res = min([x.res for x in sims])
 		
-	#first we find out the limits of the total frequency coverage so we can make an
-	#appropriate array to resample onto
-	total_freq = np.concatenate([x.spectrum.freq_profile for x in sims])
-	total_freq.sort()
-	lls,uls = find_limits(total_freq,spacing_tolerance=2,padding=0)
+	
+	#check if override_freqs has been specified, and if so, use that.
+	if override_freqs is not None:
+		freq_arr = override_freqs
 		
-	#now make a resampled array
-	freq_arr = np.concatenate([np.arange(ll,ul,res) for ll,ul in zip(lls,uls)])	
+	else:	
+		#first we find out the limits of the total frequency coverage so we can make an
+		#appropriate array to resample onto
+		total_freq = np.concatenate([x.spectrum.freq_profile for x in sims])
+		#eliminate all duplicate entries
+		total_freq = np.array(list(set(total_freq)))
+		total_freq.sort()
+		lls,uls = find_limits(total_freq,spacing_tolerance=2,padding=0)
+		
+		#now make a resampled array
+		freq_arr = np.concatenate([np.arange(ll,ul,res) for ll,ul in zip(lls,uls)])	
+	
+	#now make an identical array to hold intensities
 	int_arr = np.zeros_like(freq_arr)	
 	
 	#make a spectrum to output
 	sum_spectrum = Spectrum(name=name)
 	sum_spectrum.freq_profile = freq_arr	
-
+	
 	if thin is True:		
 		#loop through the stored simulations, resample them onto freq_arr, add them up
 		for x in sims:
 			int_arr0 = np.interp(freq_arr,x.spectrum.freq_profile,x.spectrum.int_profile,left=0.,right=0.)
 			int_arr += int_arr0				
 		sum_spectrum.int_profile = int_arr
-		
+	
 	if thin is False:
+	
+		#Check to see if the user has specified a Tbg
+		if Tbg is None:
+			print('If summing for the optically thick condition, either a constant Tbg or an appropriate Continuum object must be provided.  Operation aborted.')
+			return
+		#Otherwise if we have a continuum object, we use that to calculate the Tbg at each point in freq_arr generated above
+		if isinstance(Tbg, Continuum):
+			sum_Tbg = Tbg.Tbg(freq_arr)
+		else:
+			sum_Tbg = Tbg
+
 		#if it's not gonna be thin, then we add up all the taus and apply the corrections
 		for x in sims:
 			int_arr0 = np.interp(freq_arr,x.spectrum.freq_profile,x.spectrum.tau_profile,left=0.,right=0.)
-			int_arr += int_arr0
-			
+			int_arr += int_arr0	
+		
 		#now we apply the corrections at the specified Tex
 		J_T = ((h*freq_arr*10**6/k)*
 			  (np.exp(((h*freq_arr*10**6)/
@@ -59,11 +86,52 @@ def sum_spectra(sims,thin=True,Tex=None,Tbg=None,res=None,noise=None,name='sum')
 			  )
 		J_Tbg = ((h*freq_arr*10**6/k)*
 			  (np.exp(((h*freq_arr*10**6)/
-			  (k*Tbg))) -1)**-1
+			  (k*sum_Tbg))) -1)**-1
 			  )			  
-			
+		
 		int_arr = (J_T - J_Tbg)*(1 - np.exp(-int_arr))
+
+		##########################
+		# For Spectra in Jy/Beam #
+		##########################
+
+		if planck is True:
+		
+			#Collect the ranges over which different beam sizes are in play.
+			omegas = [] #solid angle
+			omegas_lls = [] #lower limits of frequency ranges covered by a solid angle
+			omegas_uls = [] #upper limits of frequency ranges covered by a solid angle
+			
+			#loop through the simulations and extract the lls, uls, and omegas (from the synthesized beams)
+			for sim in sims:
+				for ll in sim.ll:
+					omegas_lls.append(ll)
+					omegas.append(sim.observation.observatory.synth_beam[0]*sim.observation.observatory.synth_beam[1])
+				for ul in sim.ul:
+					omegas_uls.append(ul)
+				
+			#now we need an array that is identical to freq_arr, but holds the omega values at each point
+			omega_arr = np.zeros_like(freq_arr)
+			
+			#and now we have to fill it, given the ranges we have data for.
+			#we start by making arrays to hold all possible omega values
+			tmp_omegas = []
+			for omega,ll,ul in zip(omegas,omegas_lls,omegas_uls):
+				tmp_omega = np.zeros_like(freq_arr)
+				tmp_omega[np.where(np.logical_and(freq_arr >= ll, freq_arr <= ul))] = omega
+				tmp_omegas.append(np.array(tmp_omega))  
+	
+			#now go through and flatten it into a single array, keeping the biggest omega value at each frequency
+			#this is arbitrary. It's not possible to sum spectra at a point with more than one omega value.  The user has to make
+			#sure they aren't doing this.  We keep just the largest.
+			omega_arr = np.maximum.reduce(tmp_omegas)
+			
+			#now we can do the actual conversion to Planck scale Jy/beam.  We can only operate on non-zero values.
+			mask = np.where(int_arr != 0)[0]
+			int_arr[mask] = (3.92E-8 * (freq_arr[mask]*1E-3)**3 *omega_arr[mask] / (np.exp(0.048*freq_arr[mask]*1E-3/int_arr[mask]) - 1))
+					
 		sum_spectrum.int_profile = int_arr
+			
 
 	#add in noise, if requested
 	if noise is not None:

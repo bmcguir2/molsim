@@ -3,7 +3,7 @@ from numba import njit
 import math
 from molsim.constants import ccm, cm, ckm, h, k, kcm 
 from molsim.stats import get_rms
-from molsim.utils import _trim_arr, find_nearest, _make_gauss, _apply_vlsr, _apply_beam, _make_fmted_qnstr
+from molsim.utils import _trim_arr, find_nearest, find_nearest_vectorized, _make_gauss, _apply_vlsr, _apply_beam, _make_fmted_qnstr
 from molsim.file_io import _read_txt, _read_xy
 from scipy.interpolate import interp1d
 from astropy import units
@@ -983,6 +983,16 @@ class Continuum(object):
 			print('WARNING: Unrecognized type ("{}") specified for continuum generation.' \
 			' Will use 2.7 K CMB instead.' .format(self.type))
 			self.params = 2.7
+		# check to see if a file was provided for interpolation
+		if self.cont_file is not None and self.type == 'interpolation':
+			freqs = []
+			temps = []
+			with open(self.cont_file, 'r') as input:
+				for line in input:
+					freqs.append(float(line.split()[0].strip()))
+					temps.append(float(line.split()[1].strip()))
+			self.freqs = np.array(freqs)
+			self.temps = np.array(temps)
 		return
 		
 	def Tbg(self,freq):
@@ -999,6 +1009,9 @@ class Continuum(object):
 			for x in self.params:
 				tbg_arr[np.where(np.logical_and(freq>=x[0], freq<=x[1]))[0]] = x[2]
 			return tbg_arr
+			
+		if self.type == 'interpolation':
+			return np.interp(freq,self.freqs,self.temps)	
 				
 	def Ibg(self,freq):			
 		'''
@@ -1130,6 +1143,8 @@ class Simulation(object):
                     use_obs = False, # flag for line profile simulation to be done with observations
                     add_noise = False, #flag for whether to add noise 
                     noise = None, # Noise level in native units of the simulation to add
+                    tau_threshold = None, #Set upper threshold at which to ignore lines for fitting
+                    eup_threshold = None #Set lower eup threshold [K] at which to exclude transitions
 				):
 				
 		self.spectrum = spectrum
@@ -1154,6 +1169,8 @@ class Simulation(object):
 		self.add_noise = add_noise
 		self.noise = noise
 		self.lines_in_range = True
+		self.tau_threshold = tau_threshold
+		self.eup_threshold = eup_threshold
 				
 		self._set_arrays()
 		self._check_coverage()
@@ -1190,7 +1207,7 @@ class Simulation(object):
 				self.ul = self.ul.tolist()
 			else:
 				self.ul = [self.ul]
-		mask = _trim_arr(self.mol.catalog.frequency,self.ll,self.ul,return_mask=True)
+		mask = _trim_arr(self.mol.catalog.frequency - self.source.velocity*self.mol.catalog.frequency/ckm,self.ll,self.ul,return_mask=True)
 		self.spectrum.frequency = self.mol.catalog.frequency[mask]
 		self.spectrum.freq0 = np.copy(self.spectrum.frequency)
 		self.aij = self.mol.catalog.aij[mask]
@@ -1221,6 +1238,15 @@ class Simulation(object):
 								self.source.dV*1000 * self.mol.q(self.source.Tex)
 							)
 					)
+		#Set the tau (intensity) of a transition to 0 if it exceeds the tau_threshold. 
+		#Implemented to exclude optically thick transitions from least-squares fitting routine
+		if self.tau_threshold is not None:
+			self.spectrum.tau[self.spectrum.tau>=self.tau_threshold] = 0.
+		#Set the tau (intensity) of a transition to 0 if it falls below the eup_threshold. 
+		#Set optical depth for low energy transitions to zero, as they tend to be optically thick
+		if self.eup_threshold is not None:
+			self.spectrum.tau[self.eup<=self.eup_threshold] = 0.
+		
 		return
 		
 	def _calc_bg(self):
@@ -1297,14 +1323,14 @@ class Simulation(object):
 			if self.use_obs and self._cache:
 				l_idxs = self._cache.get("l_idxs")
 				if l_idxs is None:
-					l_idxs = [find_nearest(freq_arr,x) for x in lls_raw]
-					u_idxs = [find_nearest(freq_arr,x) for x in uls_raw]
+					l_idxs = find_nearest_vectorized(freq_arr,lls_raw)
+					u_idxs = find_nearest_vectorized(freq_arr,uls_raw)
 					self._cache["l_idxs"] = l_idxs
 					self._cache["u_idxs"] = u_idxs
 				u_idxs = self._cache.get("u_idxs")
 			else:
-				l_idxs = [find_nearest(freq_arr,x) for x in lls_raw]
-				u_idxs = [find_nearest(freq_arr,x) for x in uls_raw]		
+				l_idxs = find_nearest_vectorized(freq_arr,lls_raw)
+				u_idxs = find_nearest_vectorized(freq_arr,uls_raw)
 			for x,y,ll,ul in zip(self.spectrum.frequency,self.spectrum.tau,l_idxs,u_idxs):
 				tau_arr[ll:ul] += _make_gauss(x,y,freq_arr[ll:ul],self.source.dV,ckm)
 			self.spectrum.tau_profile = tau_arr
@@ -1367,7 +1393,7 @@ class Simulation(object):
 		
 		return
 				
-	def print_lines(self,ll=None,ul=None,threshold=None,use_profile=False,dV=None,vlsr=None,file_out=None,latex_out=False,txt_out=False):
+	def print_lines(self,ll=None,ul=None,threshold=None,use_profile=False,dV=None,vlsr=None,file_out=None,latex_out=False,txt_out=False,eup_threshold=None):
 	
 		'''
 		Prints all the lines within the simulation, optionally with constraints or output to a file.
@@ -1407,6 +1433,9 @@ class Simulation(object):
 		
 		txt_out: bool
 			Set to True to print a plain text tab-delimited table to file_out.  Cannot be used with latex_out.
+			
+		eup_threshold: float
+			Only lines with upper-state energy above this threshold will be printed.
 		
 		'''
 		
@@ -1433,8 +1462,11 @@ class Simulation(object):
 			uls = self.ul
 			
 		#for getting from catalogs	
-		l_idxs = np.searchsorted(self.mol.catalog.frequency, lls)
-		u_idxs = np.searchsorted(self.mol.catalog.frequency, uls)
+		#make a temporary copy of self.mol.catalog.frequency
+		#shift that array appropriately by the vlsr
+		#then find l_idxs and u_idxs using the commands below, but operating on your new shifted array
+		l_idxs = np.searchsorted((self.mol.catalog.frequency - self.source.velocity*self.mol.catalog.frequency/ckm), lls)
+		u_idxs = np.searchsorted((self.mol.catalog.frequency - self.source.velocity*self.mol.catalog.frequency/ckm), uls)
 		
 		#for getting from the simulation spectrum
 		sim_l_idxs = np.searchsorted(self.spectrum.frequency, lls)
@@ -1448,6 +1480,9 @@ class Simulation(object):
 		print_gls = []
 		print_aijs = []
 		print_sijmus = []
+		
+		idx_count = 0 #to track where we are in lls,uls
+		idx_used = [] #to track if a line has already been included so it's not double printed
 		
 		for x,y in zip(l_idxs,u_idxs):
 			print_freqs.append(self.mol.catalog.frequency[x:y])
@@ -1472,6 +1507,7 @@ class Simulation(object):
 		for x,y in zip(sim_l_idxs,sim_u_idxs):	
 			print_ints.append(self.spectrum.Tb[x:y])
 		
+		#given bug fix refactors above, this could be removed by changing the way things are added above (as small lists)
 		print_freqs = np.array([item for sublist in print_freqs for item in sublist])
 		print_ints = np.array([item for sublist in print_ints for item in sublist])
 		print_qns = np.array(print_qns)
@@ -1486,19 +1522,33 @@ class Simulation(object):
 		#calc skyfreqs if needed
 		if vlsr is not None:
 			print_skyfreqs = np.array([x - vlsr*x/ckm for x in print_freqs])		
+		
+# 		apply threshold if needs be
+# 		int_mask = []
+# 		if threshold is not None:
+# 			int_mask = np.where(np.array(print_ints) > threshold)[0]
+# 			make sure the mask isn't zero; if so, let the user know the threshold is set too high and let them know the maximum.
+# 			if len(int_mask) == 0:
+# 				print(f'ERROR: Threshold is set too high and no lines are found.  The maximum value in the range is {np.max(print_ints):.3e}. Exiting.')
+# 				return
+# 		
+# 		apply eup_threshold
+# 		eup_mask = []
+# 		if eup_threshold is not None:
+# 			eup_mask = np.where(np.array(print_eups) > eup_threshold)[0]
+# 			if len(eup_mask) == 0:
+# 				print(f'ERROR: Eup_threshold is set too high and no lines are found.  The maximum value in the range is {np.max(print_eups):.3e}. Exiting.')
+# 				return
+		
+		int_mask = print_ints > threshold if threshold is not None else np.full(print_ints.size, True)
+		eup_mask = print_eups > eup_threshold if eup_threshold is not None else np.full(print_eups.size, True)
+		mask = int_mask * eup_mask
 			
-		#apply threshold if needs be
-		if threshold is not None:
-			mask = np.where(np.array(print_ints) > threshold)[0]
-			#make sure the mask isn't zero; if so, let the user know the threshold is set too high and let them know the maximum.
-			if len(mask) == 0:
-				print(f'ERROR: Threshold is set too high and no lines are found.  The maximum value in the range is {np.max(print_ints):.3e}. Exiting.')
-				return
 			
 		print_table = []
 		if vlsr is None:
 			headers = ['Frequency', 'Intensity', 'Quantum Numbers', 'E$_{\mathrm{u}}$ (K)', 'g$_{\mathrm{u}}$', 'g$_{\mathrm{l}}$', 'log(A$_{\mathrm{ij}}$)', r'S$_{\mathrm{ij}}\mathrm{\mu} ^2$']
-			if threshold is not None:
+			if threshold is not None or eup_threshold is not None:
 				for a,b,c,d,e,f,g,h in zip(print_freqs[mask], print_ints[mask], print_qns[mask], print_eups[mask], print_gus[mask], print_gls[mask], print_aijs[mask], print_sijmus[mask]):
 					print_table.append([f'{a:.4f}',f'{b:.4f}',f'{c}',f'{d:.2f}',e,f,f'{g:.3f}',f'{h:.3f}'])
 				display(HTML(tabulate(print_table,
@@ -1533,7 +1583,7 @@ class Simulation(object):
 		
 		if vlsr is not None:
 			headers = ['Frequency', 'Sky Frequency', 'Intensity', 'Quantum Numbers', 'E$_{\mathrm{u}}$ (K)', 'g$_{\mathrm{u}}$', 'g$_{\mathrm{l}}$', 'log(A$_{\mathrm{ij}}$)', r'S$_{\mathrm{ij}}\mathrm{\mu} ^2$']
-			if threshold is not None:
+			if threshold is not None or eup_threshold is not None:
 				for a,a2,b,c,d,e,f,g,h in zip(print_freqs[mask], print_skyfreqs[mask], print_ints[mask], print_qns[mask], print_eups[mask], print_gus[mask], print_gls[mask], print_aijs[mask], print_sijmus[mask]):
 					print_table.append([f'{a:.4f}',f'{a2:.4f}',f'{b:.4f}',f'{c}',f'{d:.2f}',e,f,f'{g:.3f}',f'{h:.3f}'])
 				display(HTML(tabulate(print_table,
@@ -1576,7 +1626,7 @@ class Simulation(object):
 		self._calc_tau()
 		self._calc_bg()
 		self._calc_Iv()
-		self.spectrum.Tb = self._calc_Tb(self.spectrum.frequency,self.spectrum.tau,self.spectrum.Tbg)
+		self.spectrum.Tb = self._calc_Tb(self.spectrum.frequency,self.spectrum.tau,self.spectrum.Tbg,self.source.Tex)
 		self._make_lines()
 		self._beam_correct()
 		self._set_units()

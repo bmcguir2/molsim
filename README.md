@@ -21,7 +21,7 @@ For the latest build, either for testing or for contributing, please clone the `
 
 We recommend using `conda` for maintaining Python environments. Once you have acquired the code either from downloading a release or cloning the repository, you can create a new `conda` environment (called `molsim`) by running the following in the `molsim` directory:
 
-`conda env create -f conda.yml molsim`
+`conda env create -n molsim -f conda.yml`
 
 followed by:
 
@@ -31,7 +31,17 @@ to change the Anaconda environment, and then
 
 `pip install .`
 
-which will then install `molsim` into your Anaconda/Python installation. For developers/testers, we recommend you install using `pip install -e .`, which will create a symlink to the package to allow you to update code without having to constantly upgrade with `pip`.
+which will then install `molsim` into your Anaconda/Python installation.
+
+For developers/testers, you should make a fork of this repository, and make changes to the `development` branch. To separate science/production and development environments, make a new `conda` environment with the following command:
+
+`conda env create -n molsim-dev -f conda.yml`
+
+followed by:
+
+`pip install -e .\[dev\]`
+
+The backslashes are required to escape the `[]` characters for `zsh`, although you may not have that issue on other shells/OS'. This will install `molsim` as a softlink so that changes are updated on the fly, while the `[dev]` option installs additional packages such as `pytest`, and `black` for formatting.
 
 ### Use with notebook environments
 

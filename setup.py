@@ -15,17 +15,17 @@ from setuptools import find_packages, setup, Command
 NAME = 'molsim'
 DESCRIPTION = 'A program for simulating observations of molecular rotational spectra'
 URL = 'https://github.com/bmcguir2/molsim'
-REQUIRES_PYTHON = '>=3.6.0'
-VERSION = '0.1.1'
+REQUIRES_PYTHON = '>=3.7.0'
+VERSION = '0.2.0'
 
 # What packages are required for this module to be executed?
 REQUIRED = [
-    'astropy', 'numpy', 'scipy', 'emcee', 'matplotlib', 'tabulate', 'ruamel.yaml', 'lmfit', 'loguru', 'tqdm'
+    'astropy', 'numpy', 'scipy', 'emcee', 'matplotlib', 'tabulate', 'ruamel.yaml', 'lmfit', 'loguru', 'tqdm', 'joblib', 'h5py', 'arviz'
 ]
 
 # What packages are optional?
 EXTRAS = {
-    # 'fancy feature': ['django'],
+    "dev": ["pytest", "pytest-pep8", "flake8", "black"]
 }
 
 # The rest you shouldn't have to touch too much :)
