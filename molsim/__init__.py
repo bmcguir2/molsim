@@ -2,7 +2,7 @@
 A program for simulating observations of molecular rotational spectra
 '''
 __author__ = 'Brett A. McGuire'
-__version__ = '0.2.0'
+__version__ = '0.3.0'
 __email__ = 'brettmc@mit.edu'
 __status__ = 'Development'
 
