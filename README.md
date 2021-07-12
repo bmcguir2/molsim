@@ -11,13 +11,13 @@
 
 For details about the methodology, particularly with respect to MCMC simulations, please refer to [Loomis _et al._ 2020](https://arxiv.org/abs/2009.11900)
 
-If you use `molsim` for your analysis, please cite the Zenodo entry: [![DOI](https://zenodo.org/badge/253506425.svg)](https://zenodo.org/badge/latestdoi/253506425)
+If you use `molsim` for your analysis, please cite the Zenodo entry: [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.4560750.svg)](https://doi.org/10.5281/zenodo.4560750)
 
 ## Setup instructions
 
 For science-ready code, we recommend downloading one of the releases—these are verified to the best of our ability to be accurate. If there are any indications otherwise, please submit an issue!
 
-For the latest build, either for testing or for contributing, please clone the `development` branch of this reposity.
+For the latest build, either for testing or for contributing, please clone the `development` branch of this repository.
 
 We recommend using `conda` for maintaining Python environments. Once you have acquired the code either from downloading a release or cloning the repository, you can create a new `conda` environment (called `molsim`) by running the following in the `molsim` directory:
 
@@ -25,14 +25,27 @@ We recommend using `conda` for maintaining Python environments. Once you have ac
 
 followed by:
 
+`conda activate molsim`
+
+to change the Anaconda environment, and then
+
 `pip install .`
 
 which will then install `molsim` into your Anaconda/Python installation. For developers/testers, we recommend you install using `pip install -e .`, which will create a symlink to the package to allow you to update code without having to constantly upgrade with `pip`.
+
+### Use with notebook environments
+
+A common way to interact with notebook environments is to have a `base` environment installation of `jupyter`. To use the Python kernel installed as part of the `molsim` environment with the `base` environment, using these steps:
+
+1. `conda activate molsim`
+2. `python -m ipykernel install --user --name molsim --display-name "molsim-jupyter"`
+
+This links the IPython kernel with the `jupyter` installation. You'll then be able to start a notebook with the environment called "molsim-jupyter".
 
 ## Contributions
 
 The large majority of `molsim` was written by @bmcguir2, building on top of earlier code (`simulate_lte`).
 
-The `mcmc` module was written by @laserkelvin, based heavily on earlier code by Dr. Ryan Loomis (see [his repo here](https://github.com/ryanaloomis/TMC1_mcmc_fitting)), which was used for the DR1 GOTHAM data analysis.
+The `mcmc` module was written by @laserkelvin, based heavily on earlier code by @ryanaloomis (see [his repo here](https://github.com/ryanaloomis/TMC1_mcmc_fitting)), which was used for the DR1 GOTHAM data analysis.
 
 Any issues, please submit an issue, reporting what you think should happen and what actually happens.
