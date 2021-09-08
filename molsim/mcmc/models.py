@@ -425,7 +425,7 @@ class MultiComponent(SingleComponent):
     def _get_component_parameters(
         self, parameters: np.ndarray, component: int
     ) -> np.ndarray:
-        subparams = parameters[component:-2:4]
+        subparams = parameters[component:-2:len(self.components)]
         # tack on the excitation temperature and linewidth, which are global
         subparams = np.append(subparams, [parameters[-2], parameters[-1]])
         return subparams
