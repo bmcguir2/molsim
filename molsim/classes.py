@@ -1229,12 +1229,12 @@ class Simulation(object):
 		return	
 		
 	def _calc_tau(self):
-		self.spectrum.tau = ((self.aij * cm**3 * (self.source.column * 100**2) * 
+		self.spectrum.tau = (np.log(2)**0.5 * (self.aij * cm**3 * (self.source.column * 100**2) *
 								self.gup * (np.exp(-self.eup/self.source.Tex)) *
 							 	(np.exp(h*self.spectrum.frequency*1E6/(k*self.source.Tex))-1)
 							 )
 							/
-							(8*np.pi*(self.spectrum.frequency*1E6)**3 *
+							(4*np.pi**1.5*(self.spectrum.frequency*1E6)**3 *
 								self.source.dV*1000 * self.mol.q(self.source.Tex)
 							)
 					)
