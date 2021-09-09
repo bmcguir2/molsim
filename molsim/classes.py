@@ -1229,12 +1229,12 @@ class Simulation(object):
 		return	
 		
 	def _calc_tau(self):
-		self.spectrum.tau = ((self.aij * cm**3 * (self.source.column * 100**2) * 
+		self.spectrum.tau = (np.log(2)**0.5 * (self.aij * cm**3 * (self.source.column * 100**2) *
 								self.gup * (np.exp(-self.eup/self.source.Tex)) *
 							 	(np.exp(h*self.spectrum.frequency*1E6/(k*self.source.Tex))-1)
 							 )
 							/
-							(8*np.pi*(self.spectrum.frequency*1E6)**3 *
+							(4*np.pi**1.5*(self.spectrum.frequency*1E6)**3 *
 								self.source.dV*1000 * self.mol.q(self.source.Tex)
 							)
 					)
@@ -1815,4 +1815,40 @@ class Iplot(object):
 		self.fig.canvas.draw()
 		return
 							
- 		
+class Ulim_Result(object):
+	"""
+	A class used to hold the results of an upper limit analysis
+
+	...
+
+	Attributes
+	----------
+	name : str
+		The full name of the facility.	All dimensions (i.e. 100-m) should be
+		separated from units by a dash, not a space.
+
+	"""
+	
+	def __init__(
+		self,
+		line_frequency=None,
+		line_intensity=None,
+		rms = None,
+		sigma = None,
+		sim = None,
+		obs = None,
+	):
+	
+		self.line_frequency = line_frequency
+		self.line_intensity = line_intensity
+		self.rms = rms
+		self.sigma = sigma
+		self.sim = sim
+		self.obs = obs
+		
+	def summary(self):
+		print(f'Line Frequency Used (MHz): {self.line_frequency:.4f}')
+		print(f'Final Line Intensity ({self.sim.units}): {self.line_intensity:.6f}')
+		print(f'Obs RMS at Line Frequency ({self.sim.units}): {self.rms:.6f}')
+		print(f'{self.sigma} sigma Upper Limit')
+		

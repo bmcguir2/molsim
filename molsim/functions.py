@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 
 
-def sum_spectra(sims,thin=True,Tex=None,Tbg=None,res=None,noise=None,override_freqs=None,planck=False,name='sum'):
+def sum_spectra(sims,thin=True,Tex=None,Tbg=None,res=None,noise=None,override_freqs=None,planck=False,name='sum',tau_threshold=1000.,spacing_tolerance=None):
 
 	'''
 	Adds all the spectra in the simulations list and returns a spectrum object.  By default,
@@ -26,10 +26,18 @@ def sum_spectra(sims,thin=True,Tex=None,Tbg=None,res=None,noise=None,override_fr
 	
 	'''
 
+	if any([x.use_obs for x in sims]):
+		if res is None and override_freqs is None:
+			raise RuntimeError("Resolution cannot be determined since one or more spectra enabled `use_obs`. Please specify `res` or `override_freqs` to prevent this error.")
 		
 	#first figure out what the resolution needs to be if it wasn't set
 	if res is None:
 		res = min([x.res for x in sims])
+
+	#then figure out the spacing tolerance needed if it wasn't set
+	if spacing_tolerance is None:
+		# 4 in the spacing_tolerance is a magic number that can deal with doubly-repeated frequencies per simulated spectrum
+		spacing_tolerance = 4*len(sims)
 		
 	
 	#check if override_freqs has been specified, and if so, use that.
@@ -43,7 +51,7 @@ def sum_spectra(sims,thin=True,Tex=None,Tbg=None,res=None,noise=None,override_fr
 		#eliminate all duplicate entries
 		total_freq = np.array(list(set(total_freq)))
 		total_freq.sort()
-		lls,uls = find_limits(total_freq,spacing_tolerance=2,padding=0)
+		lls,uls = find_limits(total_freq,spacing_tolerance=spacing_tolerance,padding=0)
 		
 		#now make a resampled array
 		freq_arr = np.concatenate([np.arange(ll,ul,res) for ll,ul in zip(lls,uls)])	

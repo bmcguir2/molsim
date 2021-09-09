@@ -6,6 +6,18 @@ from molsim.utils import find_peaks, _get_res, find_nearest
 def set_upper_limit(sim,obs,params={}):
 	'''
 	Automatically finds an upper limit for a simulation in an observation.
+	
+	params dictionary can contain:
+		plot_name : str
+			Name of the output plot, defaults to None (also plotting not implemented yet)
+		vel_widths : float
+			Number of FWHM on each side of line to calculate RMS values (defaults to 40.)
+		tolerance : float
+			How close to require the match between the best line and the rms to be (defaults to 0.01 or 1%)
+		sigma : float
+			What confidence level is desired on the upper limit (defaults to 1.0 sigma)
+		return_result : bool
+			Whether to return an upper limit results object that stores metadata and prints reports (defaults to False)
 	'''
 	
 	#load in options from the params dictionary, and any defaults	
@@ -13,6 +25,7 @@ def set_upper_limit(sim,obs,params={}):
 	vel_widths = params['vel_widths'] if 'vel_widths' in params else 40.
 	tolerance = params['tolerance'] if 'tolerance' in params else 0.01
 	sigma = params['sigma'] if 'sigma' in params else 1.0
+	return_result = params['return_result'] if 'return_result' in params else False
 	
 	#find the indices of the peaks in the simulation
 	peak_indices = find_peaks(sim.spectrum.freq_profile,sim.spectrum.int_profile,_get_res(sim.spectrum.freq_profile),sim.source.dV,is_sim=True)
@@ -54,4 +67,19 @@ def set_upper_limit(sim,obs,params={}):
 		sim.update()
 		best_int = np.nanmax(sim.spectrum.int_profile[find_nearest(sim.spectrum.freq_profile,best_freq)])	
 	
-	return
+	if return_result is True:
+		# Get the result class
+		from molsim.classes import Ulim_Result
+		# Make one
+		result = Ulim_Result()
+		# Start storing results
+		result.line_frequency = best_freq
+		result.line_intensity = best_int
+		result.rms = best_rms/sigma
+		result.sigma = sigma
+		result.sim = sim
+		result.obs = obs
+	
+		return result
+	else:
+		return
