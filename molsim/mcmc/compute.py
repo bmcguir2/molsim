@@ -39,23 +39,23 @@ def calc_noise_std(intensity, threshold=3.5) -> Tuple[np.ndarray, np.ndarray]:
     dummy_std = np.nanstd(dummy_ints)
 
     # repeats 3 times to make sure to avoid any interloping lines
-    for chan in np.where(dummy_ints < (-dummy_std*threshold))[0]:
+    for chan in np.where(dummy_ints-dummy_mean < (-dummy_std*threshold))[0]:
         noise[chan-10:chan+10] = np.nan
-    for chan in np.where(dummy_ints > (dummy_std*threshold))[0]:
-        noise[chan-10:chan+10] = np.nan
-    noise_mean = np.nanmean(noise)
-    noise_std = np.nanstd(np.real(noise))
-
-    for chan in np.where(dummy_ints < (-noise_std*threshold))[0]:
-        noise[chan-10:chan+10] = np.nan
-    for chan in np.where(dummy_ints > (noise_std*threshold))[0]:
+    for chan in np.where(dummy_ints-dummy_mean > (dummy_std*threshold))[0]:
         noise[chan-10:chan+10] = np.nan
     noise_mean = np.nanmean(noise)
     noise_std = np.nanstd(np.real(noise))
 
-    for chan in np.where(dummy_ints < (-dummy_std*threshold))[0]:
+    for chan in np.where(dummy_ints-noise_mean < (-noise_std*threshold))[0]:
         noise[chan-10:chan+10] = np.nan
-    for chan in np.where(dummy_ints > (dummy_std*threshold))[0]:
+    for chan in np.where(dummy_ints-noise_mean > (noise_std*threshold))[0]:
+        noise[chan-10:chan+10] = np.nan
+    noise_mean = np.nanmean(noise)
+    noise_std = np.nanstd(np.real(noise))
+
+    for chan in np.where(dummy_ints-noise_mean < (-noise_std*threshold))[0]:
+        noise[chan-10:chan+10] = np.nan
+    for chan in np.where(dummy_ints-noise_mean > (noise_std*threshold))[0]:
         noise[chan-10:chan+10] = np.nan
     noise_mean = np.nanmean(noise)
     noise_std = np.nanstd(np.real(noise))
