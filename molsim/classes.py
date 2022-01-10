@@ -1837,6 +1837,7 @@ class Ulim_Result(object):
 		sigma = None,
 		sim = None,
 		obs = None,
+		ulim = None,
 	):
 	
 		self.line_frequency = line_frequency
@@ -1845,10 +1846,12 @@ class Ulim_Result(object):
 		self.sigma = sigma
 		self.sim = sim
 		self.obs = obs
+		self.ulim = ulim
 		
 	def summary(self):
 		print(f'Line Frequency Used (MHz): {self.line_frequency:.4f}')
 		print(f'Final Line Intensity ({self.sim.units}): {self.line_intensity:.6f}')
 		print(f'Obs RMS at Line Frequency ({self.sim.units}): {self.rms:.6f}')
+		print(f'Upper Limit Column Density: {self.ulim:.2e}')
 		print(f'{self.sigma} sigma Upper Limit')
 		

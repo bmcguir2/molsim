@@ -79,6 +79,7 @@ def set_upper_limit(sim,obs,params={}):
 		result.sigma = sigma
 		result.sim = sim
 		result.obs = obs
+		result.ulim = sim.source.column
 	
 		return result
 	else:
