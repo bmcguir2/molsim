@@ -552,7 +552,7 @@ def plot_html(params={}):
 		fig.add_trace(go.Scatter(x=spectrum.freq_profile, y=spectrum.int_profile, line_shape=drawstyle, line=dict(width=linewidth, color=color), name=label))
 	
 	#save it
-	open(file_out, 'w').write(fig.to_html(include_mathjax='cdn'))
+	open(file_out, 'w').write(fig.to_html(include_mathjax='cdn', include_plotlyjs='cdn'))
 	
 	return
 	
