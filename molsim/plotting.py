@@ -1,3 +1,5 @@
+from collections import Iterable
+import itertools as it
 import matplotlib.pyplot as plt
 import matplotlib
 import numpy as np
@@ -440,6 +442,119 @@ def plot_sim(spectra,params={}):
 		plt.savefig(file_out,format='pdf',transparent=True,bbox_inches='tight')
 		
 	return	
+	
+def plot_html(params={}):
+	'''
+	Plots spectra using plotly package and output to a portable html file, which
+	provides interactive user interface. Performance is limited and it slows
+	down when the number of points exceeds the threshold. An error is thrown
+	immediately when the number of points exceeds the threshold unless overriden.
+	The keywords that can be specified, and their defaults, are as follows:
+
+	'name' 			:	'html', #string
+	'xlabel'		:	'Frequency (MHz)', #string
+	'ylabel'		:	r'$T_b (\text{K})$', #string
+	'sim'			:	[], #list of simulated Spectrum objects
+	'sim_labels'	:	'Simulation', #string or list of strings of labels
+	'sim_colors'	:	None, #string or list of strings of colors
+	'sim_drawstyles':	'linear', #string or list of strings of drawstyles; string: 'linear', 'vh', 'hvh', 'hv'
+	'sim_linewidths':	1.0, #float or list of floats
+	'obs'			:	[], #list of observed Spectrum objects
+	'obs_labels'	:	'Observation', #string or list of strings of labels
+	'obs_colors'	:	'black', #string or list of strings of colors
+	'obs_drawstyles':	'vh', #string or list of strings of drawstyles; string: 'linear', 'vh', 'hvh', 'hv'
+	'obs_linewidths':	1.0, #float or list of floats
+	'plot_Iv'		:	False, #bool
+	'plot_Tb'		:	True, #bool
+	'threshold'		:	1e6, #number
+	'file_out'		:	'simulated_spectra.html' #string
+		
+	'''
+	
+	try:
+		from plotly import graph_objects as go
+	except ImportError:
+		raise ImportError('plotly package is required.')
+	
+	#load in options from the params dictionary, and any defaults
+	settings = {'name' 			:	'html',
+				'xlabel'		:	'Frequency (MHz)',
+				'ylabel'		:	r'$T_b\ (\text{K})$',
+				'sim'			:	[],
+				'sim_labels'	:	'Simulation',
+				'sim_colors'	:	None,
+				'sim_drawstyles':	'linear',
+				'sim_linewidths':	1.0,
+				'obs'			:	[],
+				'obs_labels'	:	'Observation',
+				'obs_colors'	:	'black',
+				'obs_drawstyles':	'vh',
+				'obs_linewidths':	1.0,
+				'plot_Iv'		:	False,
+				'plot_Tb'		:	True,
+				'threshold'		:	1e6,
+				'file_out'		:	'simulated_spectra.html'
+				}
+	
+	for x in params:
+		if x in settings:
+			settings[x] = params[x]
+	
+	#check if parameters conflict
+	if settings['plot_Iv'] == settings['plot_Tb']:
+		raise ValueError('Please confirm the spectral unit, plot_Iv and plot_Tb can not be both True or False.')
+	
+	#set appropriate default ylabel if not set by user
+	if 'ylabel' not in params:
+		if settings['plot_Iv']:
+			settings['ylabel'] = r'$I_\nu\ (\text{Jy/beam})$'
+	
+	#convert settings to iterables if needed
+	for x in ['sim_labels', 'sim_colors', 'sim_drawstyles', 'sim_linewidths', 'obs_labels', 'obs_colors', 'obs_drawstyles', 'obs_linewidths']:
+		if isinstance(settings[x], str) or not isinstance(settings[x], Iterable):
+			settings[x] = it.repeat(settings[x])
+	
+	name = settings['name']
+	xlabel = settings['xlabel']
+	ylabel = settings['ylabel']
+	sim = settings['sim']
+	sim_labels = settings['sim_labels']
+	sim_colors = settings['sim_colors']
+	sim_drawstyles = settings['sim_drawstyles']
+	sim_linewidths = settings['sim_linewidths']
+	obs = settings['obs']
+	obs_labels = settings['obs_labels']
+	obs_colors = settings['obs_colors']
+	obs_drawstyles = settings['obs_drawstyles']
+	obs_linewidths = settings['obs_linewidths']
+	plot_Iv = settings['plot_Iv']
+	plot_Tb = settings['plot_Tb']
+	threshold = settings['threshold']
+	file_out = settings['file_out']
+	
+	#set up figure layout
+	fig = go.Figure(layout=dict(xaxis_title=xlabel, yaxis_title=ylabel, title=name))
+	
+	#plot
+	count_points = 0
+	for spectrum,color,drawstyle,linewidth,label in zip(obs,obs_colors,obs_drawstyles,obs_linewidths,obs_labels):
+		count_points += len(spectrum.frequency)
+		if count_points > threshold:
+			raise RuntimeError('Number of points to be plotted exceeds threshold, please reduce the number of points or override threshold.')
+		if plot_Iv:
+			fig.add_trace(go.Scatter(x=spectrum.frequency, y=spectrum.Iv, line_shape=drawstyle, line=dict(width=linewidth, color=color), name=label))
+		if plot_Tb:
+			fig.add_trace(go.Scatter(x=spectrum.frequency, y=spectrum.Tb, line_shape=drawstyle, line=dict(width=linewidth, color=color), name=label))
+	for spectrum,color,drawstyle,linewidth,label in zip(sim,sim_colors,sim_drawstyles,sim_linewidths,sim_labels):
+		count_points += len(spectrum.freq_profile)
+		if count_points > threshold:
+			raise RuntimeError('Number of points to be plotted exceeds threshold, please reduce the number of points or override threshold.')
+		fig.add_trace(go.Scatter(x=spectrum.freq_profile, y=spectrum.int_profile, line_shape=drawstyle, line=dict(width=linewidth, color=color), name=label))
+	
+	#save it
+	open(file_out, 'w').write(fig.to_html(include_mathjax='cdn'))
+	
+	return
 	
 def plot_highest_snr(sims,obs,params={}):
 
