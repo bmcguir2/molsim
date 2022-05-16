@@ -335,6 +335,8 @@ def plot_sim(spectra,params={}):
 	'obs_linewidths':	[1.0], #list of floats
 	'obs_orders'	:	[1], #list of integers
 	'obs_alphas'	:	[1.0], #list of floats
+	'plot_Iv'		:	False, #bool
+	'plot_Tb'		:	True, #bool
 	'save_plot'		:	False, #True or False
 	'file_out'		:	'simulated_spectrum.pdf' #string
 		
@@ -361,6 +363,8 @@ def plot_sim(spectra,params={}):
 				'obs_linewidths':	[1.0],
 				'obs_orders'	:	[1],			
 				'obs_alphas'	:	[1.0],	
+				'plot_Iv'		:	False,
+				'plot_Tb'		:	True,
 				'save_plot'		:	False,
 				'file_out'		:	'simulated_spectrum.pdf'
 				}
@@ -368,6 +372,15 @@ def plot_sim(spectra,params={}):
 	for x in params:
 		if x in settings:
 			settings[x] = params[x]			
+	
+	#check if parameters conflict
+	if settings['plot_Iv'] == settings['plot_Tb']:
+		raise ValueError('Please confirm the spectral unit, plot_Iv and plot_Tb can not be both True or False.')
+	
+	#set appropriate default ylabel if not set by user
+	if 'ylabel' not in params:
+		if settings['plot_Iv']:
+			settings['ylabel'] = r'$I_\nu$ (Jy/beam)'
 		
 	name = settings['name']			
 	figsize	= settings['figsize']
@@ -389,6 +402,8 @@ def plot_sim(spectra,params={}):
 	obs_linewidths = settings['obs_linewidths']
 	obs_orders = settings['obs_orders']
 	obs_alphas = settings['obs_alphas']
+	plot_Iv = settings['plot_Iv']
+	plot_Tb = settings['plot_Tb']
 	save_plot = settings['save_plot']
 	file_out = settings['file_out']	
 	
@@ -422,7 +437,10 @@ def plot_sim(spectra,params={}):
 		plt.plot(spectrum.freq_profile,spectrum.int_profile,color=color,drawstyle=drawstyle,linewidth=linewidth,alpha=alpha,zorder=order)
 	if obs is not None:
 		for spectrum,color,drawstyle,linewidth,order,alpha in zip(obs,obs_colors,obs_drawstyles,obs_linewidths,obs_orders,obs_alphas):
-			plt.plot(spectrum.frequency,spectrum.Tb,color=color,drawstyle=drawstyle,linewidth=linewidth,alpha=alpha,zorder=order)	
+			if plot_Tb:
+				plt.plot(spectrum.frequency,spectrum.Tb,color=color,drawstyle=drawstyle,linewidth=linewidth,alpha=alpha,zorder=order)
+			if plot_Iv:
+				plt.plot(spectrum.frequency,spectrum.Iv,color=color,drawstyle=drawstyle,linewidth=linewidth,alpha=alpha,zorder=order)
 	
 	#xlimits
 	ax.get_xaxis().get_major_formatter().set_scientific(False) #Don't let the x-axis go into scientific notation
