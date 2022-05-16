@@ -1,6 +1,7 @@
 name: molsim
 channels:
   - defaults
+  - conda-forge
 dependencies:
   - numpy
   - scipy
