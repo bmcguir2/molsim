@@ -1,6 +1,9 @@
 from dataclasses import dataclass, field
+from typing import List
 
 import numpy as np
+
+from ..classes import Continuum, Observation, Spectrum
 
 from ..constants import cm, ckm, h, k
 from .interface import run as radex_run, read as radex_read
@@ -9,6 +12,31 @@ from .interface import run as radex_run, read as radex_read
 def _planck(T, freq):
     f = freq * 1e6
     return (1e26 * 2 * h / cm**2) * f**3 / np.expm1((h * f) / (k * T))
+
+
+def _merge_intervals(intervals):
+    merged = []
+    for x in sorted(intervals, key=lambda x: x[0]):
+        if merged and x[0] <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], x[1])
+        else:
+            merged.append(list(x))
+    return merged
+
+
+def _intersect_intervals(a, b):
+    intersected = []
+    i = j = 0
+    while i < len(a) and j < len(b):
+        lo = max(a[i][0], b[j][0])
+        hi = min(a[i][1], b[j][1])
+        if lo <= hi:
+            intersected.append([lo, hi])
+        if a[i][1] < b[j][1]:
+            i += 1
+        else:
+            j += 1
+    return intersected
 
 
 @dataclass
@@ -67,3 +95,88 @@ class NonLTESource:
         mask = tau > 0.0
         Iv[mask] *= -np.expm1(-tau[mask]) / tau[mask]
         return tau, Iv
+
+
+@dataclass
+class MaserSimulation:
+    """Class for maser simulation"""
+
+    spectrum: Spectrum = None           # Spectrum object associated with this simulation
+    observation: Observation = None     # Observation object associated with this simulation
+    source: List[NonLTESource] = None   # List of NonLTESource objects associated with this simulation
+    continuum: Continuum = None         # Continuum object
+    ll: List[float] = None              # lower limits [MHz]
+    ul: List[float] = None              # upper limits [MHz]
+    sim_width: float = 10.0             # FWHMs to simulate +/- line center
+    res: float = 0.01                   # resolution if simulating line profiles [MHz]
+    use_obs: bool = False               # flag for line profile simulation to be done with observations
+
+    def __post_init__(self):
+        # set default values
+        if self.spectrum is None:
+            self.spectrum = Spectrum()
+
+        if self.source is None:
+            self.source = NonLTESource()
+        # cast to list if needed
+        if isinstance(self.source, NonLTESource):
+            self.source = [self.source]
+
+        if self.continuum is None:
+            self.continuum = Continuum(params=2.725)
+
+        if self.use_obs:
+            if self.observation is None:
+                raise RuntimeError('use_obs is True but observation is not given')
+
+        # use minimum from observation or -infinity
+        if self.ll is None:
+            if self.use_obs:
+                self.ll = self.observation.spectrum.frequency.min()
+            else:
+                self.ll = -np.Infinity
+        # cast to list if needed
+        if isinstance(self.ll, float) or isinstance(self.ll, int):
+            self.ll = [self.ll]
+
+        # use maximum from observation or physically impossible large value
+        if self.ul is None:
+            if self.use_obs:
+                self.ul = self.observation.spectrum.frequency.max()
+            else:
+                self.ul = np.Infinity
+        # cast to list if needed
+        if isinstance(self.ul, float) or isinstance(self.ul, int):
+            self.ul = [self.ul]
+
+        # finished setting default values, the rest is done in _update()
+        self._update()
+
+    def _update(self):
+        # first, set up the frequency grid
+        if self.use_obs:
+            frequency = np.copy(self.observation.spectrum.frequency)
+        else:
+            lines_intervals = _merge_intervals(
+                [tuple(freq * (1 + d * self.sim_width * source.dV / ckm) for d in [-1, 1])
+                 for source in self.source for freq in source.frequency]
+            )
+            drawn_intervals = list(zip(self.ll, self.ul))
+            combined_intervals = _intersect_intervals(lines_intervals, drawn_intervals)
+            if combined_intervals:
+                frequency = np.concatenate([np.arange(s, e, self.res) for s, e in combined_intervals])
+            else:
+                frequency = np.empty(0)
+        self.spectrum.freq_profile = frequency
+
+        # second, compute optical depth and intensity for each source, add to the total intensity
+        intensity = np.zeros_like(frequency)
+        cumulative_tau = np.zeros_like(frequency)
+        for source in self.source:
+            tau, Iv = source.get_tau_Iv(frequency, self.sim_width)
+            intensity += Iv * np.exp(-cumulative_tau)
+            cumulative_tau += tau
+
+        # third, compute the contribution from background continuum source, and subtract the continuum
+        intensity += self.continuum.Ibg(frequency) * np.expm1(-cumulative_tau)
+        self.spectrum.int_profile = intensity
