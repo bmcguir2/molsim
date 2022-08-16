@@ -15,6 +15,11 @@ def _planck(T, freq):
     return (1e26 * 2 * h / cm**2) * f**3 / np.expm1((h * f) / (k * T))
 
 
+def _rayleigh_jeans_temperature(Iv, freq):
+    f = freq * 1e6
+    return (1e-26 * cm**2 / (2 * k)) * Iv / f**2
+
+
 def _merge_intervals(intervals):
     merged = []
     for x in sorted(intervals, key=lambda x: x[0]):
@@ -111,6 +116,7 @@ class MaserSimulation:
     ul: List[float] = None              # upper limits [MHz]
     sim_width: float = 10.0             # FWHMs to simulate +/- line center
     res: float = 0.01                   # resolution if simulating line profiles [MHz]
+    units: str = 'K'                    # units for the simulation; accepts 'K', 'mK', 'Jy/beam'
     use_obs: bool = False               # flag for line profile simulation to be done with observations
     aperture: float = None              # aperture size for spectrum extraction [arcsec]
 
@@ -189,6 +195,16 @@ class MaserSimulation:
                 intensity, beam_dilution = _apply_beam(frequency, intensity, self.size, self.observation.observatory.dish, return_beam=True)
             if self.observation.observatory.array is True and self.aperture is not None:
                 intensity, beam_dilution = _apply_aperture(intensity, self.size, self.aperture, return_beam=True)
+
+        # fifth, set units
+        if self.units in ['K', 'mK']:
+            intensity = _rayleigh_jeans_temperature(intensity, frequency)
+            if self.units == 'mK':
+                intensity *= 1e3
+        if self.units in ['Jy/beam', 'Jy']:
+            omega = self.observation.observatory.synth_beam[0]*self.observation.observatory.synth_beam[1]
+            sr_per_beam = omega * np.pi / (206265**2 * 4 * np.log(2))
+            intensity *= sr_per_beam
 
         self.spectrum.int_profile = intensity
         self.beam_dilution = beam_dilution
