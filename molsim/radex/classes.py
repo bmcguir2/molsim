@@ -4,6 +4,7 @@ from typing import List
 import numpy as np
 
 from ..classes import Continuum, Observation, Spectrum
+from ..utils import _apply_beam, _apply_aperture
 
 from ..constants import cm, ckm, h, k
 from .interface import run as radex_run, read as radex_read
@@ -105,11 +106,13 @@ class MaserSimulation:
     observation: Observation = None     # Observation object associated with this simulation
     source: List[NonLTESource] = None   # List of NonLTESource objects associated with this simulation
     continuum: Continuum = None         # Continuum object
+    size: float = 1e3                   # source size
     ll: List[float] = None              # lower limits [MHz]
     ul: List[float] = None              # upper limits [MHz]
     sim_width: float = 10.0             # FWHMs to simulate +/- line center
     res: float = 0.01                   # resolution if simulating line profiles [MHz]
     use_obs: bool = False               # flag for line profile simulation to be done with observations
+    aperture: float = None              # aperture size for spectrum extraction [arcsec]
 
     def __post_init__(self):
         # set default values
@@ -179,4 +182,13 @@ class MaserSimulation:
 
         # third, compute the contribution from background continuum source, and subtract the continuum
         intensity += self.continuum.Ibg(frequency) * np.expm1(-cumulative_tau)
+
+        # fourth, correct for beam dilution for gaussian beam or uniform aperture
+        if self.observation is not None:
+            if self.observation.observatory.sd is True:
+                intensity, beam_dilution = _apply_beam(frequency, intensity, self.size, self.observation.observatory.dish, return_beam=True)
+            if self.observation.observatory.array is True and self.aperture is not None:
+                intensity, beam_dilution = _apply_aperture(intensity, self.size, self.aperture, return_beam=True)
+
         self.spectrum.int_profile = intensity
+        self.beam_dilution = beam_dilution
