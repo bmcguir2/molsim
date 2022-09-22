@@ -204,10 +204,7 @@ class SingleComponent(AbstractModel):
         obs = self.observation.spectrum
         simulation = self.simulate_spectrum(parameters)
         # match the simulation with the spectrum
-        lnlike = np.sum(
-            np.log(1.0 / np.sqrt(obs.noise ** 2.0))
-            * np.exp(-((obs.Tb - simulation) ** 2.0) / (2.0 * obs.noise ** 2.0))
-        )
+        lnlike = - np.log(np.sqrt(2 * np.pi)) * simulation.size - np.sum( np.log(np.fabs(obs.noise)) ) - 0.5 * np.sum( ((obs.Tb - simulation) / obs.noise)**2.0 )
         return lnlike
 
     def nll(self, parameters: np.ndarray) -> float:
