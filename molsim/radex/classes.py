@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 
@@ -107,18 +107,18 @@ class NonLTESource:
 class MaserSimulation:
     """Class for maser simulation"""
 
-    spectrum: Spectrum = None           # Spectrum object associated with this simulation
-    observation: Observation = None     # Observation object associated with this simulation
-    source: List[NonLTESource] = None   # List of NonLTESource objects associated with this simulation
-    continuum: Continuum = None         # Continuum object
-    size: float = 1e3                   # source size
-    ll: List[float] = None              # lower limits [MHz]
-    ul: List[float] = None              # upper limits [MHz]
-    sim_width: float = 10.0             # FWHMs to simulate +/- line center
-    res: float = 0.01                   # resolution if simulating line profiles [MHz]
-    units: str = 'K'                    # units for the simulation; accepts 'K', 'mK', 'Jy/beam'
-    use_obs: bool = False               # flag for line profile simulation to be done with observations
-    aperture: float = None              # aperture size for spectrum extraction [arcsec]
+    spectrum: Optional[Spectrum] = None             # Spectrum object associated with this simulation
+    observation: Optional[Observation] = None       # Observation object associated with this simulation
+    source: Optional[List[NonLTESource]] = None     # List of NonLTESource objects associated with this simulation
+    continuum: Optional[Continuum] = None           # Continuum object
+    size: Optional[float] = 1e3                     # source size
+    ll: Optional[List[float]] = None                # lower limits [MHz]
+    ul: Optional[List[float]] = None                # upper limits [MHz]
+    sim_width: float = 10.0                         # FWHMs to simulate +/- line center
+    res: float = 0.01                               # resolution if simulating line profiles [MHz]
+    units: str = 'K'                                # units for the simulation; accepts 'K', 'mK', 'Jy/beam'
+    use_obs: bool = False                           # flag for line profile simulation to be done with observations
+    aperture: Optional[float] = None                # aperture size for spectrum extraction [arcsec]
 
     def __post_init__(self):
         # set default values
