@@ -173,6 +173,7 @@ def extract_chunks(
                 inband_data, data, rbf_params, noise_params, verbose
             )
             last_freq = inband_data[1]
+            chunks.append(chunk)
         else:
             pass
     logger.info(f"Created {len(chunks)} chunks.")
