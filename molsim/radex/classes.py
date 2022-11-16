@@ -5,13 +5,14 @@ from functools import lru_cache, partial
 import math
 from typing import Any, Callable, Dict, FrozenSet, List, Optional, TextIO, Tuple, Type, Union
 
+import numba as nb
 import numpy as np
 from scipy.interpolate import interp1d
 
 from ..classes import Continuum, Observation, Spectrum
 from ..utils import _apply_beam, _apply_aperture
 
-from ..constants import cm, ckm, h, k
+from ..constants import ccm, cm, ckm, h, k
 
 
 def _planck(T, freq):
@@ -57,6 +58,15 @@ class Levels:
     statistical_weight: np.ndarray[float]
     quantum_numbers: np.ndarray[str]
     level_number_index_map: Dict[int, int]
+    ediff: np.ndarray[float] = field(init=False)
+    gratio: np.ndarray[float] = field(init=False)
+
+    def __post_init__(self: Levels):
+        ediff = self.level_energies[:, None] - self.level_energies[None, :]
+        object.__setattr__(self, 'ediff', ediff)
+
+        gratio = self.statistical_weight[:, None] / self.statistical_weight[None, :]
+        object.__setattr__(self, 'gratio', gratio)
 
     def __repr__(self) -> str:
         return f'<Levels object with {len(self.level_numbers)} levels>'
@@ -297,62 +307,80 @@ class NonLTEMolecule:
         return cls(**fields)
 
 
-@dataclass
-class NonLTESource:
-    """Class for keeping non-LTE source properties"""
+@dataclass(init=True, repr=True, eq=False, order=False, unsafe_hash=False, frozen=False)
+class NonLTESourceMutableParameters:
+    Tkin: float
+    collision_density: Dict[str, float]
 
-    velocity: float = 0.0   # lsr velocity [km/s]
-    dV: float = 3.0         # FWHM [km/s]
-    column: float = 1e10    # column density [cm^-2]
-    Tbg: float = 2.725      # background temperature [K]
-    Tkin: float = 30.0      # kinetic temperature [K]
-    # density of the collision partner as a dictionary [cm^-3]
-    collision_density: dict = field(default_factory=lambda: {'H2': 1e4})
-    # LAMDA collisional data file
-    collision_file: str = 'hco+.dat'
-    # temperary file that store output from RADEX
-    radex_output: str = '/tmp/radex.out'
+
+@dataclass(init=True, repr=True, eq=False, order=False, unsafe_hash=False, frozen=True)
+class NonLTESource:
+    molecule: NonLTEMolecule
+    mutable_params: NonLTESourceMutableParameters
 
     def __post_init__(self):
-        # run RADEX simulation to obtain excitation temperatures and optical depths
-        outfile = radex_run(
-            molfile=self.collision_file,
-            outfile=self.radex_output,
-            f_low=3.0,  # 3 GHz is the minimum since RADEX cannot display wavelength > 1e5 um
-            f_high=1e5, # 1e5 GHz is the maximum since RADEX cannot display frequency > 1e5 GHz
-            T_k=self.Tkin,
-            n_c=self.collision_density,
-            T_bg=self.Tbg,
-            N=self.column,
-            dV=self.dV
-        )
-        parameters_keys, parameters_values, grid = radex_read(outfile)
-        # RADEX precision is low, choose smartly between wavelength and frequency
-        # TODO: use collision_file to correct the frequency
-        self.frequency = np.array([cm / g['WAVEL'] if g['WAVEL'] > g['FREQ'] else g['FREQ'] * 1e3 for g in grid])
-        self.frequency *= 1 - self.velocity / ckm
-        # T_EX and TAU may be insensitive to small changes in input
-        # reimplementing RADEX is required to correct the problem
-        self.Tex = np.array([g['T_EX'] for g in grid])
-        self.tau = np.array([g['TAU'] for g in grid])
+        partner_name_standardizer = self.molecule.partner_name_standardizer
 
-    def get_tau_Iv(self, freq, sim_width = 10.0):
-        tau = np.zeros_like(freq)
-        Iv = np.zeros_like(freq)
+        collision_density = dict()
+        for partner_name, density in self.mutable_params.collision_density.items():
+            collision_density[partner_name_standardizer[partner_name]] = density
+        self.mutable_params.collision_density = collision_density
 
-        for freq_, Tex_, tau_ in zip(self.frequency, self.Tex, self.tau):
-            dfreq = self.dV / ckm * freq_
-            two_sigma_sq = dfreq**2 / (4 * np.log(2))
-            lo = np.searchsorted(freq, freq_ - sim_width * dfreq, side='left')
-            hi = np.searchsorted(freq, freq_ + sim_width * dfreq, side='right')
-            f = freq[lo:hi]
-            t = tau_ * np.exp(-(f - freq_)**2 / two_sigma_sq)
-            tau[lo:hi] += t
-            Iv[lo:hi] += _planck(Tex_, f) * t  # TODO: double-check this expression
+    def get_collisional_rate(self: NonLTESource) -> np.ndarray:
+        Tkin = self.mutable_params.Tkin
+        collision_density = dict(self.mutable_params.collision_density)
 
-        mask = tau > 0.0
-        Iv[mask] *= -np.expm1(-tau[mask]) / tau[mask]
-        return tau, Iv
+        collisional_transitions = self.molecule.collisional_transitions
+        if ('H2' in collision_density and 'H2' not in collisional_transitions
+                and 'pH2' not in collision_density and 'pH2' in collisional_transitions
+                and 'oH2' not in collision_density and 'oH2' in collisional_transitions):
+            # calculate ortho-to-para ratio if H2 density is given but data file has o- and p-H2,
+            # equation extracted from radex
+            opr = min(3.0, 9.0 * math.exp(-170.6 / Tkin))
+            ofrac = opr / (opr + 1.0)
+            pfrac = 1.0 - ofrac
+            H2_density = collision_density.pop('H2')
+            collision_density['pH2'] = H2_density * pfrac
+            collision_density['oH2'] = H2_density * ofrac
+
+        return self._collisional_rate_helper(Tkin, frozenset(collision_density.items()))
+
+    @lru_cache
+    def _collisional_rate_helper(self: NonLTESource, Tkin: float, collision_density: FrozenSet[Tuple[str, float]]) -> np.ndarray:
+        levels = self.molecule.levels
+        collisional_transitions = self.molecule.collisional_transitions
+
+        crate: np.ndarray[float] = np.zeros(
+            (levels.num_levels, levels.num_levels), dtype=float)
+
+        # calculate rate coefficients multiplied by density.
+        for partner_name, density in collision_density:
+            num_transitions = collisional_transitions[partner_name].num_transitions
+            iup = collisional_transitions[partner_name].upper_level_indices
+            ilo = collisional_transitions[partner_name].lower_level_indices
+            colld = self.molecule.collisional_rate_coefficients_getter[partner_name](Tkin)
+            self._set_downward_rates(density, num_transitions, iup, ilo, colld, crate)
+
+        # calculate upward rates from detail balance
+        self._set_upward_rates_detail_balance(
+            Tkin, levels.num_levels, levels.ediff, levels.gratio, crate)
+
+        return crate
+
+    @staticmethod
+    @nb.jit
+    def _set_downward_rates(density: float, num_transitions: int, iup: np.ndarray[int], ilo: np.ndarray[int], colld: np.ndarray[float], crate: np.ndarray[float]):
+        for i in range(num_transitions):
+            crate[iup[i], ilo[i]] += density * colld[i]
+
+    @staticmethod
+    @nb.jit
+    def _set_upward_rates_detail_balance(Tkin: float, num_levels: int, ediff: np.ndarray[float], gratio: np.ndarray[float], crate: np.ndarray[float]):
+        einv = -h * ccm / (k * Tkin)
+        for iup in range(num_levels):
+            for ilo in range(iup):
+                crate[ilo, iup] = gratio[iup, ilo] * \
+                    np.exp(einv * ediff[iup, ilo]) * crate[iup, ilo]
 
 
 @dataclass
