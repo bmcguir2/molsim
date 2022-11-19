@@ -336,12 +336,73 @@ class NonLTEMolecule:
 
         return cls(**fields)
 
+@dataclass(init=True, repr=True, eq=False, order=False, unsafe_hash=False, frozen=True)
+class EscapeProbability:
+    type: str
+    set_probability: Callable[[int, np.ndarray[float], np.ndarray[float]], None] = field(init=False)
+
+    def __post_init__(self: EscapeProbability):
+        if self.type.lower() in ['uniform', 'uniform sphere', 'uniformsphere']:
+            @nb.jit
+            def func(num_transitions: int, tau: np.ndarray[float], beta: np.ndarray[float]):
+                c1 = -3.0 / 8.0
+                c2 = -4.0 / 15.0
+                c3 = -5.0 / 24.0
+                c4 = -6.0 / 35.0
+                for i in range(num_transitions):
+                    t = tau[i]
+                    if abs(t) < 0.1:
+                        beta[i] = 1.0 + c1 * t * (1.0 + c2 * t * (1.0 + c3 * t * (1.0 + c4 * t)))
+                    elif t > 20.0:
+                        ti = 1.0 / t
+                        tisq = ti * ti
+                        beta[i] = 3.0 * ti * (0.5 - tisq)
+                    else:
+                        ti = 1.0 / t
+                        tisq = ti * ti
+                        beta[i] = 3.0 * ti * (0.5 - tisq + (ti + tisq) * np.exp(-t))
+        elif self.type.lower() in ['lvg', 'expanding', 'expanding sphere', 'expanding sphere']:
+            @nb.jit
+            def func(num_transitions: int, tau: np.ndarray[float], beta: np.ndarray[float]):
+                a = 1.1719833618734954
+                c1 = -a / 2.0
+                c2 = -a / 3.0
+                c3 = -a / 4.0
+                c4 = -a / 5.0
+                sqrt_four_pi_inv = 1.0 / np.sqrt(4.0 * np.pi)
+                for i in range(num_transitions):
+                    t = tau[i]
+                    if abs(t) < 0.1 / a:
+                        beta[i] = 1.0 + c1 * t * (1.0 + c2 * t * (1.0 + c3 * t * (1.0 + c4 * t)))
+                    elif t > 14.0:
+                        beta[i] = 1 / (t * np.sqrt(np.log(t * sqrt_four_pi_inv)))
+                    else:
+                        beta[i] = -np.expm1(-a * t) / (a * t)
+        elif self.type.lower() in ['slab']:
+            @nb.jit
+            def func(num_transitions: int, tau: np.ndarray[float], beta: np.ndarray[float]):
+                a = 3.0
+                c1 = -a / 2.0
+                c2 = -a / 3.0
+                c3 = -a / 4.0
+                c4 = -a / 5.0
+                for i in range(num_transitions):
+                    t = tau[i]
+                    if abs(t) < 0.1 / a:
+                        beta[i] = 1.0 + c1 * t * (1.0 + c2 * t * (1.0 + c3 * t * (1.0 + c4 * t)))
+                    else:
+                        beta[i] = -np.expm1(-a * t) / (a * t)
+        else:
+            raise ValueError(f'Unexpected type = {self.type}')
+
+        object.__setattr__(self, 'set_probability', func)
 
 @dataclass(init=True, repr=True, eq=False, order=False, unsafe_hash=False, frozen=False)
 class NonLTESourceMutableParameters:
     Tkin: float
     collision_density: Dict[str, float]
     background: Union[Continuum, float]
+    escape_probability: EscapeProbability
 
 
 @dataclass(init=True, repr=True, eq=False, order=False, unsafe_hash=False, frozen=True)
@@ -448,6 +509,12 @@ class NonLTESource:
             yrate[ilo[i], iup[i]] -= ul
             yrate[ilo[i], ilo[i]] += lu
 
+    def set_escape_probability(self: NonLTESource, tau: np.ndarray[float], beta: np.ndarray[float]):
+        radiative_transitions = self.molecule.radiative_transitions
+        num_transitions = radiative_transitions.num_transitions
+
+        escape_probability = self.mutable_params.escape_probability
+        escape_probability.set_probability(num_transitions, tau, beta)
 
 @dataclass
 class MaserSimulation:
