@@ -108,8 +108,12 @@ class RadiativeTransitions:
     upper_level_numbers: np.ndarray[int]
     lower_level_numbers: np.ndarray[int]
     spontaneous_decay_rates: np.ndarray[float]
+    frequencies: np.ndarray[float]
+    upper_level_energies: np.ndarray[float]
     upper_level_indices: np.ndarray[int]
     lower_level_indices: np.ndarray[int]
+    ediff: np.ndarray[float]
+    gratio: np.ndarray[float]
 
     def __repr__(self:RadiativeTransitions) -> str:
         return f'<RadiativeTransitions object with {len(self.transition_numbers)} transitions>'
@@ -126,16 +130,22 @@ class RadiativeTransitions:
         fields['upper_level_numbers'] = list()
         fields['lower_level_numbers'] = list()
         fields['spontaneous_decay_rates'] = list()
+        fields['frequencies'] = list()
+        fields['upper_level_energies'] = list()
         for i in range(fields['num_transitions']):
-            cords = file_in.readline().split(maxsplit=4)
+            cords = file_in.readline().split(maxsplit=6)
             fields['transition_numbers'].append(int(cords[0]))
             fields['upper_level_numbers'].append(int(cords[1]))
             fields['lower_level_numbers'].append(int(cords[2]))
             fields['spontaneous_decay_rates'].append(float(cords[3]))
+            fields['frequencies'].append(float(cords[4]) * 1e3)
+            fields['upper_level_energies'].append(float(cords[5]))
         fields['transition_numbers'] = np.array(fields['transition_numbers'])
         fields['upper_level_numbers'] = np.array(fields['upper_level_numbers'])
         fields['lower_level_numbers'] = np.array(fields['lower_level_numbers'])
         fields['spontaneous_decay_rates'] = np.array(fields['spontaneous_decay_rates'])
+        fields['frequencies'] = np.array(fields['frequencies'])
+        fields['upper_level_energies'] = np.array(fields['upper_level_energies'])
 
         def level_number_index_map_func(
             level_number): return levels.level_number_index_map[level_number]
@@ -144,7 +154,23 @@ class RadiativeTransitions:
         fields['lower_level_indices'] = np.array([
             *map(level_number_index_map_func, fields['lower_level_numbers'])])
 
+        fields['ediff'] = levels.ediff[fields['upper_level_indices'], fields['lower_level_indices']]
+        fields['gratio'] = levels.gratio[fields['upper_level_indices'], fields['lower_level_indices']]
+
         return cls(**fields)
+
+    @lru_cache
+    def get_Bul_J(self: RadiativeTransitions, background: Union[Continuum, float]) -> np.ndarray[float]:
+        if isinstance(background, Continuum):
+            freq = ccm * self.ediff * 1e-6
+            Tbg = background.Tbg(freq)
+        else:
+            Tbg = background
+        return self.spontaneous_decay_rates / np.expm1((h * ccm / k) / Tbg * self.ediff)
+
+    @lru_cache
+    def get_Blu_J(self: RadiativeTransitions, background: Union[Continuum, float]) -> np.ndarray[float]:
+        return self.gratio * self.get_Bul_J(background)
 
 
 @dataclass(init=True, repr=False, eq=False, order=False, unsafe_hash=False, frozen=True)
@@ -240,6 +266,10 @@ class NonLTEMolecule:
             for standard_name, variant_names in partner_name_variants.items()
             for variant_name in variant_names
         }
+        partner_name_standardizer.update({
+            standard_name: standard_name
+            for standard_name in partner_name_variants.keys()
+        })
         object.__setattr__(self, 'partner_name_standardizer',
                            partner_name_standardizer)
 
@@ -311,6 +341,7 @@ class NonLTEMolecule:
 class NonLTESourceMutableParameters:
     Tkin: float
     collision_density: Dict[str, float]
+    background: Union[Continuum, float]
 
 
 @dataclass(init=True, repr=True, eq=False, order=False, unsafe_hash=False, frozen=True)
@@ -318,17 +349,13 @@ class NonLTESource:
     molecule: NonLTEMolecule
     mutable_params: NonLTESourceMutableParameters
 
-    def __post_init__(self):
+    def get_collisional_rate(self: NonLTESource) -> np.ndarray[float]:
+        Tkin = self.mutable_params.Tkin
         partner_name_standardizer = self.molecule.partner_name_standardizer
 
         collision_density = dict()
         for partner_name, density in self.mutable_params.collision_density.items():
             collision_density[partner_name_standardizer[partner_name]] = density
-        self.mutable_params.collision_density = collision_density
-
-    def get_collisional_rate(self: NonLTESource) -> np.ndarray:
-        Tkin = self.mutable_params.Tkin
-        collision_density = dict(self.mutable_params.collision_density)
 
         collisional_transitions = self.molecule.collisional_transitions
         if ('H2' in collision_density and 'H2' not in collisional_transitions
@@ -346,7 +373,7 @@ class NonLTESource:
         return self._collisional_rate_helper(Tkin, frozenset(collision_density.items()))
 
     @lru_cache
-    def _collisional_rate_helper(self: NonLTESource, Tkin: float, collision_density: FrozenSet[Tuple[str, float]]) -> np.ndarray:
+    def _collisional_rate_helper(self: NonLTESource, Tkin: float, collision_density: FrozenSet[Tuple[str, float]]) -> np.ndarray[float]:
         levels = self.molecule.levels
         collisional_transitions = self.molecule.collisional_transitions
 
@@ -381,6 +408,45 @@ class NonLTESource:
             for ilo in range(iup):
                 crate[ilo, iup] = gratio[iup, ilo] * \
                     np.exp(einv * ediff[iup, ilo]) * crate[iup, ilo]
+
+    def set_rate_matrix(self: NonLTESource, beta: np.ndarray[float], yrate: np.ndarray[float]):
+        levels = self.molecule.levels
+        radiative_transitions = self.molecule.radiative_transitions
+        background = self.mutable_params.background
+
+        num_transitions = radiative_transitions.num_transitions
+        iup = radiative_transitions.upper_level_indices
+        ilo = radiative_transitions.lower_level_indices
+
+        Aul = radiative_transitions.spontaneous_decay_rates
+        Bul_J = radiative_transitions.get_Bul_J(background)
+        Blu_J = radiative_transitions.get_Blu_J(background)
+
+        num_levels = levels.num_levels
+        crate = self.get_collisional_rate()
+        self._set_collisional_rates(num_levels, crate, yrate)
+        self._add_radiative_rates(num_transitions, iup, ilo, Aul, Bul_J, Blu_J, beta, yrate)
+
+    @staticmethod
+    @nb.jit
+    def _set_collisional_rates(num_levels: int, crate: np.ndarray[float], yrate: np.ndarray[float]):
+        for i in range(num_levels):
+            ctot = 0.0
+            for j in range(num_levels):
+                yrate[j, i] = -crate[i, j]
+                ctot += crate[i, j]
+            yrate[i, i] = ctot
+
+    @staticmethod
+    @nb.jit
+    def _add_radiative_rates(num_transitions: int, iup: np.ndarray[int], ilo: np.ndarray[int], Aul: np.ndarray[float], Bul_J: np.ndarray[float], Blu_J: np.ndarray[float], beta: np.ndarray[float], yrate: np.ndarray[float]):
+        for i in range(num_transitions):
+            ul = (Aul[i] + Bul_J[i]) * beta[i]
+            lu = Blu_J[i] * beta[i]
+            yrate[iup[i], iup[i]] += ul
+            yrate[iup[i], ilo[i]] -= lu
+            yrate[ilo[i], iup[i]] -= ul
+            yrate[ilo[i], ilo[i]] += lu
 
 
 @dataclass
