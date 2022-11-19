@@ -403,6 +403,8 @@ class NonLTESourceMutableParameters:
     collision_density: Dict[str, float]
     background: Union[Continuum, float]
     escape_probability: EscapeProbability
+    column: float
+    dV: float
 
 
 @dataclass(init=True, repr=True, eq=False, order=False, unsafe_hash=False, frozen=True)
@@ -515,6 +517,29 @@ class NonLTESource:
 
         escape_probability = self.mutable_params.escape_probability
         escape_probability.set_probability(num_transitions, tau, beta)
+
+    def set_optical_depth(self: NonLTESource, xpop: np.ndarray[float], tau: np.ndarray[float]):
+        radiative_transitions = self.molecule.radiative_transitions
+
+        num_transitions = radiative_transitions.num_transitions
+        cddv = self.mutable_params.column / self.mutable_params.dV
+        iup = radiative_transitions.upper_level_indices
+        ilo = radiative_transitions.lower_level_indices
+        Aul = radiative_transitions.spontaneous_decay_rates
+        ediff = radiative_transitions.ediff
+        gratio = radiative_transitions.gratio
+
+        self._set_optical_depth_helper(
+            num_transitions, cddv, iup, ilo, Aul, ediff, gratio, xpop, tau)
+
+    @staticmethod
+    @nb.jit
+    def _set_optical_depth_helper(num_transitions: int, cddv: float, iup: np.ndarray[int], ilo: np.ndarray[int], Aul: np.ndarray[float], ediff: np.ndarray[float], gratio: np.ndarray[float], xpop: np.ndarray[float], tau: np.ndarray[float]):
+        fgaus = np.sqrt(16 * np.pi**3 / np.log(2)) * 1e5
+        for i in range(num_transitions):
+            tau[i] = cddv * (xpop[ilo[i]] * gratio[i] - xpop[iup[i]]) * \
+                Aul[i] / (fgaus * ediff[i]**3)
+
 
 @dataclass
 class MaserSimulation:
