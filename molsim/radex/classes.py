@@ -406,6 +406,19 @@ class NonLTESourceMutableParameters:
     column: float
     dV: float
 
+    _mutated: bool = field(init=False, repr=False)
+
+    def __setattr__(self: NonLTESourceMutableParameters, name: str, value: Any):
+        if name != '_mutated' and (not hasattr(self, name) or getattr(self, name) != value):
+            self._mutated = True
+        object.__setattr__(self, name, value)
+
+    def is_mutated(self: NonLTESourceMutableParameters, reset: bool = True) -> bool:
+        ret = self._mutated
+        if reset:
+            self._mutated = False
+        return ret
+
 
 @dataclass(init=True, repr=True, eq=False, order=False, unsafe_hash=False, frozen=True)
 class NonLTESource:
