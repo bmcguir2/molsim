@@ -425,6 +425,23 @@ class NonLTESource:
     molecule: NonLTEMolecule
     mutable_params: NonLTESourceMutableParameters
 
+    _tau: np.ndarray[float] = field(init=False, repr=False)
+    _Tex: np.ndarray[float] = field(init=False, repr=False)
+
+    @property
+    def frequency(self: NonLTESource) -> np.ndarray[float]:
+        return self.molecule.radiative_transitions.frequencies
+
+    @property
+    def tau(self: NonLTESource) -> np.ndarray[float]:
+        self.run()
+        return self._tau
+
+    @property
+    def Tex(self: NonLTESource) -> np.ndarray[float]:
+        self.run()
+        return self._Tex
+
     def get_collisional_rate(self: NonLTESource) -> np.ndarray[float]:
         Tkin = self.mutable_params.Tkin
         partner_name_standardizer = self.molecule.partner_name_standardizer
@@ -600,6 +617,9 @@ class NonLTESource:
             value[i] += c * (value_old[i] - value[i])
 
     def run(self: NonLTESource):
+        if not self.mutable_params.is_mutated():
+            return
+
         levels = self.molecule.levels
         radiative_transitions = self.molecule.radiative_transitions
 
@@ -651,7 +671,10 @@ class NonLTESource:
                 self.under_relaxation(0.3, xpop, xpop_old)
 
             if converged:
-                return
+                break
+
+        object.__setattr__(self, '_tau', tau)
+        object.__setattr__(self, '_Tex', Tex)
 
 
 @dataclass
