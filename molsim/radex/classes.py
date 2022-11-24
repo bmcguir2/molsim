@@ -427,6 +427,12 @@ class NonLTESource:
     molecule: NonLTEMolecule
     mutable_params: NonLTESourceMutableParameters
 
+    miniter: int = 10
+    maxiter: int = 10000
+    ccrit: float = 1e-6
+    Tex_relaxation_coefficient: float = 0.5
+    xpop_relaxation_coefficient: float = 0.3
+
     _tau: np.ndarray[float] = field(init=False, repr=False)
     _Tex: np.ndarray[float] = field(init=False, repr=False)
 
@@ -622,26 +628,26 @@ class NonLTESource:
     def get_convergence(self: NonLTESource, tau: np.ndarray[float], Tex_old: np.ndarray[float], Tex: np.ndarray[float]) -> bool:
         radiative_transitions = self.molecule.radiative_transitions
         num_transitions = radiative_transitions.num_transitions
-        return self._get_convergence_helper(num_transitions, tau, Tex_old, Tex)
+        return self._get_convergence_helper(self.ccrit, num_transitions, tau, Tex_old, Tex)
 
     @staticmethod
     @nb.jit
-    def _get_convergence_helper(num_transitions: int, tau: np.ndarray[float], Tex_old: np.ndarray[float], Tex: np.ndarray[float]) -> bool:
+    def _get_convergence_helper(ccrit: float, num_transitions: int, tau: np.ndarray[float], Tex_old: np.ndarray[float], Tex: np.ndarray[float]) -> bool:
         nthick = 0
         tsum = 0.0
         for i in range(num_transitions):
             if tau[i] > 0.01:
                 nthick += 1
                 tsum += abs((Tex[i] - Tex_old[i]) / Tex[i])
-        ccrit = 1e-6
         return nthick == 0 or tsum / nthick < ccrit
 
-    def under_relaxation(self: NonLTESource, coefficient: float, value: np.ndarray[float], value_old: np.ndarray[float]):
-        self._under_relaxation_helper(coefficient, value, value_old)
+    def relaxation(self: NonLTESource, coefficient: float, value: np.ndarray[float], value_old: np.ndarray[float]):
+        if coefficient != 1.0:
+            self._relaxation_helper(coefficient, value, value_old)
 
     @staticmethod
     @nb.jit
-    def _under_relaxation_helper(coefficient: float, value: np.ndarray[float], value_old: np.ndarray[float]):
+    def _relaxation_helper(coefficient: float, value: np.ndarray[float], value_old: np.ndarray[float]):
         c = 1.0 - coefficient
         for i in range(value.size):
             value[i] += c * (value_old[i] - value[i])
@@ -665,9 +671,7 @@ class NonLTESource:
         Tex: np.ndarray[float]
         Tex_old: np.ndarray[float]
 
-        miniter = 10
-        maxiter = 10000
-        for niter in range(maxiter):
+        for niter in range(self.maxiter):
             if niter == 0:
                 tau = np.zeros(num_transitions, dtype=float)
                 beta = np.ones(num_transitions, dtype=float)
@@ -693,18 +697,20 @@ class NonLTESource:
                 Tex_old = np.empty(num_transitions)
             Tex_old, Tex = Tex, Tex_old
             self.set_excitation_temperature(xpop, Tex)
-            converged = niter >= miniter and self.get_convergence(tau, Tex_old, Tex)
+            converged = niter >= self.miniter and self.get_convergence(tau, Tex_old, Tex)
 
             if niter != 0:
                 self.set_optical_depth(xpop, tau)
-                self.under_relaxation(0.5, Tex, Tex_old)
-                self.under_relaxation(0.3, xpop, xpop_old)
+                self.relaxation(self.Tex_relaxation_coefficient, Tex, Tex_old)
+                self.relaxation(self.xpop_relaxation_coefficient, xpop, xpop_old)
 
             if converged:
                 break
 
         object.__setattr__(self, '_tau', tau)
         object.__setattr__(self, '_Tex', Tex)
+
+        return niter
 
 
 @dataclass
