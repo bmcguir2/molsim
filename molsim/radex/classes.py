@@ -431,6 +431,34 @@ class NonLTESource:
     _Tex: np.ndarray[float] = field(init=False, repr=False)
 
     @property
+    def Tkin(self: NonLTESource) -> float:
+        return self.mutable_params.Tkin
+
+    @property
+    def collision_density(self: NonLTESource) -> Dict[str, float]:
+        return self.mutable_params.collision_density
+
+    @property
+    def background(self: NonLTESource) -> Union[Continuum, float]:
+        return self.mutable_params.background
+
+    @property
+    def escape_probability(self: NonLTESource) -> EscapeProbability:
+        return self.mutable_params.escape_probability
+
+    @property
+    def column(self: NonLTESource) -> float:
+        return self.mutable_params.column
+
+    @property
+    def dV(self: NonLTESource) -> float:
+        return self.mutable_params.dV
+
+    @property
+    def velocity(self: NonLTESource) -> float:
+        return self.mutable_params.velocity
+
+    @property
     def frequency(self: NonLTESource) -> np.ndarray[float]:
         return self.molecule.radiative_transitions.frequencies * (1.0 - self.velocity / ckm)
 
