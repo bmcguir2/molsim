@@ -405,11 +405,13 @@ class NonLTESourceMutableParameters:
     escape_probability: EscapeProbability
     column: float
     dV: float
+    velocity: float
 
     _mutated: bool = field(init=False, repr=False)
 
     def __setattr__(self: NonLTESourceMutableParameters, name: str, value: Any):
-        if name != '_mutated' and (not hasattr(self, name) or getattr(self, name) != value):
+        untracked = ['_mutated', 'velocity']
+        if name not in untracked and (not hasattr(self, name) or getattr(self, name) != value):
             self._mutated = True
         object.__setattr__(self, name, value)
 
@@ -430,7 +432,7 @@ class NonLTESource:
 
     @property
     def frequency(self: NonLTESource) -> np.ndarray[float]:
-        return self.molecule.radiative_transitions.frequencies
+        return self.molecule.radiative_transitions.frequencies * (1.0 - self.velocity / ckm)
 
     @property
     def tau(self: NonLTESource) -> np.ndarray[float]:
