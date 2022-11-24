@@ -553,6 +553,106 @@ class NonLTESource:
             tau[i] = cddv * (xpop[ilo[i]] * gratio[i] - xpop[iup[i]]) * \
                 Aul[i] / (fgaus * ediff[i]**3)
 
+    def set_excitation_temperature(self: NonLTESource, xpop: np.ndarray[float], Tex: np.ndarray[float]):
+        radiative_transitions = self.molecule.radiative_transitions
+
+        num_transitions = radiative_transitions.num_transitions
+        iup = radiative_transitions.upper_level_indices
+        ilo = radiative_transitions.lower_level_indices
+        ediff = radiative_transitions.ediff
+        gratio = radiative_transitions.gratio
+
+        self._set_excitation_temperature_helper(
+            num_transitions, iup, ilo, ediff, gratio, xpop, Tex)
+
+    @staticmethod
+    @nb.jit
+    def _set_excitation_temperature_helper(num_transitions: int, iup: np.ndarray[int], ilo: np.ndarray[int], ediff: np.ndarray[float], gratio: np.ndarray[float], xpop: np.ndarray[float], Tex: np.ndarray[float]):
+        fk = h * ccm / k
+        for i in range(num_transitions):
+            Tex[i] = fk * ediff[i] / np.log(gratio[i] * xpop[ilo[i]] / xpop[iup[i]])
+
+    def get_convergence(self: NonLTESource, tau: np.ndarray[float], Tex_old: np.ndarray[float], Tex: np.ndarray[float]) -> bool:
+        radiative_transitions = self.molecule.radiative_transitions
+        num_transitions = radiative_transitions.num_transitions
+        return self._get_convergence_helper(num_transitions, tau, Tex_old, Tex)
+
+    @staticmethod
+    @nb.jit
+    def _get_convergence_helper(num_transitions: int, tau: np.ndarray[float], Tex_old: np.ndarray[float], Tex: np.ndarray[float]) -> bool:
+        nthick = 0
+        tsum = 0.0
+        for i in range(num_transitions):
+            if tau[i] > 0.01:
+                nthick += 1
+                tsum += abs((Tex[i] - Tex_old[i]) / Tex[i])
+        ccrit = 1e-6
+        return nthick == 0 or tsum / nthick < ccrit
+
+    def under_relaxation(self: NonLTESource, coefficient: float, value: np.ndarray[float], value_old: np.ndarray[float]):
+        self._under_relaxation_helper(coefficient, value, value_old)
+
+    @staticmethod
+    @nb.jit
+    def _under_relaxation_helper(coefficient: float, value: np.ndarray[float], value_old: np.ndarray[float]):
+        c = 1.0 - coefficient
+        for i in range(value.size):
+            value[i] += c * (value_old[i] - value[i])
+
+    def run(self: NonLTESource):
+        levels = self.molecule.levels
+        radiative_transitions = self.molecule.radiative_transitions
+
+        num_levels = levels.num_levels
+        num_transitions = radiative_transitions.num_transitions
+
+        tau: np.ndarray[float]
+        beta: np.ndarray[float]
+        yrate: np.ndarray[float]
+        rhs: np.ndarray[float]
+        xpop: np.ndarray[float]
+        xpop_old: np.ndarray[float]
+        Tex: np.ndarray[float]
+        Tex_old: np.ndarray[float]
+
+        miniter = 10
+        maxiter = 10000
+        for niter in range(maxiter):
+            if niter == 0:
+                tau = np.zeros(num_transitions, dtype=float)
+                beta = np.ones(num_transitions, dtype=float)
+
+                yrate = np.empty((num_levels, num_levels), dtype=float)
+                rhs = np.zeros(num_levels)
+                rhs[0] = 1.0
+            else:
+                self.set_optical_depth(xpop, tau)
+                self.set_escape_probability(tau, beta)
+
+            self.set_rate_matrix(beta, yrate)
+            yrate[0] = 1.0
+
+            if niter != 0:
+                xpop_old = xpop
+            xpop = np.linalg.solve(yrate, rhs)
+            np.clip(xpop, 1e-30, None, out=xpop)
+            xpop /= xpop.sum()
+
+            if niter == 0:
+                Tex = np.empty(num_transitions)
+                Tex_old = np.empty(num_transitions)
+            Tex_old, Tex = Tex, Tex_old
+            self.set_excitation_temperature(xpop, Tex)
+            converged = niter >= miniter and self.get_convergence(tau, Tex_old, Tex)
+
+            if niter != 0:
+                self.set_optical_depth(xpop, tau)
+                self.under_relaxation(0.5, Tex, Tex_old)
+                self.under_relaxation(0.3, xpop, xpop_old)
+
+            if converged:
+                return
+
 
 @dataclass
 class MaserSimulation:
