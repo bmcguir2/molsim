@@ -26,13 +26,13 @@ def _rayleigh_jeans_temperature(Iv, freq):
     return (1e-26 * cm**2 / (2 * k)) * Iv / f**2
 
 
-def _merge_intervals(intervals):
-    merged = []
+def _merge_intervals(intervals: Iterable[Tuple[float, float]]) -> List[Tuple[float, float]]:
+    merged: List[Tuple[float, float]] = []
     for x in sorted(intervals, key=lambda x: x[0]):
         if merged and x[0] <= merged[-1][1]:
-            merged[-1][1] = max(merged[-1][1], x[1])
+            merged[-1] = (merged[-1][0], max(merged[-1][1], x[1]))
         else:
-            merged.append(list(x))
+            merged.append(x)
     return merged
 
 
@@ -756,6 +756,11 @@ class NonLTESimulation:
         if not isinstance(self.ul, Iterable):
             self.ul = [self.ul]
 
+        # merge and sort ll ul intervals
+        assert isinstance(self.ll, Iterable)
+        assert isinstance(self.ul, Iterable)
+        self.ll, self.ul = map(lambda x: list(x), zip(*_merge_intervals(zip(self.ll, self.ul))))
+
         # check if observation is provided
         if self.use_obs:
             if self.observation is None:
@@ -795,12 +800,13 @@ class NonLTESimulation:
             assert isinstance(self.observation, Observation)
             frequency = np.copy(self.observation.spectrum.frequency)
         else:
-            lines_intervals = _merge_intervals(
-                [tuple(freq * (1 + d * self.sim_width * source.dV / ckm) for d in [-1, 1])
+            combined_lines_intervals = _merge_intervals(
+                [(float(freq * (1 - self.sim_width * source.dV / ckm)),
+                  float(freq * (1 + self.sim_width * source.dV / ckm)))
                  for source in self.source for freq in source.frequency]
             )
             drawn_intervals = list(zip(self.ll, self.ul))
-            combined_intervals = _intersect_intervals(lines_intervals, drawn_intervals)
+            combined_intervals = _intersect_intervals(combined_lines_intervals, drawn_intervals)
             if combined_intervals:
                 frequency = np.concatenate([np.arange(s, e, self.res) for s, e in combined_intervals])
             else:
