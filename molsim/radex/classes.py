@@ -732,14 +732,14 @@ class NonLTESource:
 
 @dataclass
 class NonLTESimulation:
-    source: Union[NonLTESource, List[NonLTESource]]         # List of NonLTESource objects associated with this simulation
+    source: List[NonLTESource]                              # List of NonLTESource objects associated with this simulation
     size: float                                             # source size
 
     continuum: Continuum = field(default_factory=Continuum) # Continuum object
     aperture: Optional[float] = None                        # aperture size for spectrum extraction [arcsec]
 
-    ll: Union[float, List[float]] = -np.Infinity            # lower limits [MHz]
-    ul: Union[float, List[float]] = np.Infinity             # upper limits [MHz]
+    ll: List[float] = -np.Infinity                          # lower limits [MHz]
+    ul: List[float] = np.Infinity                           # upper limits [MHz]
     sim_width: float = 10.0                                 # FWHMs to simulate +/- line center
     res: float = 0.01                                       # resolution if simulating line profiles [MHz]
     units: str = 'K'                                        # units for the simulation; accepts 'K', 'mK', 'Jy/beam'
@@ -747,6 +747,7 @@ class NonLTESimulation:
     observation: Optional[Observation] = None               # Observation object associated with this simulation
 
     spectrum: Spectrum = field(default_factory=Spectrum)    # Spectrum object associated with this simulation
+    beam_dilution: float = field(init=False)
 
     def __post_init__(self: NonLTESimulation):
         # cast to list if needed
@@ -760,8 +761,6 @@ class NonLTESimulation:
             self.ul = [self.ul]
 
         # merge and sort ll ul intervals
-        assert isinstance(self.ll, Iterable)
-        assert isinstance(self.ul, Iterable)
         self.ll, self.ul = map(lambda x: list(x), zip(*_merge_intervals(zip(self.ll, self.ul))))
 
         # check if observation is provided
@@ -794,10 +793,6 @@ class NonLTESimulation:
         return tau, Iv
 
     def _update(self: NonLTESimulation):
-        assert isinstance(self.source, Iterable)
-        assert isinstance(self.ll, Iterable)
-        assert isinstance(self.ul, Iterable)
-
         # first, set up the frequency grid
         if self.use_obs:
             assert isinstance(self.observation, Observation)
