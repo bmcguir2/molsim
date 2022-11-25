@@ -116,6 +116,19 @@ class RadiativeTransitions:
     ediff: np.ndarray[float]
     gratio: np.ndarray[float]
 
+    def __post_init__(self: RadiativeTransitions):
+        isort = np.argsort(self.frequencies)
+        object.__setattr__(self, 'transition_numbers', self.transition_numbers[isort])
+        object.__setattr__(self, 'upper_level_numbers', self.upper_level_numbers[isort])
+        object.__setattr__(self, 'lower_level_numbers', self.lower_level_numbers[isort])
+        object.__setattr__(self, 'spontaneous_decay_rates', self.spontaneous_decay_rates[isort])
+        object.__setattr__(self, 'frequencies', self.frequencies[isort])
+        object.__setattr__(self, 'upper_level_energies', self.upper_level_energies[isort])
+        object.__setattr__(self, 'upper_level_indices', self.upper_level_indices[isort])
+        object.__setattr__(self, 'lower_level_indices', self.lower_level_indices[isort])
+        object.__setattr__(self, 'ediff', self.ediff[isort])
+        object.__setattr__(self, 'gratio', self.gratio[isort])
+
     def __repr__(self:RadiativeTransitions) -> str:
         return f'<RadiativeTransitions object with {len(self.transition_numbers)} transitions>'
 
