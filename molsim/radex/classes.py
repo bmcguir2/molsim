@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import InitVar, dataclass, field
 from functools import lru_cache, partial
 import math
@@ -714,66 +715,71 @@ class NonLTESource:
 
 
 @dataclass
-class MaserSimulation:
-    """Class for maser simulation"""
+class NonLTESimulation:
+    source: Union[NonLTESource, List[NonLTESource]]         # List of NonLTESource objects associated with this simulation
+    size: float                                             # source size
 
-    spectrum: Optional[Spectrum] = None             # Spectrum object associated with this simulation
-    observation: Optional[Observation] = None       # Observation object associated with this simulation
-    source: Optional[List[NonLTESource]] = None     # List of NonLTESource objects associated with this simulation
-    continuum: Optional[Continuum] = None           # Continuum object
-    size: Optional[float] = 1e3                     # source size
-    ll: Optional[List[float]] = None                # lower limits [MHz]
-    ul: Optional[List[float]] = None                # upper limits [MHz]
-    sim_width: float = 10.0                         # FWHMs to simulate +/- line center
-    res: float = 0.01                               # resolution if simulating line profiles [MHz]
-    units: str = 'K'                                # units for the simulation; accepts 'K', 'mK', 'Jy/beam'
-    use_obs: bool = False                           # flag for line profile simulation to be done with observations
-    aperture: Optional[float] = None                # aperture size for spectrum extraction [arcsec]
+    continuum: Continuum = field(default_factory=Continuum) # Continuum object
+    aperture: Optional[float] = None                        # aperture size for spectrum extraction [arcsec]
 
-    def __post_init__(self):
-        # set default values
-        if self.spectrum is None:
-            self.spectrum = Spectrum()
+    ll: Union[float, List[float]] = -np.Infinity            # lower limits [MHz]
+    ul: Union[float, List[float]] = np.Infinity             # upper limits [MHz]
+    sim_width: float = 10.0                                 # FWHMs to simulate +/- line center
+    res: float = 0.01                                       # resolution if simulating line profiles [MHz]
+    units: str = 'K'                                        # units for the simulation; accepts 'K', 'mK', 'Jy/beam'
+    use_obs: bool = False                                   # flag for line profile simulation to be done with observations
+    observation: Optional[Observation] = None               # Observation object associated with this simulation
 
-        if self.source is None:
-            self.source = NonLTESource()
+    spectrum: Spectrum = field(default_factory=Spectrum)    # Spectrum object associated with this simulation
+
+    def __post_init__(self: NonLTESimulation):
         # cast to list if needed
-        if isinstance(self.source, NonLTESource):
+        if not isinstance(self.source, Iterable):
             self.source = [self.source]
 
-        if self.continuum is None:
-            self.continuum = Continuum(params=2.725)
-
-        if self.use_obs:
-            if self.observation is None:
-                raise RuntimeError('use_obs is True but observation is not given')
-
-        # use minimum from observation or -infinity
-        if self.ll is None:
-            if self.use_obs:
-                self.ll = self.observation.spectrum.frequency.min()
-            else:
-                self.ll = -np.Infinity
-        # cast to list if needed
-        if isinstance(self.ll, float) or isinstance(self.ll, int):
+        if not isinstance(self.ll, Iterable):
             self.ll = [self.ll]
 
-        # use maximum from observation or physically impossible large value
-        if self.ul is None:
-            if self.use_obs:
-                self.ul = self.observation.spectrum.frequency.max()
-            else:
-                self.ul = np.Infinity
-        # cast to list if needed
-        if isinstance(self.ul, float) or isinstance(self.ul, int):
+        if not isinstance(self.ul, Iterable):
             self.ul = [self.ul]
+
+        # check if observation is provided
+        if self.use_obs:
+            if self.observation is None:
+                raise RuntimeError('use_obs is True but observation is not provided')
+        if self.units in ['Jy/beam', 'Jy']:
+            if self.observation is None:
+                raise RuntimeError(f'units is {self.units} but observation is not provided')
 
         # finished setting default values, the rest is done in _update()
         self._update()
 
-    def _update(self):
+    def _get_tau_Iv(self: NonLTESimulation, source: NonLTESource, freq: np.ndarray[float]):
+        tau = np.zeros_like(freq)
+        Iv = np.zeros_like(freq)
+
+        for freq_, Tex_, tau_ in zip(source.frequency, source.Tex, source.tau):
+            dfreq = source.dV / ckm * freq_
+            two_sigma_sq = dfreq**2 / (4 * np.log(2))
+            lo = np.searchsorted(freq, freq_ - self.sim_width * dfreq, side='left')
+            hi = np.searchsorted(freq, freq_ + self.sim_width * dfreq, side='right')
+            f = freq[lo:hi]
+            t = tau_ * np.exp(-(f - freq_)**2 / two_sigma_sq)
+            tau[lo:hi] += t
+            Iv[lo:hi] += _planck(Tex_, f) * t  # TODO: double-check this expression
+
+        mask = tau > 0.0
+        Iv[mask] *= -np.expm1(-tau[mask]) / tau[mask]
+        return tau, Iv
+
+    def _update(self: NonLTESimulation):
+        assert isinstance(self.source, Iterable)
+        assert isinstance(self.ll, Iterable)
+        assert isinstance(self.ul, Iterable)
+
         # first, set up the frequency grid
         if self.use_obs:
+            assert isinstance(self.observation, Observation)
             frequency = np.copy(self.observation.spectrum.frequency)
         else:
             lines_intervals = _merge_intervals(
@@ -792,7 +798,7 @@ class MaserSimulation:
         intensity = np.zeros_like(frequency)
         cumulative_tau = np.zeros_like(frequency)
         for source in self.source:
-            tau, Iv = source.get_tau_Iv(frequency, self.sim_width)
+            tau, Iv = self._get_tau_Iv(source, frequency)
             intensity += Iv * np.exp(-cumulative_tau)
             cumulative_tau += tau
 
@@ -812,6 +818,7 @@ class MaserSimulation:
             if self.units == 'mK':
                 intensity *= 1e3
         if self.units in ['Jy/beam', 'Jy']:
+            assert isinstance(self.observation, Observation)
             omega = self.observation.observatory.synth_beam[0]*self.observation.observatory.synth_beam[1]
             sr_per_beam = omega * np.pi / (206265**2 * 4 * np.log(2))
             intensity *= sr_per_beam
