@@ -54,6 +54,17 @@ def _intersect_intervals(list_a: Iterable[Tuple[float, float]], list_b: Iterable
     return intersected
 
 
+def _find_in_intervals(values: np.ndarray[float], intervals: Iterable[Tuple[float, float]]) -> np.ndarray[int]:
+    indices: List[int] = []
+    i = 0
+    for left, right in intervals:
+        while i < values.size and values[i] <= right:
+            if values[i] >= left:
+                indices.append(i)
+            i += 1
+    return np.array(indices)
+
+
 @dataclass(init=True, repr=False, eq=False, order=False, unsafe_hash=False, frozen=True)
 class Levels:
     num_levels: int
@@ -774,11 +785,11 @@ class NonLTESimulation:
         # finished setting default values, the rest is done in _update()
         self._update()
 
-    def _get_tau_Iv(self: NonLTESimulation, source: NonLTESource, freq: np.ndarray[float]):
+    def _get_tau_Iv(self: NonLTESimulation, source: NonLTESource, freq: np.ndarray[float], drawn_indices: np.ndarray[int]):
         tau = np.zeros_like(freq)
         Iv = np.zeros_like(freq)
 
-        for freq_, Tex_, tau_ in zip(source.frequency, source.Tex, source.tau):
+        for freq_, Tex_, tau_ in zip(source.frequency[drawn_indices], source.Tex[drawn_indices], source.tau[drawn_indices]):
             dfreq = source.dV / ckm * freq_
             two_sigma_sq = dfreq**2 / (4 * np.log(2))
             lo = np.searchsorted(freq, freq_ - self.sim_width * dfreq, side='left')
@@ -797,6 +808,16 @@ class NonLTESimulation:
         if self.use_obs:
             assert isinstance(self.observation, Observation)
             frequency = np.copy(self.observation.spectrum.frequency)
+            dV_max = max(source.dV for source in self.source)
+            combined_intervals = _merge_intervals(zip(
+                frequency * (1.0 - self.sim_width * dV_max / ckm),
+                frequency * (1.0 + self.sim_width * dV_max / ckm)
+            ))
+            drawn_intervals = [
+                (left / (1.0 - self.sim_width * dV_max / ckm),
+                 right / (1.0 + self.sim_width * dV_max / ckm))
+                for left, right in combined_intervals
+            ]
         else:
             combined_lines_intervals = _merge_intervals(
                 [(float(freq * (1 - self.sim_width * source.dV / ckm)),
@@ -804,18 +825,19 @@ class NonLTESimulation:
                  for source in self.source for freq in source.frequency]
             )
             drawn_intervals = list(zip(self.ll, self.ul))
-            combined_intervals = _intersect_intervals(combined_lines_intervals, drawn_intervals)
-            if combined_intervals:
-                frequency = np.concatenate([np.arange(s, e, self.res) for s, e in combined_intervals])
+            frequency_generation_intervals = _intersect_intervals(combined_lines_intervals, drawn_intervals)
+            if frequency_generation_intervals:
+                frequency = np.concatenate([np.arange(s, e, self.res) for s, e in frequency_generation_intervals])
             else:
                 frequency = np.empty(0)
-        self.spectrum.freq_profile = frequency
+        # lines to be drawn for each source
+        drawn_indices_list = [_find_in_intervals(source.frequency, drawn_intervals) for source in self.source]
 
         # second, compute optical depth and intensity for each source, add to the total intensity
         intensity = np.zeros_like(frequency)
         cumulative_tau = np.zeros_like(frequency)
-        for source in self.source:
-            tau, Iv = self._get_tau_Iv(source, frequency)
+        for source, drawn_indices in zip(self.source, drawn_indices_list):
+            tau, Iv = self._get_tau_Iv(source, frequency, drawn_indices)
             intensity += Iv * np.exp(-cumulative_tau)
             cumulative_tau += tau
 
@@ -840,5 +862,6 @@ class NonLTESimulation:
             sr_per_beam = omega * np.pi / (206265**2 * 4 * np.log(2))
             intensity *= sr_per_beam
 
+        self.spectrum.freq_profile = frequency
         self.spectrum.int_profile = intensity
         self.beam_dilution = beam_dilution
