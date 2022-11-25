@@ -36,18 +36,21 @@ def _merge_intervals(intervals: Iterable[Tuple[float, float]]) -> List[Tuple[flo
     return merged
 
 
-def _intersect_intervals(a, b):
-    intersected = []
-    i = j = 0
-    while i < len(a) and j < len(b):
-        lo = max(a[i][0], b[j][0])
-        hi = min(a[i][1], b[j][1])
+def _intersect_intervals(list_a: Iterable[Tuple[float, float]], list_b: Iterable[Tuple[float, float]]) -> List[Tuple[float, float]]:
+    intersected: List[Tuple[float, float]] = []
+    it_a = iter(list_a)
+    it_b = iter(list_b)
+    a = next(it_a, None)
+    b = next(it_b, None)
+    while a is not None and b is not None:
+        lo = max(a[0], b[0])
+        hi = min(a[1], b[1])
         if lo <= hi:
-            intersected.append([lo, hi])
-        if a[i][1] < b[j][1]:
-            i += 1
+            intersected.append((lo, hi))
+        if a[1] < b[1]:
+            a = next(it_a, None)
         else:
-            j += 1
+            b = next(it_b, None)
     return intersected
 
 
