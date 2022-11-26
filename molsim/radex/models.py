@@ -1,11 +1,11 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Union, Tuple
 import numpy as np
 from loguru import logger
 from joblib import load
 from scipy.optimize import minimize
 
-from .classes import NonLTESource, MaserSimulation
+from .classes import NonLTEMolecule, NonLTESource, NonLTESourceMutableParameters, NonLTESimulation, EscapeProbability
 from ..classes import Observation, Continuum
 from ..mcmc.base import AbstractModel, AbstractDistribution, UniformLikelihood, GaussianLikelihood
 from ..utils import load_yaml
@@ -21,9 +21,10 @@ class MultiComponentMaserModel(AbstractModel):
     source_sizes: List[float]
     continuum: Continuum
     collision_file: str
-    radex_output: str
     observation: Observation
     aperture: float
+
+    _simulations: List[NonLTESimulation] = field(init=False, repr=False, default_factory=list)
 
     def __post_init__(self):
         # make sure all lists have the same length
@@ -100,27 +101,48 @@ class MultiComponentMaserModel(AbstractModel):
                 Ncols[i] = 10 ** Ncols[i]
 
         simulated = np.zeros_like(self.observation.spectrum.frequency)
-        for Tkin, nH2, vlsr, dV, Ncol, source_size in zip(Tkins, nH2s, vlsrs, dVs, Ncols, self.source_sizes):
-            source = NonLTESource(
-                velocity=vlsr,
-                dV=dV,
-                column=Ncol,
-                Tbg=Tbg,
-                Tkin=Tkin,
-                collision_density={'H2': nH2},
-                collision_file=self.collision_file,
-                radex_output=self.radex_output
-            )
-            sim = MaserSimulation(
-                observation=self.observation,
-                source=[source],
-                continuum=self.continuum,
-                size=source_size,
-                units='Jy/beam',
-                use_obs=True,
-                aperture=self.aperture
-            )
-            simulated += sim.spectrum.int_profile
+        if not self._simulations:
+            mol = NonLTEMolecule.from_LAMDA(self.collision_file)
+            for Tkin, nH2, vlsr, dV, Ncol, source_size in zip(Tkins, nH2s, vlsrs, dVs, Ncols, self.source_sizes):
+                source = NonLTESource(
+                    molecule=mol,
+                    mutable_params=NonLTESourceMutableParameters(
+                        Tkin=Tkin,
+                        collision_density={'H2': nH2},
+                        background=Tbg,
+                        escape_probability=EscapeProbability(type='uniform'),
+                        column=Ncol,
+                        dV=dV,
+                        velocity=vlsr
+                    ),
+                    miniter=3,
+                    maxiter=10000,
+                    ccrit=1e-6,
+                    Tex_relaxation_coefficient=1.0,
+                    xpop_relaxation_coefficient=0.6
+                )
+                sim = NonLTESimulation(
+                    observation=self.observation,
+                    source=[source],
+                    continuum=self.continuum,
+                    size=source_size,
+                    units='Jy/beam',
+                    use_obs=True,
+                    aperture=self.aperture
+                )
+                self._simulations.append(sim)
+                simulated += sim.spectrum.int_profile
+        else:
+            for sim, Tkin, nH2, vlsr, dV, Ncol, source_size in zip(self._simulations, Tkins, nH2s, vlsrs, dVs, Ncols, self.source_sizes):
+                sim.source[0].mutable_params.Tkin = Tkin
+                sim.source[0].mutable_params.collision_density = {'H2': nH2}
+                sim.source[0].mutable_params.background = Tbg
+                sim.source[0].mutable_params.column = Ncol
+                sim.source[0].mutable_params.dV = dV
+                sim.source[0].mutable_params.velocity = vlsr
+                sim.size = source_size
+                simulated += sim.spectrum.int_profile
+
         return simulated
 
 
