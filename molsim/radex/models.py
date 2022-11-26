@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List, Union, Tuple
+from typing import Any, Dict, List, Union, Tuple
 import numpy as np
 from loguru import logger
 from joblib import load
@@ -23,6 +23,7 @@ class MultiComponentMaserModel(AbstractModel):
     collision_file: str
     observation: Observation
     aperture: float
+    source_kwargs: Dict[str, Any] = field(default_factory=dict)
 
     _simulations: List[NonLTESimulation] = field(init=False, repr=False, default_factory=list)
 
@@ -115,11 +116,7 @@ class MultiComponentMaserModel(AbstractModel):
                         dV=dV,
                         velocity=vlsr
                     ),
-                    miniter=3,
-                    maxiter=10000,
-                    ccrit=1e-6,
-                    Tex_relaxation_coefficient=1.0,
-                    xpop_relaxation_coefficient=0.6
+                    **self.source_kwargs
                 )
                 sim = NonLTESimulation(
                     observation=self.observation,
