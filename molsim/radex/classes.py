@@ -634,7 +634,7 @@ class NonLTESource:
             tau[i] = cddv * (xpop[ilo[i]] * gratio[i] - xpop[iup[i]]) * \
                 Aul[i] / (fgaus * ediff[i]**3)
 
-    def set_excitation_temperature(self: NonLTESource, xpop: np.ndarray[float], Tex: np.ndarray[float]):
+    def set_excitation_temperature(self: NonLTESource, xpop: np.ndarray[float], Tex_old: np.ndarray[float], Tex: np.ndarray[float]):
         radiative_transitions = self.molecule.radiative_transitions
 
         num_transitions = radiative_transitions.num_transitions
@@ -644,14 +644,17 @@ class NonLTESource:
         gratio = radiative_transitions.gratio
 
         self._set_excitation_temperature_helper(
-            num_transitions, iup, ilo, ediff, gratio, xpop, Tex)
+            num_transitions, iup, ilo, ediff, gratio, xpop, Tex_old, Tex)
 
     @staticmethod
     @nb.jit
-    def _set_excitation_temperature_helper(num_transitions: int, iup: np.ndarray[int], ilo: np.ndarray[int], ediff: np.ndarray[float], gratio: np.ndarray[float], xpop: np.ndarray[float], Tex: np.ndarray[float]):
+    def _set_excitation_temperature_helper(num_transitions: int, iup: np.ndarray[int], ilo: np.ndarray[int], ediff: np.ndarray[float], gratio: np.ndarray[float], xpop: np.ndarray[float], Tex_old: np.ndarray[float], Tex: np.ndarray[float]):
         fk = h * ccm / k
         for i in range(num_transitions):
-            Tex[i] = fk * ediff[i] / np.log(gratio[i] * xpop[ilo[i]] / xpop[iup[i]])
+            if gratio[i] * xpop[ilo[i]] == xpop[iup[i]]:
+                Tex[i] = Tex_old[i]
+            else:
+                Tex[i] = fk * ediff[i] / np.log(gratio[i] * xpop[ilo[i]] / xpop[iup[i]])
 
     def get_convergence(self: NonLTESource, tau: np.ndarray[float], Tex_old: np.ndarray[float], Tex: np.ndarray[float]) -> bool:
         radiative_transitions = self.molecule.radiative_transitions
@@ -686,6 +689,7 @@ class NonLTESource:
 
         levels = self.molecule.levels
         radiative_transitions = self.molecule.radiative_transitions
+        background = self.mutable_params.background
 
         num_levels = levels.num_levels
         num_transitions = radiative_transitions.num_transitions
@@ -722,13 +726,17 @@ class NonLTESource:
 
             if niter == 0:
                 Tex = np.empty(num_transitions)
-                Tex_old = np.empty(num_transitions)
-            Tex_old, Tex = Tex, Tex_old
-            self.set_excitation_temperature(xpop, Tex)
+                if isinstance(background, Continuum):
+                    Tex_old = background.Tbg(radiative_transitions.frequencies)
+                else:
+                    Tex_old = np.full(num_transitions, background)
+            else:
+                Tex_old, Tex = Tex, Tex_old
+            self.set_excitation_temperature(xpop, Tex_old, Tex)
+            self.set_optical_depth(xpop, tau)
             converged = niter >= self.miniter and self.get_convergence(tau, Tex_old, Tex)
 
             if niter != 0:
-                self.set_optical_depth(xpop, tau)
                 self.relaxation(self.Tex_relaxation_coefficient, Tex, Tex_old)
                 self.relaxation(self.xpop_relaxation_coefficient, xpop, xpop_old)
 
