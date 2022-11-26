@@ -90,10 +90,10 @@ class MultiComponentMaserModel(AbstractModel):
         """
         Tbg = parameters[0]
         Tkins = parameters[1:1+self.ncomponent]
-        nH2s = parameters[1+self.ncomponent:1+self.ncomponent*2]
+        nH2s = np.copy(parameters[1+self.ncomponent:1+self.ncomponent*2])
         vlsrs = parameters[1+self.ncomponent*2:1+self.ncomponent*3]
         dVs = parameters[1+self.ncomponent*3:1+self.ncomponent*4]
-        Ncols = parameters[1+self.ncomponent*4:1+self.ncomponent*5]
+        Ncols = np.copy(parameters[1+self.ncomponent*4:1+self.ncomponent*5])
         for i in range(self.ncomponent):
             if nH2s[i] < 1e3:
                 nH2s[i] = 10 ** nH2s[i]
@@ -141,6 +141,7 @@ class MultiComponentMaserModel(AbstractModel):
                 sim.source[0].mutable_params.dV = dV
                 sim.source[0].mutable_params.velocity = vlsr
                 sim.size = source_size
+                sim._update()
                 simulated += sim.spectrum.int_profile
 
         return simulated
