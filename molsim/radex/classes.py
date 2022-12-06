@@ -460,9 +460,15 @@ class NonLTESource:
     ccrit: float = 1e-6
     Tex_relaxation_coefficient: float = 0.5
     xpop_relaxation_coefficient: float = 0.3
+    use_random: bool = False
+    rng: np.random.Generator = None
 
     _tau: np.ndarray[float] = field(init=False, repr=False)
     _Tex: np.ndarray[float] = field(init=False, repr=False)
+
+    def __post_init__(self):
+        if self.use_random and self.rng is None:
+            object.__setattr__(self, 'rng', np.random.default_rng())
 
     @property
     def Tkin(self: NonLTESource) -> float:
@@ -738,7 +744,11 @@ class NonLTESource:
 
             if niter != 0:
                 self.relaxation(self.Tex_relaxation_coefficient, Tex, Tex_old)
-                self.relaxation(self.xpop_relaxation_coefficient, xpop, xpop_old)
+                if self.use_random:
+                    xpop_relaxation_coefficient = self.rng.uniform(0.0, self.xpop_relaxation_coefficient)
+                else:
+                    xpop_relaxation_coefficient = self.xpop_relaxation_coefficient
+                self.relaxation(xpop_relaxation_coefficient, xpop, xpop_old)
 
             if converged:
                 break
