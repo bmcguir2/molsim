@@ -662,21 +662,25 @@ class NonLTESource:
             else:
                 Tex[i] = fk * ediff[i] / np.log(gratio[i] * xpop[ilo[i]] / xpop[iup[i]])
 
-    def get_convergence(self: NonLTESource, tau: np.ndarray[float], Tex_old: np.ndarray[float], Tex: np.ndarray[float]) -> bool:
+    def get_convergence(self: NonLTESource, tau: np.ndarray[float], Tex_old: np.ndarray[float], Tex: np.ndarray[float]) -> Tuple[bool, bool]:
         radiative_transitions = self.molecule.radiative_transitions
         num_transitions = radiative_transitions.num_transitions
         return self._get_convergence_helper(self.ccrit, num_transitions, tau, Tex_old, Tex)
 
     @staticmethod
     @nb.jit
-    def _get_convergence_helper(ccrit: float, num_transitions: int, tau: np.ndarray[float], Tex_old: np.ndarray[float], Tex: np.ndarray[float]) -> bool:
+    def _get_convergence_helper(ccrit: float, num_transitions: int, tau: np.ndarray[float], Tex_old: np.ndarray[float], Tex: np.ndarray[float]) -> Tuple[bool, bool]:
         nthick = 0
         tsum = 0.0
         for i in range(num_transitions):
+            if np.isnan(tau[i]):
+                return False, True
             if tau[i] > 0.01:
                 nthick += 1
                 tsum += abs((Tex[i] - Tex_old[i]) / Tex[i])
-        return nthick == 0 or tsum / nthick < ccrit
+        converged = nthick == 0 or tsum / nthick < ccrit
+        restart = False
+        return converged, restart
 
     def relaxation(self: NonLTESource, coefficient: float, value: np.ndarray[float], value_old: np.ndarray[float]):
         if coefficient != 1.0:
@@ -709,7 +713,11 @@ class NonLTESource:
         Tex: np.ndarray[float]
         Tex_old: np.ndarray[float]
 
-        for niter in range(self.maxiter):
+        maxiter = self.maxiter
+        niter = 0
+        while maxiter > 0:
+            maxiter -= 1
+
             if niter == 0:
                 tau = np.zeros(num_transitions, dtype=float)
                 beta = np.ones(num_transitions, dtype=float)
@@ -740,7 +748,11 @@ class NonLTESource:
                 Tex_old, Tex = Tex, Tex_old
             self.set_excitation_temperature(xpop, Tex_old, Tex)
             self.set_optical_depth(xpop, tau)
-            converged = niter >= self.miniter and self.get_convergence(tau, Tex_old, Tex)
+            converged, restart = self.get_convergence(tau, Tex_old, Tex)
+
+            if restart:
+                niter = 0
+                continue
 
             if niter != 0:
                 self.relaxation(self.Tex_relaxation_coefficient, Tex, Tex_old)
@@ -750,8 +762,10 @@ class NonLTESource:
                     xpop_relaxation_coefficient = self.xpop_relaxation_coefficient
                 self.relaxation(xpop_relaxation_coefficient, xpop, xpop_old)
 
-            if converged:
+            if converged and niter >= self.miniter:
                 break
+
+            niter += 1
 
         object.__setattr__(self, '_tau', tau)
         object.__setattr__(self, '_Tex', Tex)
