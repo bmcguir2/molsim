@@ -10,6 +10,7 @@ import numba as nb
 import numpy as np
 from scipy.interpolate import interp1d
 
+from .utils import ClosestLRUCache
 from ..classes import Continuum, Observation, Spectrum
 from ..utils import _apply_beam, _apply_aperture
 
@@ -465,6 +466,10 @@ class NonLTESource:
     use_adaptive: bool = False
     min_adaptive_relaxation_coefficient: float = 0.0
     max_adaptive_niter: int = 10000
+    use_cache: bool = False
+    cache_size: int = 10000
+    cache: Optional[ClosestLRUCache] = None
+    cache_keygen: Optional[Callable] = None
 
     _tau: np.ndarray[float] = field(init=False, repr=False)
     _Tex: np.ndarray[float] = field(init=False, repr=False)
@@ -472,6 +477,9 @@ class NonLTESource:
     def __post_init__(self):
         if self.use_random and self.rng is None:
             object.__setattr__(self, 'rng', np.random.default_rng())
+
+        if self.use_cache and self.cache_keygen is None:
+            raise RuntimeError('cache_keygen must be provided if cache is used')
 
     @property
     def Tkin(self: NonLTESource) -> float:
@@ -700,6 +708,14 @@ class NonLTESource:
         if not self.mutable_params.is_mutated():
             return
 
+        xpop0 = None
+        if self.use_cache and self.cache_keygen is not None:
+            key = self.cache_keygen(self.mutable_params)
+            if self.cache is None:
+                object.__setattr__(self, 'cache', ClosestLRUCache(self.cache_size, key.size))
+            else:
+                xpop0 = self.cache.get(key)
+
         levels = self.molecule.levels
         radiative_transitions = self.molecule.radiative_transitions
         background = self.mutable_params.background
@@ -729,6 +745,10 @@ class NonLTESource:
                 yrate = np.empty((num_levels, num_levels), dtype=float)
                 rhs = np.zeros(num_levels)
                 rhs[0] = 1.0
+
+                if xpop0 is not None:
+                    self.set_optical_depth(xpop0, tau)
+                    self.set_escape_probability(tau, beta)
             else:
                 self.set_optical_depth(xpop, tau)
                 self.set_escape_probability(tau, beta)
@@ -775,6 +795,9 @@ class NonLTESource:
 
         object.__setattr__(self, '_tau', tau)
         object.__setattr__(self, '_Tex', Tex)
+
+        if self.use_cache and self.cache is not None:
+            self.cache.put(key, xpop)
 
         return niter
 
