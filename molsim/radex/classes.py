@@ -462,6 +462,9 @@ class NonLTESource:
     xpop_relaxation_coefficient: float = 0.3
     use_random: bool = False
     rng: np.random.Generator = None
+    use_adaptive: bool = False
+    min_adaptive_relaxation_coefficient: float = 0.0
+    max_adaptive_niter: int = 10000
 
     _tau: np.ndarray[float] = field(init=False, repr=False)
     _Tex: np.ndarray[float] = field(init=False, repr=False)
@@ -715,6 +718,7 @@ class NonLTESource:
 
         maxiter = self.maxiter
         niter = 0
+        max_xpop_relaxation_coefficient = self.xpop_relaxation_coefficient
         while maxiter > 0:
             maxiter -= 1
 
@@ -750,16 +754,18 @@ class NonLTESource:
             self.set_optical_depth(xpop, tau)
             converged, restart = self.get_convergence(tau, Tex_old, Tex)
 
-            if restart:
+            if restart or (self.use_adaptive and niter >= self.max_adaptive_niter and max_xpop_relaxation_coefficient > self.min_adaptive_relaxation_coefficient):
                 niter = 0
+                if self.use_adaptive:
+                    max_xpop_relaxation_coefficient = max(self.min_adaptive_relaxation_coefficient, 0.5 * max_xpop_relaxation_coefficient)
                 continue
 
             if niter != 0:
                 self.relaxation(self.Tex_relaxation_coefficient, Tex, Tex_old)
                 if self.use_random:
-                    xpop_relaxation_coefficient = self.rng.uniform(0.0, self.xpop_relaxation_coefficient)
+                    xpop_relaxation_coefficient = self.rng.uniform(0.0, max_xpop_relaxation_coefficient)
                 else:
-                    xpop_relaxation_coefficient = self.xpop_relaxation_coefficient
+                    xpop_relaxation_coefficient = max_xpop_relaxation_coefficient
                 self.relaxation(xpop_relaxation_coefficient, xpop, xpop_old)
 
             if converged and niter >= self.miniter:
