@@ -18,8 +18,8 @@ class MultiComponentMaserModel(AbstractModel):
     vlsrs: List[AbstractDistribution]
     dVs: List[AbstractDistribution]
     Ncols: List[AbstractDistribution]
+    Tcont: AbstractDistribution
     source_sizes: List[float]
-    continuum: Continuum
     collision_file: str
     observation: Observation
     aperture: float
@@ -35,7 +35,7 @@ class MultiComponentMaserModel(AbstractModel):
             raise ValueError("Distribution lists have inconsistent length.")
 
         self._distributions = (
-            [self.Tbg] + self.Tks + self.nH2s + self.vlsrs + self.dVs + self.Ncols
+            [self.Tbg] + self.Tks + self.nH2s + self.vlsrs + self.dVs + self.Ncols + [self.Tcont]
         )
 
         self.ll = self.observation.spectrum.frequency.min()
@@ -52,6 +52,7 @@ class MultiComponentMaserModel(AbstractModel):
         for param in ["Tkin", "nH2", "VLSR", "dV", "NCol"]:
             for i in range(self.ncomponent):
                 names.append(f"{param}_{i}")
+        names.append("Tcont")
         return names
 
     def __repr__(self) -> str:
@@ -95,6 +96,7 @@ class MultiComponentMaserModel(AbstractModel):
         vlsrs = parameters[1+self.ncomponent*2:1+self.ncomponent*3]
         dVs = parameters[1+self.ncomponent*3:1+self.ncomponent*4]
         Ncols = np.copy(parameters[1+self.ncomponent*4:1+self.ncomponent*5])
+        Tcont = parameters[1+self.ncomponent*5]
         for i in range(self.ncomponent):
             if nH2s[i] < 1e3:
                 nH2s[i] = 10 ** nH2s[i]
@@ -121,7 +123,7 @@ class MultiComponentMaserModel(AbstractModel):
                 sim = NonLTESimulation(
                     observation=self.observation,
                     source=[source],
-                    continuum=self.continuum,
+                    continuum=Continuum(params=Tcont),
                     size=source_size,
                     units='Jy/beam',
                     use_obs=True,
@@ -138,6 +140,7 @@ class MultiComponentMaserModel(AbstractModel):
                 sim.source[0].mutable_params.dV = dV
                 sim.source[0].mutable_params.velocity = vlsr
                 sim.size = source_size
+                sim.continuum.params = Tcont
                 sim._update()
                 simulated += sim.spectrum.int_profile
 
