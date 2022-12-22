@@ -767,7 +767,7 @@ class NonLTESource:
                 if isinstance(background, Continuum):
                     Tex_old = background.Tbg(radiative_transitions.frequencies)
                 else:
-                    Tex_old = np.full(num_transitions, background)
+                    Tex_old = np.full(num_transitions, background, dtype=float)
             else:
                 Tex_old, Tex = Tex, Tex_old
             self.set_excitation_temperature(xpop, Tex_old, Tex)
