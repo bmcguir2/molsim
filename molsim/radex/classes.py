@@ -8,6 +8,7 @@ from typing import Any, Callable, Dict, FrozenSet, List, Optional, TextIO, Tuple
 
 import numba as nb
 import numpy as np
+import numpy.typing as npt
 from scipy.interpolate import interp1d
 
 from .utils import ClosestLRUCache
@@ -55,7 +56,7 @@ def _intersect_intervals(list_a: Iterable[Tuple[float, float]], list_b: Iterable
     return intersected
 
 
-def _find_in_intervals(values: np.ndarray[float], intervals: Iterable[Tuple[float, float]]) -> np.ndarray[int]:
+def _find_in_intervals(values: npt.NDArray[np.float_], intervals: Iterable[Tuple[float, float]]) -> npt.NDArray[np.int_]:
     indices: List[int] = []
     i = 0
     for left, right in intervals:
@@ -69,13 +70,13 @@ def _find_in_intervals(values: np.ndarray[float], intervals: Iterable[Tuple[floa
 @dataclass(init=True, repr=False, eq=False, order=False, unsafe_hash=False, frozen=True)
 class Levels:
     num_levels: int
-    level_numbers: np.ndarray[int]
-    level_energies: np.ndarray[float]
-    statistical_weight: np.ndarray[float]
-    quantum_numbers: np.ndarray[str]
+    level_numbers: npt.NDArray[np.int_]
+    level_energies: npt.NDArray[np.float_]
+    statistical_weight: npt.NDArray[np.float_]
+    quantum_numbers: npt.NDArray[np.str_]
     level_number_index_map: Dict[int, int]
-    ediff: np.ndarray[float] = field(init=False)
-    gratio: np.ndarray[float] = field(init=False)
+    ediff: npt.NDArray[np.float_] = field(init=False)
+    gratio: npt.NDArray[np.float_] = field(init=False)
 
     def __post_init__(self: Levels):
         ediff = self.level_energies[:, None] - self.level_energies[None, :]
@@ -120,31 +121,33 @@ class Levels:
 @dataclass(init=True, repr=False, eq=False, order=False, unsafe_hash=False, frozen=True)
 class RadiativeTransitions:
     num_transitions: int
-    transition_numbers: np.ndarray[int]
-    upper_level_numbers: np.ndarray[int]
-    lower_level_numbers: np.ndarray[int]
-    spontaneous_decay_rates: np.ndarray[float]
-    frequencies: np.ndarray[float]
-    upper_level_energies: np.ndarray[float]
-    upper_level_indices: np.ndarray[int]
-    lower_level_indices: np.ndarray[int]
-    ediff: np.ndarray[float]
-    gratio: np.ndarray[float]
+    transition_numbers: npt.NDArray[np.int_]
+    upper_level_numbers: npt.NDArray[np.int_]
+    lower_level_numbers: npt.NDArray[np.int_]
+    spontaneous_decay_rates: npt.NDArray[np.float_]
+    frequencies: npt.NDArray[np.float_]
+    upper_level_energies: npt.NDArray[np.float_]
+    upper_level_indices: npt.NDArray[np.int_]
+    lower_level_indices: npt.NDArray[np.int_]
+    ediff: npt.NDArray[np.float_]
+    gratio: npt.NDArray[np.float_]
 
     def __post_init__(self: RadiativeTransitions):
         isort = np.argsort(self.frequencies)
         object.__setattr__(self, 'transition_numbers', self.transition_numbers[isort])
         object.__setattr__(self, 'upper_level_numbers', self.upper_level_numbers[isort])
         object.__setattr__(self, 'lower_level_numbers', self.lower_level_numbers[isort])
-        object.__setattr__(self, 'spontaneous_decay_rates', self.spontaneous_decay_rates[isort])
+        object.__setattr__(self, 'spontaneous_decay_rates',
+                           self.spontaneous_decay_rates[isort])
         object.__setattr__(self, 'frequencies', self.frequencies[isort])
-        object.__setattr__(self, 'upper_level_energies', self.upper_level_energies[isort])
+        object.__setattr__(self, 'upper_level_energies',
+                           self.upper_level_energies[isort])
         object.__setattr__(self, 'upper_level_indices', self.upper_level_indices[isort])
         object.__setattr__(self, 'lower_level_indices', self.lower_level_indices[isort])
         object.__setattr__(self, 'ediff', self.ediff[isort])
         object.__setattr__(self, 'gratio', self.gratio[isort])
 
-    def __repr__(self:RadiativeTransitions) -> str:
+    def __repr__(self: RadiativeTransitions) -> str:
         return f'<RadiativeTransitions object with {len(self.transition_numbers)} transitions>'
 
     @classmethod
@@ -183,13 +186,15 @@ class RadiativeTransitions:
         fields['lower_level_indices'] = np.array([
             *map(level_number_index_map_func, fields['lower_level_numbers'])])
 
-        fields['ediff'] = levels.ediff[fields['upper_level_indices'], fields['lower_level_indices']]
-        fields['gratio'] = levels.gratio[fields['upper_level_indices'], fields['lower_level_indices']]
+        fields['ediff'] = levels.ediff[fields['upper_level_indices'],
+                                       fields['lower_level_indices']]
+        fields['gratio'] = levels.gratio[fields['upper_level_indices'],
+                                         fields['lower_level_indices']]
 
         return cls(**fields)
 
     @lru_cache
-    def get_Bul_J(self: RadiativeTransitions, background: Union[Continuum, float]) -> np.ndarray[float]:
+    def get_Bul_J(self: RadiativeTransitions, background: Union[Continuum, float]) -> npt.NDArray[np.float_]:
         if isinstance(background, Continuum):
             freq = ccm * self.ediff * 1e-6
             Tbg = background.Tbg(freq)
@@ -198,7 +203,7 @@ class RadiativeTransitions:
         return self.spontaneous_decay_rates / np.expm1((h * ccm / k) / Tbg * self.ediff)
 
     @lru_cache
-    def get_Blu_J(self: RadiativeTransitions, background: Union[Continuum, float]) -> np.ndarray[float]:
+    def get_Blu_J(self: RadiativeTransitions, background: Union[Continuum, float]) -> npt.NDArray[np.float_]:
         return self.gratio * self.get_Bul_J(background)
 
 
@@ -206,13 +211,13 @@ class RadiativeTransitions:
 class CollisionalTransitions:
     num_temperatures: int
     num_transitions: int
-    temperatures: np.ndarray[float]
-    transition_numbers: np.ndarray[int]
-    upper_level_numbers: np.ndarray[int]
-    lower_level_numbers: np.ndarray[int]
-    rate_coefficients: np.ndarray[float]
-    upper_level_indices: np.ndarray[int]
-    lower_level_indices: np.ndarray[int]
+    temperatures: npt.NDArray[np.float_]
+    transition_numbers: npt.NDArray[np.int_]
+    upper_level_numbers: npt.NDArray[np.int_]
+    lower_level_numbers: npt.NDArray[np.int_]
+    rate_coefficients: npt.NDArray[np.float_]
+    upper_level_indices: npt.NDArray[np.int_]
+    lower_level_indices: npt.NDArray[np.int_]
 
     def __repr__(self) -> str:
         return f'<CollisionalTransitions object with {len(self.transition_numbers)} transitions at {len(self.temperatures)} temperatures>'
@@ -268,16 +273,16 @@ class NonLTEMolecule:
     collisional_transitions: Dict[str, CollisionalTransitions]
     partner_name_standardizer: Dict[str, str] = field(init=False, repr=False)
     collisional_rate_coefficients_getter: Dict[str, Callable[[
-        np.ndarray], np.ndarray]] = field(init=False, repr=False)
+        float], npt.NDArray]] = field(init=False, repr=False)
 
-    interpolator: InitVar[Union[str, Callable[[np.ndarray,
-                                               np.ndarray], Callable[[float], np.ndarray]]]] = 'slinear'
+    interpolator: InitVar[Union[str, Callable[[npt.NDArray,
+                                               npt.NDArray], Callable[[np.float_], npt.NDArray]]]] = 'slinear'
 
-    def __post_init__(self, interpolator: Union[str, Callable[[np.ndarray, np.ndarray], Callable[[float], np.ndarray]]]) -> None:
+    def __post_init__(self, interpolator: Union[str, Callable[[npt.NDArray, npt.NDArray], Callable[[np.float_], npt.NDArray]]]) -> None:
         if isinstance(interpolator, str):
             interpolator = partial(interp1d, kind=interpolator,
                                    copy=False, assume_sorted=True)
-        collisional_rate_coefficients_getter: Dict[str, Callable[[float], np.ndarray]] = {
+        collisional_rate_coefficients_getter: Dict[str, Callable[[float], npt.NDArray]] = {
             partner_name: lru_cache(interpolator(
                 collision_data.temperatures, collision_data.rate_coefficients))
             for partner_name, collision_data in self.collisional_transitions.items()
@@ -369,15 +374,17 @@ class NonLTEMolecule:
 
         return cls(**fields)
 
+
 @dataclass(init=True, repr=True, eq=False, order=False, unsafe_hash=False, frozen=True)
 class EscapeProbability:
     type: str
-    set_probability: Callable[[int, np.ndarray[float], np.ndarray[float]], None] = field(init=False)
+    set_probability: Callable[[int, npt.NDArray[np.float_],
+                               npt.NDArray[np.float_]], None] = field(init=False)
 
     def __post_init__(self: EscapeProbability):
         if self.type.lower() in ['uniform', 'uniform sphere', 'uniformsphere']:
             @nb.jit
-            def func(num_transitions: int, tau: np.ndarray[float], beta: np.ndarray[float]):
+            def func(num_transitions: int, tau: npt.NDArray[np.float_], beta: npt.NDArray[np.float_]):
                 c1 = -3.0 / 8.0
                 c2 = -4.0 / 15.0
                 c3 = -5.0 / 24.0
@@ -385,7 +392,8 @@ class EscapeProbability:
                 for i in range(num_transitions):
                     t = tau[i]
                     if abs(t) < 0.1:
-                        beta[i] = 1.0 + c1 * t * (1.0 + c2 * t * (1.0 + c3 * t * (1.0 + c4 * t)))
+                        beta[i] = 1.0 + c1 * t * \
+                            (1.0 + c2 * t * (1.0 + c3 * t * (1.0 + c4 * t)))
                     elif t > 20.0:
                         ti = 1.0 / t
                         tisq = ti * ti
@@ -396,7 +404,7 @@ class EscapeProbability:
                         beta[i] = 3.0 * ti * (0.5 - tisq + (ti + tisq) * np.exp(-t))
         elif self.type.lower() in ['lvg', 'expanding', 'expanding sphere', 'expanding sphere']:
             @nb.jit
-            def func(num_transitions: int, tau: np.ndarray[float], beta: np.ndarray[float]):
+            def func(num_transitions: int, tau: npt.NDArray[np.float_], beta: npt.NDArray[np.float_]):
                 a = 1.1719833618734954
                 c1 = -a / 2.0
                 c2 = -a / 3.0
@@ -406,14 +414,15 @@ class EscapeProbability:
                 for i in range(num_transitions):
                     t = tau[i]
                     if abs(t) < 0.1 / a:
-                        beta[i] = 1.0 + c1 * t * (1.0 + c2 * t * (1.0 + c3 * t * (1.0 + c4 * t)))
+                        beta[i] = 1.0 + c1 * t * \
+                            (1.0 + c2 * t * (1.0 + c3 * t * (1.0 + c4 * t)))
                     elif t > 14.0:
                         beta[i] = 1 / (t * np.sqrt(np.log(t * sqrt_four_pi_inv)))
                     else:
                         beta[i] = -np.expm1(-a * t) / (a * t)
         elif self.type.lower() in ['slab']:
             @nb.jit
-            def func(num_transitions: int, tau: np.ndarray[float], beta: np.ndarray[float]):
+            def func(num_transitions: int, tau: npt.NDArray[np.float_], beta: npt.NDArray[np.float_]):
                 a = 3.0
                 c1 = -a / 2.0
                 c2 = -a / 3.0
@@ -422,13 +431,15 @@ class EscapeProbability:
                 for i in range(num_transitions):
                     t = tau[i]
                     if abs(t) < 0.1 / a:
-                        beta[i] = 1.0 + c1 * t * (1.0 + c2 * t * (1.0 + c3 * t * (1.0 + c4 * t)))
+                        beta[i] = 1.0 + c1 * t * \
+                            (1.0 + c2 * t * (1.0 + c3 * t * (1.0 + c4 * t)))
                     else:
                         beta[i] = -np.expm1(-a * t) / (a * t)
         else:
             raise ValueError(f'Unexpected type = {self.type}')
 
         object.__setattr__(self, 'set_probability', func)
+
 
 @dataclass(init=True, repr=True, eq=False, order=False, unsafe_hash=False, frozen=False)
 class NonLTESourceMutableParameters:
@@ -466,7 +477,7 @@ class NonLTESource:
     Tex_relaxation_coefficient: float = 0.5
     xpop_relaxation_coefficient: float = 0.3
     use_random: bool = False
-    rng: np.random.Generator = None
+    rng: np.random.Generator = np.random.default_rng()
     use_adaptive: bool = False
     min_adaptive_relaxation_coefficient: float = 0.0
     max_adaptive_niter: int = 10000
@@ -475,13 +486,10 @@ class NonLTESource:
     cache: Optional[ClosestLRUCache] = None
     cache_keygen: Optional[Callable] = None
 
-    _tau: np.ndarray[float] = field(init=False, repr=False)
-    _Tex: np.ndarray[float] = field(init=False, repr=False)
+    _tau: npt.NDArray[np.float_] = field(init=False, repr=False)
+    _Tex: npt.NDArray[np.float_] = field(init=False, repr=False)
 
     def __post_init__(self):
-        if self.use_random and self.rng is None:
-            object.__setattr__(self, 'rng', np.random.default_rng())
-
         if self.use_cache and self.cache_keygen is None:
             raise RuntimeError('cache_keygen must be provided if cache is used')
 
@@ -514,20 +522,20 @@ class NonLTESource:
         return self.mutable_params.velocity
 
     @property
-    def frequency(self: NonLTESource) -> np.ndarray[float]:
+    def frequency(self: NonLTESource) -> npt.NDArray[np.float_]:
         return self.molecule.radiative_transitions.frequencies * (1.0 - self.velocity / ckm)
 
     @property
-    def tau(self: NonLTESource) -> np.ndarray[float]:
+    def tau(self: NonLTESource) -> npt.NDArray[np.float_]:
         self.run()
         return self._tau
 
     @property
-    def Tex(self: NonLTESource) -> np.ndarray[float]:
+    def Tex(self: NonLTESource) -> npt.NDArray[np.float_]:
         self.run()
         return self._Tex
 
-    def get_collisional_rate(self: NonLTESource) -> np.ndarray[float]:
+    def get_collisional_rate(self: NonLTESource) -> npt.NDArray[np.float_]:
         Tkin = self.mutable_params.Tkin
         partner_name_standardizer = self.molecule.partner_name_standardizer
 
@@ -551,11 +559,11 @@ class NonLTESource:
         return self._collisional_rate_helper(Tkin, frozenset(collision_density.items()))
 
     @lru_cache
-    def _collisional_rate_helper(self: NonLTESource, Tkin: float, collision_density: FrozenSet[Tuple[str, float]]) -> np.ndarray[float]:
+    def _collisional_rate_helper(self: NonLTESource, Tkin: float, collision_density: FrozenSet[Tuple[str, float]]) -> npt.NDArray[np.float_]:
         levels = self.molecule.levels
         collisional_transitions = self.molecule.collisional_transitions
 
-        crate: np.ndarray[float] = np.zeros(
+        crate: npt.NDArray[np.float_] = np.zeros(
             (levels.num_levels, levels.num_levels), dtype=float)
 
         # calculate rate coefficients multiplied by density.
@@ -563,7 +571,8 @@ class NonLTESource:
             num_transitions = collisional_transitions[partner_name].num_transitions
             iup = collisional_transitions[partner_name].upper_level_indices
             ilo = collisional_transitions[partner_name].lower_level_indices
-            colld = self.molecule.collisional_rate_coefficients_getter[partner_name](Tkin)
+            colld = self.molecule.collisional_rate_coefficients_getter[partner_name](
+                Tkin)
             self._set_downward_rates(density, num_transitions, iup, ilo, colld, crate)
 
         # calculate upward rates from detail balance
@@ -574,20 +583,20 @@ class NonLTESource:
 
     @staticmethod
     @nb.jit
-    def _set_downward_rates(density: float, num_transitions: int, iup: np.ndarray[int], ilo: np.ndarray[int], colld: np.ndarray[float], crate: np.ndarray[float]):
+    def _set_downward_rates(density: float, num_transitions: int, iup: npt.NDArray[np.int_], ilo: npt.NDArray[np.int_], colld: npt.NDArray[np.float_], crate: npt.NDArray[np.float_]):
         for i in range(num_transitions):
             crate[iup[i], ilo[i]] += density * colld[i]
 
     @staticmethod
     @nb.jit
-    def _set_upward_rates_detail_balance(Tkin: float, num_levels: int, ediff: np.ndarray[float], gratio: np.ndarray[float], crate: np.ndarray[float]):
+    def _set_upward_rates_detail_balance(Tkin: float, num_levels: int, ediff: npt.NDArray[np.float_], gratio: npt.NDArray[np.float_], crate: npt.NDArray[np.float_]):
         einv = -h * ccm / (k * Tkin)
         for iup in range(num_levels):
             for ilo in range(iup):
                 crate[ilo, iup] = gratio[iup, ilo] * \
                     np.exp(einv * ediff[iup, ilo]) * crate[iup, ilo]
 
-    def set_rate_matrix(self: NonLTESource, beta: np.ndarray[float], yrate: np.ndarray[float]):
+    def set_rate_matrix(self: NonLTESource, beta: npt.NDArray[np.float_], yrate: npt.NDArray[np.float_]):
         levels = self.molecule.levels
         radiative_transitions = self.molecule.radiative_transitions
         background = self.mutable_params.background
@@ -603,11 +612,12 @@ class NonLTESource:
         num_levels = levels.num_levels
         crate = self.get_collisional_rate()
         self._set_collisional_rates(num_levels, crate, yrate)
-        self._add_radiative_rates(num_transitions, iup, ilo, Aul, Bul_J, Blu_J, beta, yrate)
+        self._add_radiative_rates(num_transitions, iup, ilo,
+                                  Aul, Bul_J, Blu_J, beta, yrate)
 
     @staticmethod
     @nb.jit
-    def _set_collisional_rates(num_levels: int, crate: np.ndarray[float], yrate: np.ndarray[float]):
+    def _set_collisional_rates(num_levels: int, crate: npt.NDArray[np.float_], yrate: npt.NDArray[np.float_]):
         for i in range(num_levels):
             ctot = 0.0
             for j in range(num_levels):
@@ -617,7 +627,7 @@ class NonLTESource:
 
     @staticmethod
     @nb.jit
-    def _add_radiative_rates(num_transitions: int, iup: np.ndarray[int], ilo: np.ndarray[int], Aul: np.ndarray[float], Bul_J: np.ndarray[float], Blu_J: np.ndarray[float], beta: np.ndarray[float], yrate: np.ndarray[float]):
+    def _add_radiative_rates(num_transitions: int, iup: npt.NDArray[np.int_], ilo: npt.NDArray[np.int_], Aul: npt.NDArray[np.float_], Bul_J: npt.NDArray[np.float_], Blu_J: npt.NDArray[np.float_], beta: npt.NDArray[np.float_], yrate: npt.NDArray[np.float_]):
         for i in range(num_transitions):
             ul = (Aul[i] + Bul_J[i]) * beta[i]
             lu = Blu_J[i] * beta[i]
@@ -626,14 +636,14 @@ class NonLTESource:
             yrate[ilo[i], iup[i]] -= ul
             yrate[ilo[i], ilo[i]] += lu
 
-    def set_escape_probability(self: NonLTESource, tau: np.ndarray[float], beta: np.ndarray[float]):
+    def set_escape_probability(self: NonLTESource, tau: npt.NDArray[np.float_], beta: npt.NDArray[np.float_]):
         radiative_transitions = self.molecule.radiative_transitions
         num_transitions = radiative_transitions.num_transitions
 
         escape_probability = self.mutable_params.escape_probability
         escape_probability.set_probability(num_transitions, tau, beta)
 
-    def set_optical_depth(self: NonLTESource, xpop: np.ndarray[float], tau: np.ndarray[float]):
+    def set_optical_depth(self: NonLTESource, xpop: npt.NDArray[np.float_], tau: npt.NDArray[np.float_]):
         radiative_transitions = self.molecule.radiative_transitions
 
         num_transitions = radiative_transitions.num_transitions
@@ -649,13 +659,13 @@ class NonLTESource:
 
     @staticmethod
     @nb.jit
-    def _set_optical_depth_helper(num_transitions: int, cddv: float, iup: np.ndarray[int], ilo: np.ndarray[int], Aul: np.ndarray[float], ediff: np.ndarray[float], gratio: np.ndarray[float], xpop: np.ndarray[float], tau: np.ndarray[float]):
+    def _set_optical_depth_helper(num_transitions: int, cddv: float, iup: npt.NDArray[np.int_], ilo: npt.NDArray[np.int_], Aul: npt.NDArray[np.float_], ediff: npt.NDArray[np.float_], gratio: npt.NDArray[np.float_], xpop: npt.NDArray[np.float_], tau: npt.NDArray[np.float_]):
         fgaus = np.sqrt(16 * np.pi**3 / np.log(2)) * 1e5
         for i in range(num_transitions):
             tau[i] = cddv * (xpop[ilo[i]] * gratio[i] - xpop[iup[i]]) * \
                 Aul[i] / (fgaus * ediff[i]**3)
 
-    def set_excitation_temperature(self: NonLTESource, xpop: np.ndarray[float], Tex_old: np.ndarray[float], Tex: np.ndarray[float]):
+    def set_excitation_temperature(self: NonLTESource, xpop: npt.NDArray[np.float_], Tex_old: npt.NDArray[np.float_], Tex: npt.NDArray[np.float_]):
         radiative_transitions = self.molecule.radiative_transitions
 
         num_transitions = radiative_transitions.num_transitions
@@ -669,7 +679,7 @@ class NonLTESource:
 
     @staticmethod
     @nb.jit
-    def _set_excitation_temperature_helper(num_transitions: int, iup: np.ndarray[int], ilo: np.ndarray[int], ediff: np.ndarray[float], gratio: np.ndarray[float], xpop: np.ndarray[float], Tex_old: np.ndarray[float], Tex: np.ndarray[float]):
+    def _set_excitation_temperature_helper(num_transitions: int, iup: npt.NDArray[np.int_], ilo: npt.NDArray[np.int_], ediff: npt.NDArray[np.float_], gratio: npt.NDArray[np.float_], xpop: npt.NDArray[np.float_], Tex_old: npt.NDArray[np.float_], Tex: npt.NDArray[np.float_]):
         fk = h * ccm / k
         for i in range(num_transitions):
             if gratio[i] * xpop[ilo[i]] == xpop[iup[i]]:
@@ -677,14 +687,14 @@ class NonLTESource:
             else:
                 Tex[i] = fk * ediff[i] / np.log(gratio[i] * xpop[ilo[i]] / xpop[iup[i]])
 
-    def get_convergence(self: NonLTESource, tau: np.ndarray[float], Tex_old: np.ndarray[float], Tex: np.ndarray[float]) -> Tuple[bool, bool]:
+    def get_convergence(self: NonLTESource, tau: npt.NDArray[np.float_], Tex_old: npt.NDArray[np.float_], Tex: npt.NDArray[np.float_]) -> Tuple[bool, bool]:
         radiative_transitions = self.molecule.radiative_transitions
         num_transitions = radiative_transitions.num_transitions
         return self._get_convergence_helper(self.ccrit, num_transitions, tau, Tex_old, Tex)
 
     @staticmethod
     @nb.jit
-    def _get_convergence_helper(ccrit: float, num_transitions: int, tau: np.ndarray[float], Tex_old: np.ndarray[float], Tex: np.ndarray[float]) -> Tuple[bool, bool]:
+    def _get_convergence_helper(ccrit: float, num_transitions: int, tau: npt.NDArray[np.float_], Tex_old: npt.NDArray[np.float_], Tex: npt.NDArray[np.float_]) -> Tuple[bool, bool]:
         nthick = 0
         tsum = 0.0
         for i in range(num_transitions):
@@ -697,13 +707,13 @@ class NonLTESource:
         restart = False
         return converged, restart
 
-    def relaxation(self: NonLTESource, coefficient: float, value: np.ndarray[float], value_old: np.ndarray[float]):
+    def relaxation(self: NonLTESource, coefficient: float, value: npt.NDArray[np.float_], value_old: npt.NDArray[np.float_]):
         if coefficient != 1.0:
             self._relaxation_helper(coefficient, value, value_old)
 
     @staticmethod
     @nb.jit
-    def _relaxation_helper(coefficient: float, value: np.ndarray[float], value_old: np.ndarray[float]):
+    def _relaxation_helper(coefficient: float, value: npt.NDArray[np.float_], value_old: npt.NDArray[np.float_]):
         c = 1.0 - coefficient
         for i in range(value.size):
             value[i] += c * (value_old[i] - value[i])
@@ -716,7 +726,8 @@ class NonLTESource:
         if self.use_cache and self.cache_keygen is not None:
             key = self.cache_keygen(self.mutable_params)
             if self.cache is None:
-                object.__setattr__(self, 'cache', ClosestLRUCache(self.cache_size, key.size))
+                object.__setattr__(self, 'cache', ClosestLRUCache(
+                    self.cache_size, key.size))
             else:
                 xpop0 = self.cache.get(key)
 
@@ -727,14 +738,14 @@ class NonLTESource:
         num_levels = levels.num_levels
         num_transitions = radiative_transitions.num_transitions
 
-        tau: np.ndarray[float]
-        beta: np.ndarray[float]
-        yrate: np.ndarray[float]
-        rhs: np.ndarray[float]
-        xpop: np.ndarray[float]
-        xpop_old: np.ndarray[float]
-        Tex: np.ndarray[float]
-        Tex_old: np.ndarray[float]
+        tau: npt.NDArray[np.float_]
+        beta: npt.NDArray[np.float_]
+        yrate: npt.NDArray[np.float_]
+        rhs: npt.NDArray[np.float_]
+        xpop: npt.NDArray[np.float_]
+        xpop_old: npt.NDArray[np.float_]
+        Tex: npt.NDArray[np.float_]
+        Tex_old: npt.NDArray[np.float_]
 
         maxiter = self.maxiter
         niter = 0
@@ -781,13 +792,15 @@ class NonLTESource:
             if restart or (self.use_adaptive and niter >= self.max_adaptive_niter and max_xpop_relaxation_coefficient > self.min_adaptive_relaxation_coefficient):
                 niter = 0
                 if self.use_adaptive:
-                    max_xpop_relaxation_coefficient = max(self.min_adaptive_relaxation_coefficient, 0.5 * max_xpop_relaxation_coefficient)
+                    max_xpop_relaxation_coefficient = max(
+                        self.min_adaptive_relaxation_coefficient, 0.5 * max_xpop_relaxation_coefficient)
                 continue
 
             if niter != 0:
                 self.relaxation(self.Tex_relaxation_coefficient, Tex, Tex_old)
                 if self.use_random:
-                    xpop_relaxation_coefficient = self.rng.uniform(0.0, max_xpop_relaxation_coefficient)
+                    xpop_relaxation_coefficient = self.rng.uniform(
+                        0.0, max_xpop_relaxation_coefficient)
                 else:
                     xpop_relaxation_coefficient = max_xpop_relaxation_coefficient
                 self.relaxation(xpop_relaxation_coefficient, xpop, xpop_old)
@@ -808,21 +821,31 @@ class NonLTESource:
 
 @dataclass
 class NonLTESimulation:
-    source: List[NonLTESource]                              # List of NonLTESource objects associated with this simulation
-    size: float                                             # source size
+    # List of NonLTESource objects associated with this simulation
+    source: List[NonLTESource]
+    size: float                                                     # source size
 
-    continuum: Continuum = field(default_factory=Continuum) # Continuum object
-    aperture: Optional[float] = None                        # aperture size for spectrum extraction [arcsec]
+    continuum: Continuum = field(default_factory=Continuum)         # Continuum object
+    # aperture size for spectrum extraction [arcsec]
+    aperture: Optional[float] = None
 
-    ll: List[float] = -np.Infinity                          # lower limits [MHz]
-    ul: List[float] = np.Infinity                           # upper limits [MHz]
-    sim_width: float = 10.0                                 # FWHMs to simulate +/- line center
-    res: float = 0.01                                       # resolution if simulating line profiles [MHz]
-    units: str = 'K'                                        # units for the simulation; accepts 'K', 'mK', 'Jy/beam'
-    use_obs: bool = False                                   # flag for line profile simulation to be done with observations
-    observation: Optional[Observation] = None               # Observation object associated with this simulation
+    ll: List[float] = field(
+        default_factory=lambda: [-np.Infinity])  # lower limits [MHz]
+    ul: List[float] = field(
+        default_factory=lambda: [np.Infinity])  # upper limits [MHz]
+    # FWHMs to simulate +/- line center
+    sim_width: float = 10.0
+    # resolution if simulating line profiles [MHz]
+    res: float = 0.01
+    # units for the simulation; accepts 'K', 'mK', 'Jy/beam'
+    units: str = 'K'
+    # flag for line profile simulation to be done with observations
+    use_obs: bool = False
+    # Observation object associated with this simulation
+    observation: Optional[Observation] = None
 
-    spectrum: Spectrum = field(default_factory=Spectrum)    # Spectrum object associated with this simulation
+    # Spectrum object associated with this simulation
+    spectrum: Spectrum = field(default_factory=Spectrum)
     beam_dilution: float = field(init=False)
 
     def __post_init__(self: NonLTESimulation):
@@ -837,7 +860,8 @@ class NonLTESimulation:
             self.ul = [self.ul]
 
         # merge and sort ll ul intervals
-        self.ll, self.ul = map(lambda x: list(x), zip(*_merge_intervals(zip(self.ll, self.ul))))
+        self.ll, self.ul = map(lambda x: list(x), zip(
+            *_merge_intervals(zip(self.ll, self.ul))))
 
         # check if observation is provided
         if self.use_obs:
@@ -845,12 +869,13 @@ class NonLTESimulation:
                 raise RuntimeError('use_obs is True but observation is not provided')
         if self.units in ['Jy/beam', 'Jy']:
             if self.observation is None:
-                raise RuntimeError(f'units is {self.units} but observation is not provided')
+                raise RuntimeError(
+                    f'units is {self.units} but observation is not provided')
 
         # finished setting default values, the rest is done in _update()
         self._update()
 
-    def _get_tau_Iv(self: NonLTESimulation, source: NonLTESource, freq: np.ndarray[float], drawn_indices: np.ndarray[int]):
+    def _get_tau_Iv(self: NonLTESimulation, source: NonLTESource, freq: npt.NDArray[np.float_], drawn_indices: npt.NDArray[np.int_]):
         tau = np.zeros_like(freq)
         Iv = np.zeros_like(freq)
 
@@ -890,13 +915,16 @@ class NonLTESimulation:
                  for source in self.source for freq in source.frequency]
             )
             drawn_intervals = list(zip(self.ll, self.ul))
-            frequency_generation_intervals = _intersect_intervals(combined_lines_intervals, drawn_intervals)
+            frequency_generation_intervals = _intersect_intervals(
+                combined_lines_intervals, drawn_intervals)
             if frequency_generation_intervals:
-                frequency = np.concatenate([np.arange(s, e, self.res) for s, e in frequency_generation_intervals])
+                frequency = np.concatenate([np.arange(s, e, self.res)
+                                           for s, e in frequency_generation_intervals])
             else:
                 frequency = np.empty(0)
         # lines to be drawn for each source
-        drawn_indices_list = [_find_in_intervals(source.frequency, drawn_intervals) for source in self.source]
+        drawn_indices_list = [_find_in_intervals(
+            source.frequency, drawn_intervals) for source in self.source]
 
         # second, compute optical depth and intensity for each source, add to the total intensity
         intensity = np.zeros_like(frequency)
@@ -912,9 +940,11 @@ class NonLTESimulation:
         # fourth, correct for beam dilution for gaussian beam or uniform aperture
         if self.observation is not None:
             if self.observation.observatory.sd is True:
-                intensity, beam_dilution = _apply_beam(frequency, intensity, self.size, self.observation.observatory.dish, return_beam=True)
+                intensity, beam_dilution = _apply_beam(
+                    frequency, intensity, self.size, self.observation.observatory.dish, return_beam=True)
             if self.observation.observatory.array is True and self.aperture is not None:
-                intensity, beam_dilution = _apply_aperture(intensity, self.size, self.aperture, return_beam=True)
+                intensity, beam_dilution = _apply_aperture(
+                    intensity, self.size, self.aperture, return_beam=True)
 
         # fifth, set units
         if self.units in ['K', 'mK']:
@@ -923,7 +953,8 @@ class NonLTESimulation:
                 intensity *= 1e3
         if self.units in ['Jy/beam', 'Jy']:
             assert isinstance(self.observation, Observation)
-            omega = self.observation.observatory.synth_beam[0]*self.observation.observatory.synth_beam[1]
+            omega = self.observation.observatory.synth_beam[0] * \
+                self.observation.observatory.synth_beam[1]
             sr_per_beam = omega * np.pi / (206265**2 * 4 * np.log(2))
             intensity *= sr_per_beam
 

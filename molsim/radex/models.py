@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Union, Tuple
 import numpy as np
+import numpy.typing as npt
 from loguru import logger
 from joblib import load
 from scipy.optimize import minimize
@@ -61,33 +62,33 @@ class MultiComponentMaserModel(AbstractModel):
             output += f"{dist}\n"
         return output
 
-    def sample_prior(self) -> np.ndarray:
+    def sample_prior(self) -> npt.NDArray[np.float_]:
         """
         Draw samples from each respective prior distribution to
         return an array of parameters.
 
         Returns
         -------
-        np.ndarray
+        npt.NDArray[np.float_]
             NumPy 1D array of parameter values drawn from the
             respective prior.
         """
         initial = np.array([param.sample() for param in self._distributions])
         return initial
 
-    def simulate_spectrum(self, parameters: np.ndarray) -> np.ndarray:
+    def simulate_spectrum(self, parameters: npt.NDArray[np.float_]) -> npt.NDArray[np.float_]:
         """
         Wraps `molsim` functionality to simulate the spectrum, given a set
         of input parameters as a NumPy 1D array.
 
         Parameters
         ----------
-        parameters : np.ndarray
+        parameters : npt.NDArray[np.float_]
             NumPy 1D array containing parameters for the simulation.
 
         Returns
         -------
-        np.ndarray
+        npt.NDArray[np.float_]
             NumPy 1D array corresponding to the simulated spectrum
         """
         Tbg = parameters[0]
@@ -147,7 +148,7 @@ class MultiComponentMaserModel(AbstractModel):
         return simulated
 
 
-    def prior_constraint(self, parameters: np.ndarray) -> float:
+    def prior_constraint(self, parameters: npt.NDArray[np.float_]) -> float:
         """
         Function that will apply a constrain on the prior. This function
         should be overwritten in child models, say for example in the
@@ -156,7 +157,7 @@ class MultiComponentMaserModel(AbstractModel):
 
         Parameters
         ----------
-        parameters : np.ndarray
+        parameters : npt.NDArray[np.float_]
             NumPy 1D array containing parameter values
 
         Returns
@@ -167,14 +168,14 @@ class MultiComponentMaserModel(AbstractModel):
         """
         return 0.0
 
-    def compute_prior_likelihood(self, parameters: np.ndarray) -> float:
+    def compute_prior_likelihood(self, parameters: npt.NDArray[np.float_]) -> float:
         """
         Calculate the total prior log likelihood. The calculation is handed
         off to the individual distributions.
 
         Parameters
         ----------
-        parameters : np.ndarray
+        parameters : npt.NDArray[np.float_]
             NumPy 1D array containing the model parameters
 
         Returns
@@ -191,14 +192,14 @@ class MultiComponentMaserModel(AbstractModel):
         )
         return lnlikelihood
 
-    def compute_log_likelihood(self, parameters: np.ndarray) -> float:
+    def compute_log_likelihood(self, parameters: npt.NDArray[np.float_]) -> float:
         """
         Calculate the negative log likelihood, given a set of parameters
         and our observed data.
 
         Parameters
         ----------
-        parameters : np.ndarray
+        parameters : npt.NDArray[np.float_]
             [description]
 
         Returns
@@ -212,7 +213,7 @@ class MultiComponentMaserModel(AbstractModel):
         lnlike = - np.log(np.sqrt(2 * np.pi)) * simulation.size - np.sum( np.log(np.fabs(obs.noise)) ) - 0.5 * np.sum( ((obs.Iv - simulation) / obs.noise)**2.0 )
         return lnlike
 
-    def nll(self, parameters: np.ndarray) -> float:
+    def nll(self, parameters: npt.NDArray[np.float_]) -> float:
         """
         Calculate the negative log likelihood. This is functionally exactly
         the sample as `compute_log_likelihood`, except that the sign of the
@@ -220,7 +221,7 @@ class MultiComponentMaserModel(AbstractModel):
 
         Parameters
         ----------
-        parameters : np.ndarray
+        parameters : npt.NDArray[np.float_]
             [description]
 
         Returns
@@ -232,7 +233,7 @@ class MultiComponentMaserModel(AbstractModel):
 
     def mle_optimization(
         self,
-        initial: Union[None, np.ndarray] = None,
+        initial: Union[None, npt.NDArray[np.float_]] = None,
         bounds: Union[None, List[Union[Tuple[float], float]], None] = None,
         **kwargs,
     ):
@@ -248,7 +249,7 @@ class MultiComponentMaserModel(AbstractModel):
 
         Parameters
         ----------
-        initial : Union[None, np.ndarray], optional
+        initial : Union[None, npt.NDArray[np.float_]], optional
             Initial parameters for optimization, by default None, which
             will take the mean of the prior.
         bounds : Union[None, List[Union[Tuple[float, float]]], None], optional
