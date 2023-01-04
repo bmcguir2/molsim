@@ -225,9 +225,12 @@ class CollisionalTransitions:
         fields['num_transitions'] = int(file_in.readline().split(maxsplit=1)[0])
         _ = file_in.readline()
         fields['num_temperatures'] = int(file_in.readline().split(maxsplit=1)[0])
+        fields['num_temperatures'] += 1
 
         _ = file_in.readline()
         fields['temperatures'] = [*map(float, file_in.readline().split())]
+        fields['temperatures'].insert(0, 0.0)
+        fields['temperatures'] = np.array(fields['temperatures'])
 
         _ = file_in.readline()
         fields['transition_numbers'] = list()
@@ -240,6 +243,7 @@ class CollisionalTransitions:
             fields['upper_level_numbers'].append(int(cords[1]))
             fields['lower_level_numbers'].append(int(cords[2]))
             fields['rate_coefficients'].append([*map(float, cords[3:])])
+            fields['rate_coefficients'][-1].insert(0, 0.0)
         fields['transition_numbers'] = np.array(fields['transition_numbers'])
         fields['upper_level_numbers'] = np.array(fields['upper_level_numbers'])
         fields['lower_level_numbers'] = np.array(fields['lower_level_numbers'])
