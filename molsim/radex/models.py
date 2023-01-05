@@ -2,15 +2,11 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Union, Tuple
 import numpy as np
 import numpy.typing as npt
-from loguru import logger
-from joblib import load
 from scipy.optimize import minimize
 
 from .classes import NonLTEMolecule, NonLTESource, NonLTESourceMutableParameters, NonLTESimulation, EscapeProbability
 from ..classes import Observation, Continuum
-from ..mcmc.base import AbstractModel, AbstractDistribution, UniformLikelihood, GaussianLikelihood
-from ..utils import load_yaml
-
+from ..mcmc.base import AbstractModel, AbstractDistribution
 @dataclass
 class MultiComponentMaserModel(AbstractModel):
     Tbg: AbstractDistribution
@@ -274,23 +270,3 @@ class MultiComponentMaserModel(AbstractModel):
         opt_kwargs.update(**kwargs)
         result = minimize(**opt_kwargs)
         return result
-
-    @classmethod
-    def from_yml(cls, yml_path: str):
-        input_dict = load_yaml(yml_path)
-        cls_dict = dict()
-        # the two stragglers
-        for key in input_dict.keys():
-            if key not in ["observation", "molecule", "nominal_vlsr"]:
-                if hasattr(input_dict[key], "mu"):
-                    dist = GaussianLikelihood
-                else:
-                    dist = UniformLikelihood
-                cls_dict[key] = dist.from_values(**input_dict[key])
-            else:
-                if key != "nominal_vlsr":
-                    # load in the observed data
-                    cls_dict[key] = load(input_dict[key])
-                else:
-                    logger.warning(f"{key} is not recognized, and therefore ignored.")
-        return cls(**cls_dict)
