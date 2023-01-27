@@ -270,3 +270,85 @@ class MultiComponentMaserModel(AbstractModel):
         opt_kwargs.update(**kwargs)
         result = minimize(**opt_kwargs)
         return result
+
+
+class ChainedMultiComponentMaserModel(MultiComponentMaserModel):
+    def __post_init__(self):
+        super().__post_init__()
+
+        # now ensure all source sizes provided are the same
+        source_sizes = set(self.source_sizes)
+        self.source_size = source_sizes.pop()
+        if source_sizes:
+            raise ValueError(
+                "Source sizes have to be the same for ChainedMultiComponentMaserModel.")
+
+    def simulate_spectrum(self, parameters: npt.NDArray[np.float_]) -> npt.NDArray[np.float_]:
+        """
+        Wraps `molsim` functionality to simulate the spectrum, given a set
+        of input parameters as a NumPy 1D array.
+
+        Parameters
+        ----------
+        parameters : npt.NDArray[np.float_]
+            NumPy 1D array containing parameters for the simulation.
+
+        Returns
+        -------
+        npt.NDArray[np.float_]
+            NumPy 1D array corresponding to the simulated spectrum
+        """
+        Tbg = parameters[0]
+        Tkins = parameters[1:1+self.ncomponent]
+        nH2s = np.copy(parameters[1+self.ncomponent:1+self.ncomponent*2])
+        vlsrs = parameters[1+self.ncomponent*2:1+self.ncomponent*3]
+        dVs = parameters[1+self.ncomponent*3:1+self.ncomponent*4]
+        Ncols = np.copy(parameters[1+self.ncomponent*4:1+self.ncomponent*5])
+        Tcont = parameters[1+self.ncomponent*5]
+        for i in range(self.ncomponent):
+            if nH2s[i] < 1e3:
+                nH2s[i] = 10 ** nH2s[i]
+            if Ncols[i] < 1e3:
+                Ncols[i] = 10 ** Ncols[i]
+
+        simulated = np.zeros_like(self.observation.spectrum.frequency)
+        if not self._simulations:
+            mol = NonLTEMolecule.from_LAMDA(self.collision_file)
+            for Tkin, nH2, vlsr, dV, Ncol in zip(Tkins, nH2s, vlsrs, dVs, Ncols):
+                self._sources.append(NonLTESource(
+                    molecule=mol,
+                    mutable_params=NonLTESourceMutableParameters(
+                        Tkin=Tkin,
+                        collision_density={'H2': nH2},
+                        background=Tbg,
+                        escape_probability=EscapeProbability(type='uniform'),
+                        column=Ncol,
+                        dV=dV,
+                        velocity=vlsr
+                    ),
+                    **self.source_kwargs
+                ))
+            sim = NonLTESimulation(
+                observation=self.observation,
+                source=self._sources,
+                continuum=Continuum(params=Tcont),
+                size=self.source_size,
+                units='Jy/beam',
+                use_obs=True,
+                aperture=self.aperture
+            )
+            self._simulations.append(sim)
+        else:
+            for source, Tkin, nH2, vlsr, dV, Ncol in zip(self._sources, Tkins, nH2s, vlsrs, dVs, Ncols):
+                source.mutable_params.Tkin = Tkin
+                source.mutable_params.collision_density = {'H2': nH2}
+                source.mutable_params.background = Tbg
+                source.mutable_params.column = Ncol
+                source.mutable_params.dV = dV
+                source.mutable_params.velocity = vlsr
+            sim = self._simulations[0]
+            sim.continuum.params = Tcont
+            sim._update()
+            simulated += sim.spectrum.int_profile
+
+        return simulated
