@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from functools import partial
 from typing import Any, Dict, List, Union, Tuple
 import numpy as np
 import numpy.typing as npt
@@ -22,14 +23,25 @@ class MultiComponentMaserModel(AbstractModel):
     aperture: float
     source_kwargs: Dict[str, Any] = field(default_factory=dict)
 
+    _sources: List[NonLTESource] = field(init=False, repr=False, default_factory=list)
     _simulations: List[NonLTESimulation] = field(init=False, repr=False, default_factory=list)
 
     def __post_init__(self):
-        # make sure all lists have the same length
-        length = set(map(len, [self.Tks, self.nH2s, self.vlsrs, self.dVs, self.Ncols, self.source_sizes]))
-        self.ncomponent = length.pop()
+        # Make sure all lists have the same length
+        list_param_names = ['Tks', 'nH2s', 'vlsrs', 'dVs', 'Ncols', 'source_sizes']
+        list_params = [*map(partial(getattr, self), list_param_names)]
+        length = set(len(param) for param in list_params if isinstance(param, list))
+        if length:
+            self.ncomponent = length.pop()
+        else:
+            self.ncomponent = 1
         if length:
             raise ValueError("Distribution lists have inconsistent length.")
+
+        # Expand all params that supposed to be list
+        for param_name, param in zip(list_param_names, list_params):
+            if not isinstance(param, list):
+                setattr(self, param_name, [param] * self.ncomponent)
 
         self._distributions = (
             [self.Tbg] + self.Tks + self.nH2s + self.vlsrs + self.dVs + self.Ncols + [self.Tcont]
@@ -69,8 +81,15 @@ class MultiComponentMaserModel(AbstractModel):
             NumPy 1D array of parameter values drawn from the
             respective prior.
         """
-        initial = np.array([param.sample() for param in self._distributions])
-        return initial
+        initial = []
+        sampled: Dict[Any, float] = dict()
+        for param in self._distributions:
+            if param in sampled:
+                res = sampled[param]
+            else:
+                res = sampled[param] = param.sample()
+            initial.append(res)
+        return np.array(initial)
 
     def simulate_spectrum(self, parameters: npt.NDArray[np.float_]) -> npt.NDArray[np.float_]:
         """
@@ -126,20 +145,21 @@ class MultiComponentMaserModel(AbstractModel):
                     use_obs=True,
                     aperture=self.aperture
                 )
+                self._sources.append(source)
                 self._simulations.append(sim)
-                simulated += sim.spectrum.int_profile
         else:
-            for sim, Tkin, nH2, vlsr, dV, Ncol, source_size in zip(self._simulations, Tkins, nH2s, vlsrs, dVs, Ncols, self.source_sizes):
-                sim.source[0].mutable_params.Tkin = Tkin
-                sim.source[0].mutable_params.collision_density = {'H2': nH2}
-                sim.source[0].mutable_params.background = Tbg
-                sim.source[0].mutable_params.column = Ncol
-                sim.source[0].mutable_params.dV = dV
-                sim.source[0].mutable_params.velocity = vlsr
+            for source, sim, Tkin, nH2, vlsr, dV, Ncol, source_size in zip(self._sources, self._simulations, Tkins, nH2s, vlsrs, dVs, Ncols, self.source_sizes):
+                source.mutable_params.Tkin = Tkin
+                source.mutable_params.collision_density = {'H2': nH2}
+                source.mutable_params.background = Tbg
+                source.mutable_params.column = Ncol
+                source.mutable_params.dV = dV
+                source.mutable_params.velocity = vlsr
                 sim.size = source_size
                 sim.continuum.params = Tcont
-                sim._update()
-                simulated += sim.spectrum.int_profile
+        for source, sim in zip(self._sources, self._simulations):
+            sim._update()
+            simulated += sim.spectrum.int_profile
 
         return simulated
 
