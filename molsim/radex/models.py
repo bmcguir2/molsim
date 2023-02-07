@@ -10,7 +10,7 @@ from ..classes import Observation, Continuum
 from ..mcmc.base import AbstractModel, AbstractDistribution
 @dataclass
 class MultiComponentMaserModel(AbstractModel):
-    Tbg: AbstractDistribution
+    Tbgs: List[AbstractDistribution]
     Tks: List[AbstractDistribution]
     nH2s: List[AbstractDistribution]
     vlsrs: List[AbstractDistribution]
@@ -28,7 +28,7 @@ class MultiComponentMaserModel(AbstractModel):
 
     def __post_init__(self):
         # Make sure all lists have the same length
-        list_param_names = ['Tks', 'nH2s', 'vlsrs', 'dVs', 'Ncols', 'source_sizes']
+        list_param_names = ['Tbgs', 'Tks', 'nH2s', 'vlsrs', 'dVs', 'Ncols', 'source_sizes']
         list_params = [*map(partial(getattr, self), list_param_names)]
         length = set(len(param) for param in list_params if isinstance(param, list))
         if length:
@@ -44,7 +44,7 @@ class MultiComponentMaserModel(AbstractModel):
                 setattr(self, param_name, [param] * self.ncomponent)
 
         self._distributions = (
-            [self.Tbg] + self.Tks + self.nH2s + self.vlsrs + self.dVs + self.Ncols + [self.Tcont]
+            self.Tbgs + self.Tks + self.nH2s + self.vlsrs + self.dVs + self.Ncols + [self.Tcont]
         )
 
         self.ll = self.observation.spectrum.frequency.min()
@@ -57,8 +57,8 @@ class MultiComponentMaserModel(AbstractModel):
         return self._distributions
 
     def get_names(self) -> List[str]:
-        names = ["Tbg"]
-        for param in ["Tkin", "nH2", "VLSR", "dV", "NCol"]:
+        names = []
+        for param in ["Tbg", "Tkin", "nH2", "VLSR", "dV", "NCol"]:
             for i in range(self.ncomponent):
                 names.append(f"{param}_{i}")
         names.append("Tcont")
@@ -106,13 +106,13 @@ class MultiComponentMaserModel(AbstractModel):
         npt.NDArray[np.float_]
             NumPy 1D array corresponding to the simulated spectrum
         """
-        Tbg = parameters[0]
-        Tkins = parameters[1:1+self.ncomponent]
-        nH2s = np.copy(parameters[1+self.ncomponent:1+self.ncomponent*2])
-        vlsrs = parameters[1+self.ncomponent*2:1+self.ncomponent*3]
-        dVs = parameters[1+self.ncomponent*3:1+self.ncomponent*4]
-        Ncols = np.copy(parameters[1+self.ncomponent*4:1+self.ncomponent*5])
-        Tcont = parameters[1+self.ncomponent*5]
+        Tbgs = parameters[0:self.ncomponent]
+        Tkins = parameters[self.ncomponent:self.ncomponent*2]
+        nH2s = np.copy(parameters[self.ncomponent*2:self.ncomponent*3])
+        vlsrs = parameters[self.ncomponent*3:self.ncomponent*4]
+        dVs = parameters[self.ncomponent*4:self.ncomponent*5]
+        Ncols = np.copy(parameters[self.ncomponent*5:self.ncomponent*6])
+        Tcont = parameters[self.ncomponent*6]
         for i in range(self.ncomponent):
             if nH2s[i] < 1e3:
                 nH2s[i] = 10 ** nH2s[i]
@@ -122,7 +122,7 @@ class MultiComponentMaserModel(AbstractModel):
         simulated = np.zeros_like(self.observation.spectrum.frequency)
         if not self._simulations:
             mol = NonLTEMolecule.from_LAMDA(self.collision_file)
-            for Tkin, nH2, vlsr, dV, Ncol, source_size in zip(Tkins, nH2s, vlsrs, dVs, Ncols, self.source_sizes):
+            for Tbg, Tkin, nH2, vlsr, dV, Ncol, source_size in zip(Tbgs, Tkins, nH2s, vlsrs, dVs, Ncols, self.source_sizes):
                 source = NonLTESource(
                     molecule=mol,
                     mutable_params=NonLTESourceMutableParameters(
@@ -148,7 +148,7 @@ class MultiComponentMaserModel(AbstractModel):
                 self._sources.append(source)
                 self._simulations.append(sim)
         else:
-            for source, sim, Tkin, nH2, vlsr, dV, Ncol, source_size in zip(self._sources, self._simulations, Tkins, nH2s, vlsrs, dVs, Ncols, self.source_sizes):
+            for source, sim, Tbg, Tkin, nH2, vlsr, dV, Ncol, source_size in zip(self._sources, self._simulations, Tbgs, Tkins, nH2s, vlsrs, dVs, Ncols, self.source_sizes):
                 source.mutable_params.Tkin = Tkin
                 source.mutable_params.collision_density = {'H2': nH2}
                 source.mutable_params.background = Tbg
@@ -318,13 +318,13 @@ class ChainedMultiComponentMaserModel(MultiComponentMaserModel):
         npt.NDArray[np.float_]
             NumPy 1D array corresponding to the simulated spectrum
         """
-        Tbg = parameters[0]
-        Tkins = parameters[1:1+self.ncomponent]
-        nH2s = np.copy(parameters[1+self.ncomponent:1+self.ncomponent*2])
-        vlsrs = parameters[1+self.ncomponent*2:1+self.ncomponent*3]
-        dVs = parameters[1+self.ncomponent*3:1+self.ncomponent*4]
-        Ncols = np.copy(parameters[1+self.ncomponent*4:1+self.ncomponent*5])
-        Tcont = parameters[1+self.ncomponent*5]
+        Tbgs = parameters[0:self.ncomponent]
+        Tkins = parameters[self.ncomponent:self.ncomponent*2]
+        nH2s = np.copy(parameters[self.ncomponent*2:self.ncomponent*3])
+        vlsrs = parameters[self.ncomponent*3:self.ncomponent*4]
+        dVs = parameters[self.ncomponent*4:self.ncomponent*5]
+        Ncols = np.copy(parameters[self.ncomponent*5:self.ncomponent*6])
+        Tcont = parameters[self.ncomponent*6]
         for i in range(self.ncomponent):
             if nH2s[i] < 1e3:
                 nH2s[i] = 10 ** nH2s[i]
@@ -334,7 +334,7 @@ class ChainedMultiComponentMaserModel(MultiComponentMaserModel):
         simulated = np.zeros_like(self.observation.spectrum.frequency)
         if not self._simulations:
             mol = NonLTEMolecule.from_LAMDA(self.collision_file)
-            for Tkin, nH2, vlsr, dV, Ncol in zip(Tkins, nH2s, vlsrs, dVs, Ncols):
+            for Tbg, Tkin, nH2, vlsr, dV, Ncol in zip(Tbgs, Tkins, nH2s, vlsrs, dVs, Ncols):
                 self._sources.append(NonLTESource(
                     molecule=mol,
                     mutable_params=NonLTESourceMutableParameters(
@@ -359,7 +359,7 @@ class ChainedMultiComponentMaserModel(MultiComponentMaserModel):
             )
             self._simulations.append(sim)
         else:
-            for source, Tkin, nH2, vlsr, dV, Ncol in zip(self._sources, Tkins, nH2s, vlsrs, dVs, Ncols):
+            for source, Tbg, Tkin, nH2, vlsr, dV, Ncol in zip(self._sources, Tbgs, Tkins, nH2s, vlsrs, dVs, Ncols):
                 source.mutable_params.Tkin = Tkin
                 source.mutable_params.collision_density = {'H2': nH2}
                 source.mutable_params.background = Tbg
