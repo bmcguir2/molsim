@@ -16,7 +16,7 @@ class MultiComponentMaserModel(AbstractModel):
     vlsrs: List[AbstractDistribution]
     dVs: List[AbstractDistribution]
     Ncols: List[AbstractDistribution]
-    Tcont: AbstractDistribution
+    Tconts: Dict[Tuple, AbstractDistribution]
     source_sizes: List[float]
     collision_file: str
     observation: Observation
@@ -43,8 +43,12 @@ class MultiComponentMaserModel(AbstractModel):
             if not isinstance(param, list):
                 setattr(self, param_name, [param] * self.ncomponent)
 
+        if not isinstance(self.Tconts, dict):
+            self.Tconts = {(0.0, np.inf): self.Tconts}
+        self.nTconts = len(self.Tconts)
+
         self._distributions = (
-            self.Tbgs + self.Tks + self.nH2s + self.vlsrs + self.dVs + self.Ncols + [self.Tcont]
+            self.Tbgs + self.Tks + self.nH2s + self.vlsrs + self.dVs + self.Ncols + list(self.Tconts.values())
         )
 
         self.ll = self.observation.spectrum.frequency.min()
@@ -61,7 +65,8 @@ class MultiComponentMaserModel(AbstractModel):
         for param in ["Tbg", "Tkin", "nH2", "VLSR", "dV", "NCol"]:
             for i in range(self.ncomponent):
                 names.append(f"{param}_{i}")
-        names.append("Tcont")
+        for key in self.Tconts.keys():
+            names.append(f"Tcont_{key}")
         return names
 
     def __repr__(self) -> str:
@@ -112,12 +117,16 @@ class MultiComponentMaserModel(AbstractModel):
         vlsrs = parameters[self.ncomponent*3:self.ncomponent*4]
         dVs = parameters[self.ncomponent*4:self.ncomponent*5]
         Ncols = np.copy(parameters[self.ncomponent*5:self.ncomponent*6])
-        Tcont = parameters[self.ncomponent*6]
+        Tconts = parameters[self.ncomponent*6:self.ncomponent*6+self.nTconts]
         for i in range(self.ncomponent):
             if nH2s[i] < 1e3:
                 nH2s[i] = 10 ** nH2s[i]
             if Ncols[i] < 1e3:
                 Ncols[i] = 10 ** Ncols[i]
+
+        continuum_params = []
+        for freq_range, Tcont in zip(self.Tconts.keys(), Tconts):
+            continuum_params.append((freq_range[0], freq_range[1], Tcont))
 
         simulated = np.zeros_like(self.observation.spectrum.frequency)
         if not self._simulations:
@@ -139,7 +148,7 @@ class MultiComponentMaserModel(AbstractModel):
                 sim = NonLTESimulation(
                     observation=self.observation,
                     source=[source],
-                    continuum=Continuum(params=Tcont),
+                    continuum=Continuum(type='range', params=continuum_params),
                     size=source_size,
                     units='Jy/beam',
                     use_obs=True,
@@ -156,7 +165,7 @@ class MultiComponentMaserModel(AbstractModel):
                 source.mutable_params.dV = dV
                 source.mutable_params.velocity = vlsr
                 sim.size = source_size
-                sim.continuum.params = Tcont
+                sim.continuum.params = continuum_params
         for source, sim in zip(self._sources, self._simulations):
             sim._update()
             simulated += sim.spectrum.int_profile
@@ -324,12 +333,16 @@ class ChainedMultiComponentMaserModel(MultiComponentMaserModel):
         vlsrs = parameters[self.ncomponent*3:self.ncomponent*4]
         dVs = parameters[self.ncomponent*4:self.ncomponent*5]
         Ncols = np.copy(parameters[self.ncomponent*5:self.ncomponent*6])
-        Tcont = parameters[self.ncomponent*6]
+        Tconts = parameters[self.ncomponent*6:self.ncomponent*6+self.nTconts]
         for i in range(self.ncomponent):
             if nH2s[i] < 1e3:
                 nH2s[i] = 10 ** nH2s[i]
             if Ncols[i] < 1e3:
                 Ncols[i] = 10 ** Ncols[i]
+
+        continuum_params = []
+        for freq_range, Tcont in zip(self.Tconts.keys(), Tconts):
+            continuum_params.append((freq_range[0], freq_range[1], Tcont))
 
         simulated = np.zeros_like(self.observation.spectrum.frequency)
         if not self._simulations:
@@ -351,7 +364,7 @@ class ChainedMultiComponentMaserModel(MultiComponentMaserModel):
             sim = NonLTESimulation(
                 observation=self.observation,
                 source=self._sources,
-                continuum=Continuum(params=Tcont),
+                continuum=Continuum(type='range', params=continuum_params),
                 size=self.source_size,
                 units='Jy/beam',
                 use_obs=True,
@@ -367,7 +380,7 @@ class ChainedMultiComponentMaserModel(MultiComponentMaserModel):
                 source.mutable_params.dV = dV
                 source.mutable_params.velocity = vlsr
             sim = self._simulations[0]
-            sim.continuum.params = Tcont
+            sim.continuum.params = continuum_params
             sim._update()
             simulated += sim.spectrum.int_profile
 
