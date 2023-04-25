@@ -935,7 +935,8 @@ class NonLTESimulation:
             cumulative_tau += tau
 
         # third, compute the contribution from background continuum source, and subtract the continuum
-        intensity += self.continuum.Ibg(frequency) * np.expm1(-cumulative_tau)
+        continuum_Ibg_cgs = self.continuum.Ibg(frequency)
+        intensity += continuum_Ibg_cgs * np.expm1(-cumulative_tau)
 
         # fourth, correct for beam dilution for gaussian beam or uniform aperture
         if self.observation is not None:
@@ -961,3 +962,4 @@ class NonLTESimulation:
         self.spectrum.freq_profile = frequency
         self.spectrum.int_profile = intensity
         self.beam_dilution = beam_dilution
+        self.spectrum.Tbg = _rayleigh_jeans_temperature(continuum_Ibg_cgs, frequency)
