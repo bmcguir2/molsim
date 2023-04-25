@@ -21,6 +21,7 @@ class MultiComponentMaserModel(AbstractModel):
     collision_file: str
     observation: Observation
     aperture: float
+    escape_probability: str = 'uniform'
     source_kwargs: Dict[str, Any] = field(default_factory=dict)
 
     _sources: List[NonLTESource] = field(init=False, repr=False, default_factory=list)
@@ -138,7 +139,7 @@ class MultiComponentMaserModel(AbstractModel):
                         Tkin=Tkin,
                         collision_density={'H2': nH2},
                         background=Tbg,
-                        escape_probability=EscapeProbability(type='uniform'),
+                        escape_probability=EscapeProbability(type=self.escape_probability),
                         column=Ncol,
                         dV=dV,
                         velocity=vlsr
@@ -354,7 +355,7 @@ class ChainedMultiComponentMaserModel(MultiComponentMaserModel):
                         Tkin=Tkin,
                         collision_density={'H2': nH2},
                         background=Tbg,
-                        escape_probability=EscapeProbability(type='uniform'),
+                        escape_probability=EscapeProbability(type=self.escape_probability),
                         column=Ncol,
                         dV=dV,
                         velocity=vlsr
