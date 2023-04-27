@@ -319,6 +319,9 @@ def _legacy_filter_spectrum(
     sim_cutoff: float = 0.1,
     line_wash_threshold: float = 3.5,
 ):
+    sorted_index = np.argsort(frequency)
+    frequency = frequency[sorted_index]
+    intensity = intensity[sorted_index]
     restfreqs = catalog.frequency
     int_sim = 10 ** catalog.logint
     max_int_sim = int_sim.max()
@@ -339,9 +342,12 @@ def _legacy_filter_spectrum(
     relevant_yerrs = np.zeros_like(intensity)
     ignore_counter = 0
     for catalog_index, restfreq in zip(cat_mask, restfreqs):
-        velocity = (restfreq - frequency) / restfreq * 300000
-        mask = np.where((velocity < (delta_v + vlsr)) & (velocity > (-delta_v + vlsr)))
-        if mask[0].size != 0:
+        freq_ll = restfreq * (1 - (vlsr + abs(delta_v)) / 300000)
+        freq_ul = restfreq * (1 - (vlsr - abs(delta_v)) / 300000)
+        index_ll = np.searchsorted(frequency, freq_ll)
+        index_ul = np.searchsorted(frequency, freq_ul)
+        if index_ll < index_ul:
+            mask = slice(index_ll, index_ul)
             noise_mean, noise_std = compute.calc_noise_std(
                 intensity[mask], line_wash_threshold
             )
