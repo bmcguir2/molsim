@@ -318,6 +318,7 @@ def _legacy_filter_spectrum(
     interloper_threshold: float = 6.0,
     sim_cutoff: float = 0.1,
     line_wash_threshold: float = 3.5,
+    silent: bool = False,
 ):
     sorted_index = np.argsort(frequency)
     frequency = frequency[sorted_index]
@@ -358,7 +359,8 @@ def _legacy_filter_spectrum(
                 block_interlopers
                 and intensity[mask].max() > interloper_threshold * noise_std
             ):
-                logger.info(f"Found interloper at {restfreq}; ignoring.")
+                if not silent:
+                    logger.info(f"Found interloper at {restfreq}; ignoring.")
                 ignore_counter += 1
                 continue
             else:
@@ -402,6 +404,7 @@ def preprocess_spectrum(
     legacy: bool = False,
     sim_cutoff: float = 0.1,
     line_wash_threshold: float = 3.5,
+    silent: bool = False,
 ) -> Type[DataChunk]:
     logger.add(f"{name}_analysis.log", rotation="1 days", colorize=True)
     output_path = Path(name)
@@ -453,6 +456,7 @@ def preprocess_spectrum(
             interloper_threshold,
             sim_cutoff,
             line_wash_threshold,
+            silent,
         )
     logger.info(f"Using {len(datachunk.catalog_index)} entries for analysis.")
     # dump stuff for later usage
