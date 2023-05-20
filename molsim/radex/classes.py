@@ -939,6 +939,7 @@ class NonLTESimulation:
         intensity += continuum_Ibg_cgs * np.expm1(-cumulative_tau)
 
         # fourth, correct for beam dilution for gaussian beam or uniform aperture
+        beam_dilution = None
         if self.observation is not None:
             if self.observation.observatory.sd is True:
                 intensity, beam_dilution = _apply_beam(
@@ -961,5 +962,6 @@ class NonLTESimulation:
 
         self.spectrum.freq_profile = frequency
         self.spectrum.int_profile = intensity
-        self.beam_dilution = beam_dilution
+        if beam_dilution is not None:
+            self.beam_dilution = beam_dilution
         self.spectrum.Tbg = _rayleigh_jeans_temperature(continuum_Ibg_cgs, frequency)
