@@ -10,7 +10,7 @@ from ..classes import Observation, Continuum
 from ..mcmc.base import AbstractModel, AbstractDistribution
 @dataclass
 class MultiComponentMaserModel(AbstractModel):
-    Tbgs: List[AbstractDistribution]
+    Trads: List[AbstractDistribution]
     Tks: List[AbstractDistribution]
     nH2s: List[AbstractDistribution]
     vlsrs: List[AbstractDistribution]
@@ -29,7 +29,7 @@ class MultiComponentMaserModel(AbstractModel):
 
     def __post_init__(self):
         # Make sure all lists have the same length
-        list_param_names = ['Tbgs', 'Tks', 'nH2s', 'vlsrs', 'dVs', 'Ncols', 'source_sizes']
+        list_param_names = ['Trads', 'Tks', 'nH2s', 'vlsrs', 'dVs', 'Ncols', 'source_sizes']
         list_params = [*map(partial(getattr, self), list_param_names)]
         length = set(len(param) for param in list_params if isinstance(param, list))
         if length:
@@ -49,7 +49,7 @@ class MultiComponentMaserModel(AbstractModel):
         self.nTconts = len(self.Tconts)
 
         self._distributions = (
-            self.Tbgs + self.Tks + self.nH2s + self.vlsrs + self.dVs + self.Ncols + list(self.Tconts.values())
+            self.Trads + self.Tks + self.nH2s + self.vlsrs + self.dVs + self.Ncols + list(self.Tconts.values())
         )
 
         self.ll = self.observation.spectrum.frequency.min()
@@ -63,7 +63,7 @@ class MultiComponentMaserModel(AbstractModel):
 
     def get_names(self) -> List[str]:
         names = []
-        for param in ["Tbg", "Tkin", "nH2", "VLSR", "dV", "NCol"]:
+        for param in ["Trad", "Tkin", "nH2", "VLSR", "dV", "NCol"]:
             for i in range(self.ncomponent):
                 names.append(f"{param}_{i}")
         for key in self.Tconts.keys():
@@ -112,7 +112,7 @@ class MultiComponentMaserModel(AbstractModel):
         npt.NDArray[np.float_]
             NumPy 1D array corresponding to the simulated spectrum
         """
-        Tbgs = parameters[0:self.ncomponent]
+        Trads = parameters[0:self.ncomponent]
         Tkins = parameters[self.ncomponent:self.ncomponent*2]
         nH2s = np.copy(parameters[self.ncomponent*2:self.ncomponent*3])
         vlsrs = parameters[self.ncomponent*3:self.ncomponent*4]
@@ -132,13 +132,13 @@ class MultiComponentMaserModel(AbstractModel):
         simulated = np.zeros_like(self.observation.spectrum.frequency)
         if not self._simulations:
             mol = NonLTEMolecule.from_LAMDA(self.collision_file)
-            for Tbg, Tkin, nH2, vlsr, dV, Ncol, source_size in zip(Tbgs, Tkins, nH2s, vlsrs, dVs, Ncols, self.source_sizes):
+            for Trad, Tkin, nH2, vlsr, dV, Ncol, source_size in zip(Trads, Tkins, nH2s, vlsrs, dVs, Ncols, self.source_sizes):
                 source = NonLTESource(
                     molecule=mol,
                     mutable_params=NonLTESourceMutableParameters(
                         Tkin=Tkin,
                         collision_density={'H2': nH2},
-                        background=Tbg,
+                        local_radiation=Trad,
                         escape_probability=EscapeProbability(type=self.escape_probability),
                         column=Ncol,
                         dV=dV,
@@ -158,10 +158,10 @@ class MultiComponentMaserModel(AbstractModel):
                 self._sources.append(source)
                 self._simulations.append(sim)
         else:
-            for source, sim, Tbg, Tkin, nH2, vlsr, dV, Ncol, source_size in zip(self._sources, self._simulations, Tbgs, Tkins, nH2s, vlsrs, dVs, Ncols, self.source_sizes):
+            for source, sim, Trad, Tkin, nH2, vlsr, dV, Ncol, source_size in zip(self._sources, self._simulations, Trads, Tkins, nH2s, vlsrs, dVs, Ncols, self.source_sizes):
                 source.mutable_params.Tkin = Tkin
                 source.mutable_params.collision_density = {'H2': nH2}
-                source.mutable_params.background = Tbg
+                source.mutable_params.local_radiation = Trad
                 source.mutable_params.column = Ncol
                 source.mutable_params.dV = dV
                 source.mutable_params.velocity = vlsr
@@ -328,7 +328,7 @@ class ChainedMultiComponentMaserModel(MultiComponentMaserModel):
         npt.NDArray[np.float_]
             NumPy 1D array corresponding to the simulated spectrum
         """
-        Tbgs = parameters[0:self.ncomponent]
+        Trads = parameters[0:self.ncomponent]
         Tkins = parameters[self.ncomponent:self.ncomponent*2]
         nH2s = np.copy(parameters[self.ncomponent*2:self.ncomponent*3])
         vlsrs = parameters[self.ncomponent*3:self.ncomponent*4]
@@ -348,13 +348,13 @@ class ChainedMultiComponentMaserModel(MultiComponentMaserModel):
         simulated = np.zeros_like(self.observation.spectrum.frequency)
         if not self._simulations:
             mol = NonLTEMolecule.from_LAMDA(self.collision_file)
-            for Tbg, Tkin, nH2, vlsr, dV, Ncol in zip(Tbgs, Tkins, nH2s, vlsrs, dVs, Ncols):
+            for Trad, Tkin, nH2, vlsr, dV, Ncol in zip(Trads, Tkins, nH2s, vlsrs, dVs, Ncols):
                 self._sources.append(NonLTESource(
                     molecule=mol,
                     mutable_params=NonLTESourceMutableParameters(
                         Tkin=Tkin,
                         collision_density={'H2': nH2},
-                        background=Tbg,
+                        local_radiation=Trad,
                         escape_probability=EscapeProbability(type=self.escape_probability),
                         column=Ncol,
                         dV=dV,
@@ -373,10 +373,10 @@ class ChainedMultiComponentMaserModel(MultiComponentMaserModel):
             )
             self._simulations.append(sim)
         else:
-            for source, Tbg, Tkin, nH2, vlsr, dV, Ncol in zip(self._sources, Tbgs, Tkins, nH2s, vlsrs, dVs, Ncols):
+            for source, Trad, Tkin, nH2, vlsr, dV, Ncol in zip(self._sources, Trads, Tkins, nH2s, vlsrs, dVs, Ncols):
                 source.mutable_params.Tkin = Tkin
                 source.mutable_params.collision_density = {'H2': nH2}
-                source.mutable_params.background = Tbg
+                source.mutable_params.local_radiation = Trad
                 source.mutable_params.column = Ncol
                 source.mutable_params.dV = dV
                 source.mutable_params.velocity = vlsr

@@ -194,17 +194,17 @@ class RadiativeTransitions:
         return cls(**fields)
 
     @lru_cache
-    def get_Bul_J(self: RadiativeTransitions, background: Union[Continuum, float]) -> npt.NDArray[np.float_]:
-        if isinstance(background, Continuum):
+    def get_Bul_J(self: RadiativeTransitions, local_radiation: Union[Continuum, float]) -> npt.NDArray[np.float_]:
+        if isinstance(local_radiation, Continuum):
             freq = ccm * self.ediff * 1e-6
-            Tbg = background.Tbg(freq)
+            Trad = local_radiation.Tbg(freq)
         else:
-            Tbg = background
-        return self.spontaneous_decay_rates / np.expm1((h * ccm / k) / Tbg * self.ediff)
+            Trad = local_radiation
+        return self.spontaneous_decay_rates / np.expm1((h * ccm / k) / Trad * self.ediff)
 
     @lru_cache
-    def get_Blu_J(self: RadiativeTransitions, background: Union[Continuum, float]) -> npt.NDArray[np.float_]:
-        return self.gratio * self.get_Bul_J(background)
+    def get_Blu_J(self: RadiativeTransitions, local_radiation: Union[Continuum, float]) -> npt.NDArray[np.float_]:
+        return self.gratio * self.get_Bul_J(local_radiation)
 
 
 @dataclass(init=True, repr=False, eq=False, order=False, unsafe_hash=False, frozen=True)
@@ -445,7 +445,7 @@ class EscapeProbability:
 class NonLTESourceMutableParameters:
     Tkin: float
     collision_density: Dict[str, float]
-    background: Union[Continuum, float]
+    local_radiation: Union[Continuum, float]
     escape_probability: EscapeProbability
     column: float
     dV: float
@@ -502,8 +502,8 @@ class NonLTESource:
         return self.mutable_params.collision_density
 
     @property
-    def background(self: NonLTESource) -> Union[Continuum, float]:
-        return self.mutable_params.background
+    def local_radiation(self: NonLTESource) -> Union[Continuum, float]:
+        return self.mutable_params.local_radiation
 
     @property
     def escape_probability(self: NonLTESource) -> EscapeProbability:
@@ -599,15 +599,15 @@ class NonLTESource:
     def set_rate_matrix(self: NonLTESource, beta: npt.NDArray[np.float_], yrate: npt.NDArray[np.float_]):
         levels = self.molecule.levels
         radiative_transitions = self.molecule.radiative_transitions
-        background = self.mutable_params.background
+        local_radiation = self.mutable_params.local_radiation
 
         num_transitions = radiative_transitions.num_transitions
         iup = radiative_transitions.upper_level_indices
         ilo = radiative_transitions.lower_level_indices
 
         Aul = radiative_transitions.spontaneous_decay_rates
-        Bul_J = radiative_transitions.get_Bul_J(background)
-        Blu_J = radiative_transitions.get_Blu_J(background)
+        Bul_J = radiative_transitions.get_Bul_J(local_radiation)
+        Blu_J = radiative_transitions.get_Blu_J(local_radiation)
 
         num_levels = levels.num_levels
         crate = self.get_collisional_rate()
@@ -733,7 +733,7 @@ class NonLTESource:
 
         levels = self.molecule.levels
         radiative_transitions = self.molecule.radiative_transitions
-        background = self.mutable_params.background
+        local_radiation = self.mutable_params.local_radiation
 
         num_levels = levels.num_levels
         num_transitions = radiative_transitions.num_transitions
@@ -779,10 +779,10 @@ class NonLTESource:
 
             if niter == 0:
                 Tex = np.empty(num_transitions)
-                if isinstance(background, Continuum):
-                    Tex_old = background.Tbg(radiative_transitions.frequencies)
+                if isinstance(local_radiation, Continuum):
+                    Tex_old = local_radiation.Tbg(radiative_transitions.frequencies)
                 else:
-                    Tex_old = np.full(num_transitions, background, dtype=float)
+                    Tex_old = np.full(num_transitions, local_radiation, dtype=float)
             else:
                 Tex_old, Tex = Tex, Tex_old
             self.set_excitation_temperature(xpop, Tex_old, Tex)
