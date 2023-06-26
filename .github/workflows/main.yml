@@ -19,25 +19,29 @@ jobs:
   build:
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
       
-      - name: Setup Python
-        uses: actions/setup-python@v2.2.1
+      - name: Create and activate conda environment for testing
+        uses: conda-incubator/setup-miniconda@v2
         with:
-          python-version: 3.7.9
+          activate-environment: molsim-testing
+          python-version: 3.7
       - name: Install dependencies with anaconda
         run: |
-          $CONDA/bin/conda env update -f conda.yml --name base
-          $CONDA/bin/conda install flake8 pytest
-          $CONDA/bin/pip install --upgrade pip
+          conda env update -f conda.yml --name molsim-testing
+          conda install flake8 pytest
+          pip install --upgrade pip
       - name: Install molsim into environment
         run: |
-          $CONDA/bin/pip install -e .[dev]
+          pip install -e .[dev]
       - name: Run CI actions
         run: |
-          # $CONDA/bin/flake8
-          $CONDA/bin/pytest
+          # flake8
+          pytest
