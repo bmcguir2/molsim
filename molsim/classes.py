@@ -1019,8 +1019,7 @@ class Continuum(object):
 		densities [Jy/sr] at those frequencies.
 		'''
 		
-		if self.type == 'thermal':
-			return 2*h*(freq*1E6)**3 / (cm**2 * np.exp(h*freq*1E6/(k*self.params)))*1E26		
+		return 2*h*(freq*1E6)**3 / (cm**2 * (np.exp(h*freq*1E6/(k*self.Tbg(freq)))-1))*1E26		
 
 class Source(object):
 
