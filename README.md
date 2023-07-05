@@ -56,6 +56,6 @@ This links the IPython kernel with the `jupyter` installation. You'll then be ab
 
 The large majority of `molsim` was written by @bmcguir2, building on top of earlier code (`simulate_lte`).
 
-The `mcmc` module was written by @laserkelvin, based heavily on earlier code by @ryanaloomis (see [his repo here](https://github.com/ryanaloomis/TMC1_mcmc_fitting)), which was used for the DR1 GOTHAM data analysis.
+The `mcmc` module was written by @laserkelvin, based heavily on earlier code by @ryanaloomis (see [his repo here](https://github.com/ryanaloomis/TMC1_mcmc_fitting)), which was used for the DR1 GOTHAM data analysis. The `radex` module was written by @cixue, implemented based on the RADEX non-LTE radiative transfer code, and accelerated with `Numba` to provide the high performance required for MCMC analysis.
 
 Any issues, please submit an issue, reporting what you think should happen and what actually happens.
