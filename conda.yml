@@ -4,7 +4,7 @@ channels:
 dependencies:
   - numpy
   - scipy
-  - python=3.7
+#  - python=3.7
   - ipython
   - ipykernel
   - numba
@@ -19,3 +19,8 @@ dependencies:
   - numexpr
   - tqdm
   - h5py
+  - tabulate
+  - loguru
+  - pip:
+    - emcee
+    - lmfit

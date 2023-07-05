@@ -1019,8 +1019,7 @@ class Continuum(object):
 		densities [Jy/sr] at those frequencies.
 		'''
 		
-		if self.type == 'thermal':
-			return 2*h*(freq*1E6)**3 / (cm**2 * np.exp(h*freq*1E6/(k*self.params)))*1E26		
+		return 2*h*(freq*1E6)**3 / (cm**2 * (np.exp(h*freq*1E6/(k*self.Tbg(freq)))-1))*1E26		
 
 class Source(object):
 
@@ -1837,6 +1836,7 @@ class Ulim_Result(object):
 		sigma = None,
 		sim = None,
 		obs = None,
+		ulim = None,
 	):
 	
 		self.line_frequency = line_frequency
@@ -1845,10 +1845,12 @@ class Ulim_Result(object):
 		self.sigma = sigma
 		self.sim = sim
 		self.obs = obs
+		self.ulim = ulim
 		
 	def summary(self):
 		print(f'Line Frequency Used (MHz): {self.line_frequency:.4f}')
 		print(f'Final Line Intensity ({self.sim.units}): {self.line_intensity:.6f}')
 		print(f'Obs RMS at Line Frequency ({self.sim.units}): {self.rms:.6f}')
+		print(f'Upper Limit Column Density: {self.ulim:.2e}')
 		print(f'{self.sigma} sigma Upper Limit')
 		

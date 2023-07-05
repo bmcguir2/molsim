@@ -28,7 +28,7 @@ def set_upper_limit(sim,obs,params={}):
 	return_result = params['return_result'] if 'return_result' in params else False
 	
 	#find the indices of the peaks in the simulation
-	peak_indices = find_peaks(sim.spectrum.freq_profile,sim.spectrum.int_profile,_get_res(sim.spectrum.freq_profile),sim.source.dV,is_sim=True)
+	peak_indices = find_peaks(sim.spectrum.freq_profile,np.abs(sim.spectrum.int_profile),_get_res(sim.spectrum.freq_profile),sim.source.dV,is_sim=True)
 	
 	#get the frequencies and absolute values of the intensities in these regions
 	peak_freqs = np.copy(sim.spectrum.freq_profile[peak_indices])
@@ -65,7 +65,7 @@ def set_upper_limit(sim,obs,params={}):
 	while abs(best_int - best_rms)/best_rms > tolerance:
 		sim.source.column *= best_rms/best_int
 		sim.update()
-		best_int = np.nanmax(sim.spectrum.int_profile[find_nearest(sim.spectrum.freq_profile,best_freq)])	
+		best_int = np.nanmax(np.abs(sim.spectrum.int_profile[find_nearest(sim.spectrum.freq_profile,best_freq)]))
 	
 	if return_result is True:
 		# Get the result class
@@ -79,6 +79,7 @@ def set_upper_limit(sim,obs,params={}):
 		result.sigma = sigma
 		result.sim = sim
 		result.obs = obs
+		result.ulim = sim.source.column
 	
 		return result
 	else:
