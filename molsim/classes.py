@@ -1131,8 +1131,8 @@ class Simulation(object):
 					spectrum = None, #Spectrum object associated with this simulation
 					observation = None, #Observation object associated with this simulation
 					source = None, #Source object associated with this simulation
-					ll = [np.float('-inf')], #lower limits
-					ul = [np.float('-inf')], #lower limits
+					ll = [float('-inf')], #lower limits
+					ul = [float('-inf')], #lower limits
 					line_profile = 'Gaussian', #simulate a line profile or not
 					sim_width = 10, #fwhms to simulate +/- line center
 					res = 10., #resolution if simulating line profiles [kHz]

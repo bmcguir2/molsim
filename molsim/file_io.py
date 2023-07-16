@@ -20,8 +20,8 @@ def _read_xy(filein):
 	
 	with open(filein, 'r') as input:
 		for line in input:
-			x.append(np.float(line.split()[0].strip()))
-			y.append(np.float(line.split()[1].strip()))
+			x.append(float(line.split()[0].strip()))
+			y.append(float(line.split()[1].strip()))
 	
 	x = np.asarray(x)
 	y = np.asarray(y)

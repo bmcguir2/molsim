@@ -29,8 +29,8 @@ def _read_xy(filein):
 	
 	with open(filein, 'r') as input:
 		for line in input:
-			x.append(np.float(line.split()[0].strip()))
-			y.append(np.float(line.split()[1].strip()))
+			x.append(float(line.split()[0].strip()))
+			y.append(float(line.split()[1].strip()))
 	
 	x = np.asarray(x)
 	y = np.asarray(y)
@@ -100,19 +100,19 @@ def _read_spcat(filein):
 	
 	#we start with the easy ones that don't have nonsense letters
 	frequency = np.array(frequency)
-	frequency = frequency.astype(np.float64)
+	frequency = frequency.astype(float)
 	freq_err = np.array(freq_err)
-	freq_err = freq_err.astype(np.float64)	
+	freq_err = freq_err.astype(float)	
 	logint = np.array(logint)
-	logint = logint.astype(np.float64)	
+	logint = logint.astype(float)	
 	dof = np.array(dof)
-	dof = dof.astype(np.int)
+	dof = dof.astype(int)
 	elow = np.array(elow)
-	elow = elow.astype(np.float64)
+	elow = elow.astype(float)
 	tag = np.array(tag)
-	tag = tag.astype(np.int)
+	tag = tag.astype(int)
 	qnformat = np.array(qnformat)
-	qnformat = qnformat.astype(np.int)	
+	qnformat = qnformat.astype(int)	
 	
 	#convert elow to Kelvin
 		
