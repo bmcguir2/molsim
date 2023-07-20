@@ -1289,7 +1289,7 @@ class Simulation(object):
 		return	
 		
 	def _apply_eta(self):
-		if self.observation.observatory.eta is not None:
+		if self.observation is not None and self.observation.observatory is not None and self.observation.observatory.eta is not None:
 				self.spectrum.Tb *= self.observation.observatory.eta
 				self.spectrum.int_profile *= self.observation.observatory.eta
 		return
