@@ -11,7 +11,7 @@
 
 For details about the methodology, particularly with respect to MCMC simulations, please refer to [Loomis _et al._ 2020](https://arxiv.org/abs/2009.11900)
 
-If you use `molsim` for your analysis, please cite the Zenodo entry: [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.4560750.svg)](https://doi.org/10.5281/zenodo.4560750)
+If you use `molsim` for your analysis, please cite the Zenodo entry: [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.8118192.svg)](https://doi.org/10.5281/zenodo.8118192)
 
 ## Setup instructions
 
