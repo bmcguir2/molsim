@@ -409,16 +409,7 @@ def velocity_stack(params):
 	interped_sim_ints = np.asarray(interped_sim_ints)
 	
 	#we're going to now need a point by point rms array, so that when we average up and ignore nans, we don't divide by extra values.
-	rms_arr = []
-	for x in range(len(velocity_avg)):
-		rms_sum = 0
-		for y in range(len(interped_rms)):
-			if np.isnan(interped_ints[y][x]):
-				continue
-			else:
-				rms_sum += interped_rms[y]**2
-		rms_arr.append(rms_sum)
-	rms_arr	= np.asarray(rms_arr)
+	rms_arr = ((~np.isnan(interped_ints)) * interped_rms[:, None]**2).sum(axis=0)
 	rms_arr[rms_arr==0] = np.nan
 	
 	#add up the interped intensities, then divide that by the rms_array
