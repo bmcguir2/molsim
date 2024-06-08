@@ -885,6 +885,7 @@ class Spectrum(object):
 					int_sim = None, #intensity of a simulation
 					freq_sim = None, #frequency of a simulation
 					snr = None, #data in snr space
+					noise = None, #noise level with the same unit as intensity
 					id = None, #a unique ID for this spectrum
 					notes = None, #notes
 					name = None, #name
@@ -910,6 +911,7 @@ class Spectrum(object):
 		self.int_sim = int_sim
 		self.freq_sim = freq_sim
 		self.snr = snr
+		self.noise = noise
 
 		return	
 		
@@ -940,6 +942,7 @@ class Spectrum(object):
 								int_sim = self.int_sim,
 								freq_sim = self.freq_sim,
 								snr = self.snr,
+								noise = self.noise,
 							)
 		
 		return				
