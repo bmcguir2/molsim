@@ -201,6 +201,7 @@ def velocity_stack(params):
 	n_strongest: stack the strongest x lines.  Integer.  Default: All lines.
 	n_snr: stack the x highest snr lines.  Integer.  Default: All lines.
 	return_snr: output arrays of the snrs stacked plus the snr of the stack itself. True or False. Default: False 
+	flag_report: return a report on the flagged data.  True or False.  Default: False
 	'''
 	
 	#define an obs_chunk class to hold chunks of data to stack
@@ -282,6 +283,7 @@ def velocity_stack(params):
 	n_strongest = params['n_strongest'] if 'n_strongest' in options else None
 	n_snr = params['n_snr'] if 'n_snr' in options else None
 	return_snr = params['return_snr'] if 'return_snr' in options else False
+	flag_report = params['flag_report'] if 'flag_report' in options else False
 
 	#initialize a spectrum object to hold the stack and name it
 	stacked_spectrum = Spectrum(name=name)
@@ -333,6 +335,9 @@ def velocity_stack(params):
 		
 	obs_chunks = [ObsChunk(np.copy(freq_arr[x:y]),np.copy(int_arr[x:y]),np.copy(freq_sim[a:b]),np.copy(int_sim[a:b]),peak_int,c,d) for x,y,a,b,peak_int,c,d in zip(lls_obs,uls_obs,lls_sim,uls_sim,peak_ints,range(len(uls_sim)),peak_freqs)]
 
+	#count sigma flags
+	n_flags = 0
+	
 	#flagging
 	for obs in obs_chunks:
 		#already flagged, move on
@@ -366,6 +371,7 @@ def velocity_stack(params):
 		if flag_lines is True:
 			if np.nanmax(obs.int_obs) > flag_sigma*obs.rms:
 				obs.flag = True
+				n_flags += 1
 				continue
 				
 	#setting and applying the weights
@@ -403,16 +409,7 @@ def velocity_stack(params):
 	interped_sim_ints = np.asarray(interped_sim_ints)
 	
 	#we're going to now need a point by point rms array, so that when we average up and ignore nans, we don't divide by extra values.
-	rms_arr = []
-	for x in range(len(velocity_avg)):
-		rms_sum = 0
-		for y in range(len(interped_rms)):
-			if np.isnan(interped_ints[y][x]):
-				continue
-			else:
-				rms_sum += interped_rms[y]**2
-		rms_arr.append(rms_sum)
-	rms_arr	= np.asarray(rms_arr)
+	rms_arr = ((~np.isnan(interped_ints)) * interped_rms[:, None]**2).sum(axis=0)
 	rms_arr[rms_arr==0] = np.nan
 	
 	#add up the interped intensities, then divide that by the rms_array
@@ -433,6 +430,10 @@ def velocity_stack(params):
 	stacked_spectrum.velocity = np.copy(velocity_avg)
 	stacked_spectrum.snr = np.copy(int_avg)
 	stacked_spectrum.int_sim = np.copy(int_sim_avg)
+	
+	#flag report
+	if flag_report is True:
+		print(f'{n_flags} obs chunks were flagged out of {len(obs_chunks)} in total.')
 						
 	if return_snr is False:
 		return stacked_spectrum

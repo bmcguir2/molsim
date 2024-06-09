@@ -1,4 +1,4 @@
-from collections import Iterable
+from collections.abc import Iterable
 import itertools as it
 import matplotlib.pyplot as plt
 import matplotlib
