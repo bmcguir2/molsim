@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Tuple, List, Union, Type, Dict
 from functools import lru_cache
 
@@ -121,7 +121,7 @@ class SpectrumChunk:
     _intensity: np.ndarray
     center: np.ndarray
     _weight: float = 1.0
-    _mask: np.ndarray = np.zeros(1, dtype=bool)
+    _mask: np.ndarray = field(default_factory=lambda: np.zeros(1, dtype=bool))
 
     def __post_init__(self):
         # set the default mask to take all values
