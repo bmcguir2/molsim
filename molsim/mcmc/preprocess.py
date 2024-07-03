@@ -1,5 +1,5 @@
 import os
-from typing import Type, Any, List, Tuple
+from typing import Type, Any, List, Tuple, Optional
 from dataclasses import dataclass
 from pathlib import Path
 from itertools import repeat
@@ -133,6 +133,7 @@ def extract_chunks(
     verbose: bool = False,
     block_interlopers: bool = False,
     interloper_threshold: float = 6.0,
+    spectrum_with_noise: Optional[bool] = None,
 ):
     """
     Function to extract frequency chunks out of a large NumPy 2D array, where
@@ -147,6 +148,7 @@ def extract_chunks(
     catalog : Type[Catalog]
         [description]
     """
+    assert spectrum_with_noise is not None
     # Extract only frequencies within band of the observations
     logger.info("Extracting inband chunks.")
     min_freq, max_freq = data[:, 0].min(), data[:, 0].max()
@@ -170,7 +172,7 @@ def extract_chunks(
             inband_data[1], delta_v
         ):
             chunk = _compute_chunks(
-                inband_data, data, rbf_params, noise_params, verbose
+                inband_data, data, rbf_params, noise_params, verbose, spectrum_with_noise
             )
             last_freq = inband_data[1]
             chunks.append(chunk)
@@ -186,6 +188,7 @@ def _compute_chunks(
     rbf_params={},
     noise_params={},
     verbose=False,
+    spectrum_with_noise: Optional[bool] = None,
 ) -> Type[DataChunk]:
     """
 
@@ -207,12 +210,16 @@ def _compute_chunks(
     Type[DataChunk]
         [description]
     """
+    assert spectrum_with_noise is not None
     index, rest_freq, offset = inband_data
     masked_data = extract_frequency_slice(data, rest_freq, offset)
     chunk = DataChunk(
         frequency=masked_data[:, 0], intensity=masked_data[:, 1], catalog_index=index,
     )
-    chunk.noise = gp_noise_estimation(chunk, rbf_params, noise_params, verbose)
+    if spectrum_with_noise:
+        chunk.noise = masked_data[:, 2]
+    else:
+        chunk.noise = gp_noise_estimation(chunk, rbf_params, noise_params, verbose)
     return chunk
 
 
@@ -313,6 +320,7 @@ def _legacy_filter_spectrum(
     catalog: Catalog,
     frequency: np.ndarray,
     intensity: np.ndarray,
+    noise: Optional[np.ndarray] = None,
     vlsr: float = 5.8,
     delta_v: float = 0.3,
     block_interlopers: bool = False,
@@ -350,16 +358,22 @@ def _legacy_filter_spectrum(
         index_ul = np.searchsorted(frequency, freq_ul)
         if index_ll < index_ul:
             mask = slice(index_ll, index_ul)
-            noise_mean, noise_std = compute.calc_noise_std(
-                intensity[mask], line_wash_threshold
-            )
-            if np.isnan(noise_mean) or np.isnan(noise_std):
-                logger.info(f"NaNs found at {restfreq}")
-                continue
-            if (
-                block_interlopers
-                and intensity[mask].max() > interloper_threshold * noise_std
-            ):
+            if noise is None:
+                noise_mean, noise_std = compute.calc_noise_std(
+                    intensity[mask], line_wash_threshold
+                )
+                if np.isnan(noise_mean) or np.isnan(noise_std):
+                    logger.info(f"NaNs found at {restfreq}")
+                    continue
+                skip_interloper = (
+                    block_interlopers
+                    and intensity[mask].max() > interloper_threshold * noise_std
+                )
+            else:
+                skip_interloper = block_interlopers and np.any(
+                    intensity[mask] > interloper_threshold * noise[mask]
+                )
+            if skip_interloper:
                 if not silent:
                     logger.info(f"Found interloper at {restfreq}; ignoring.")
                 ignore_counter += 1
@@ -368,9 +382,14 @@ def _legacy_filter_spectrum(
                 catalog_indices.append(catalog_index)
                 relevant_freqs[mask] = frequency[mask]
                 relevant_intensity[mask] = intensity[mask]
-                relevant_yerrs[mask] = np.sqrt(
-                    noise_std ** 2.0 + (intensity[mask] * 0.1) ** 2.0
-                )
+                if noise is None:
+                    relevant_yerrs[mask] = np.sqrt(
+                        noise_std ** 2.0 + (intensity[mask] * 0.1) ** 2.0
+                    )
+                else:
+                    relevant_yerrs[mask] = np.sqrt(
+                        noise[mask] ** 2.0 + (intensity[mask] * 0.1) ** 2.0
+                    )
     logger.info(
         f"Ignored a total of {ignore_counter} catalog entries due to interlopers."
     )
@@ -406,6 +425,7 @@ def preprocess_spectrum(
     sim_cutoff: float = 0.1,
     line_wash_threshold: float = 3.5,
     silent: bool = False,
+    spectrum_with_noise: Optional[bool] = None,
 ) -> Type[DataChunk]:
     logger.add(f"{name}_analysis.log", rotation="1 days", colorize=True)
     output_path = Path(name)
@@ -421,8 +441,15 @@ def preprocess_spectrum(
     else:
         raise ValueError(f"File format not recognized: {spectrum_path.suffix}")
     data = load_func(spectrum_path).T
+    # determine if data has noise if spectrum_with_noise is not specified
+    # default to False unless data has exactly 3 columns
+    if spectrum_with_noise is None:
+        spectrum_with_noise = data.shape[-1] == 3
     # check that the shape of the loaded spectrum has rows as observations
-    assert data.shape[-1] == 2
+    if spectrum_with_noise:
+        assert data.shape[-1] == 3
+    else:
+        assert data.shape[-1] == 2
     logger.info(f"Number of elements: {data.size}")
     logger.info(f"Min/max frequency: {data[:,0].min():.4f}/{data[:,0].max():.4f}")
     if ".npz" in catalog_path:
@@ -434,7 +461,7 @@ def preprocess_spectrum(
     if not legacy:
         # process chunks of spectra, including GP noise estimation
         chunks, catalog_mask = extract_chunks(
-            data, catalog, delta_v, vlsr, rbf_params, noise_params
+            data, catalog, delta_v, vlsr, rbf_params, noise_params, spectrum_with_noise
         )
         # unroll the chunks, and reform them into a single DataChunk object
         frequency, intensity, noise, cat_indices = unroll_chunks(chunks)
@@ -451,6 +478,7 @@ def preprocess_spectrum(
             catalog,
             data[:, 0],
             data[:, 1],
+            data[:, 2] if spectrum_with_noise else None,
             vlsr,
             delta_v,
             block_interlopers,

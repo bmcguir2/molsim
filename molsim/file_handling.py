@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 import numpy as np
 import re
 from numba import njit
@@ -251,7 +253,7 @@ def _read_spectrum(filein):
 	'''
 	
 	npz_dict = np.load(filein,allow_pickle=True)
-	new_dict = {}
+	new_dict = defaultdict(lambda: None)
 	for x in npz_dict:
 		new_dict[x] = npz_dict[x]
 	#sort some back to strings from numpy arrays
@@ -275,6 +277,7 @@ def _read_spectrum(filein):
 						int_sim = new_dict['int_sim'],
 						freq_sim = new_dict['freq_sim'],
 						snr = new_dict['snr'],
+						noise = new_dict['noise'],
 						id = new_dict['id'],
 						notes = new_dict['notes'],
 						name = new_dict['name']
