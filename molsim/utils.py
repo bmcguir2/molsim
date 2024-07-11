@@ -262,7 +262,7 @@ def _find_ones(arr):
 
 	return lls,uls
 
-def find_peaks(freq_arr,int_arr,res,min_sep,is_sim=False,sigma=3,kms=True):
+def find_peaks(freq_arr,int_arr,res,min_sep,is_sim=False,sigma=3,kms=True,local_rms=False,local_span=500):
 	'''
 	'''
 
@@ -289,10 +289,23 @@ def find_peaks(freq_arr,int_arr,res,min_sep,is_sim=False,sigma=3,kms=True):
 	if is_sim is True:
 		return np.asarray(indices)
 
-	rms = get_rms(int_arr)
-	indices = [x for x in indices if int_arr[x]>sigma*rms ]
-
-	return np.asarray(indices)
+	if local_rms is True:
+		tmp = []
+		for x in indices:
+			if x-local_span > 0:
+				l_idx = x-local_span
+			else:
+				l_idx = 0
+			u_idx = x+local_span
+			rms = get_rms(int_arr[l_idx:u_idx])
+			if int_arr[x]>sigma*rms:
+				tmp.append(x)
+		return np.asarray(tmp)
+	
+	else:	
+		rms = get_rms(int_arr)
+		indices = [x for x in indices if int_arr[x]>sigma*rms ]
+		return np.asarray(indices)
 
 def _get_res(freq_arr):
 	'''
