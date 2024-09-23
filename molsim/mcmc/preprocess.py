@@ -1,5 +1,5 @@
 import os
-from typing import Type, Any, List, Tuple, Optional
+from typing import Type, Any, List, Tuple, Optional, Union
 from dataclasses import dataclass
 from pathlib import Path
 from itertools import repeat
@@ -426,9 +426,13 @@ def preprocess_spectrum(
     line_wash_threshold: float = 3.5,
     silent: bool = False,
     spectrum_with_noise: Optional[bool] = None,
+    output_path: Optional[Union[str, Path]] = None,
 ) -> Type[DataChunk]:
     logger.add(f"{name}_analysis.log", rotation="1 days", colorize=True)
-    output_path = Path(name)
+    if output_path is None:
+        output_path = Path(name)
+    elif isinstance(output_path, str):
+        output_path = Path(output_path)
     if not output_path.exists():
         output_path.mkdir()
     spectrum_path = Path(spectrum_path)
