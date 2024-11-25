@@ -334,7 +334,7 @@ def _legacy_filter_spectrum(
     intensity = intensity[sorted_index]
     restfreqs = catalog.frequency
     int_sim = 10 ** catalog.logint
-    max_int_sim = int_sim.max()
+    max_int_sim = int_sim[(restfreqs > frequency.min()) & (restfreqs < frequency.max())].max()
     logger.info("Thresholding catalog entries based on overlap and intensity.")
     logger.info(f"Intensity cutoff: {sim_cutoff * max_int_sim}")
     # get indices of catalogs that actually fall in the range of the data
@@ -384,11 +384,11 @@ def _legacy_filter_spectrum(
                 relevant_intensity[mask] = intensity[mask]
                 if noise is None:
                     relevant_yerrs[mask] = np.sqrt(
-                        noise_std ** 2.0 + (intensity[mask] * 0.1) ** 2.0
+                        noise_std ** 2.0 + (intensity[mask] * 0.2) ** 2.0
                     )
                 else:
                     relevant_yerrs[mask] = np.sqrt(
-                        noise[mask] ** 2.0 + (intensity[mask] * 0.1) ** 2.0
+                        noise[mask] ** 2.0 + (intensity[mask] * 0.2) ** 2.0
                     )
     logger.info(
         f"Ignored a total of {ignore_counter} catalog entries due to interlopers."
