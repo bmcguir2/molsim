@@ -367,11 +367,11 @@ def _legacy_filter_spectrum(
                     continue
                 skip_interloper = (
                     block_interlopers
-                    and intensity[mask].max() > interloper_threshold * noise_std
+                    and abs(intensity[mask]).max() > interloper_threshold * noise_std
                 )
             else:
                 skip_interloper = block_interlopers and np.any(
-                    intensity[mask] > interloper_threshold * noise[mask]
+                    abs(intensity[mask]) > interloper_threshold * noise[mask]
                 )
             if skip_interloper:
                 if not silent:
