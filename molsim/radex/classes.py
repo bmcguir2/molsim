@@ -101,7 +101,7 @@ class Levels:
         fields['statistical_weight'] = list()
         fields['quantum_numbers'] = list()
         for _ in range(fields['num_levels']):
-            cords = file_in.readline().split(maxsplit=4)
+            cords = file_in.readline().rstrip().split(maxsplit=3)
             fields['level_numbers'].append(int(cords[0]))
             fields['level_energies'].append(float(cords[1]))
             fields['statistical_weight'].append(float(cords[2]))
