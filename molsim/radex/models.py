@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Any, Dict, List, Union, Tuple
+from typing import Any, Dict, List, Union, Tuple, Optional
 import numpy as np
 import numpy.typing as npt
 from scipy.optimize import minimize
@@ -20,7 +20,7 @@ class MultiComponentMaserModel(AbstractModel):
     source_sizes: List[float]
     collision_file: str
     observation: Observation
-    aperture: float
+    aperture: Optional[float] = None
     escape_probability: str = 'uniform'
     units: str = 'Jy/beam'
     source_kwargs: Dict[str, Any] = field(default_factory=dict)
