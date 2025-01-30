@@ -22,6 +22,7 @@ class MultiComponentMaserModel(AbstractModel):
     observation: Observation
     aperture: float
     escape_probability: str = 'uniform'
+    units: str = 'Jy/beam'
     source_kwargs: Dict[str, Any] = field(default_factory=dict)
 
     _sources: List[NonLTESource] = field(init=False, repr=False, default_factory=list)
@@ -151,7 +152,7 @@ class MultiComponentMaserModel(AbstractModel):
                     source=[source],
                     continuum=Continuum(type='range', params=continuum_params),
                     size=source_size,
-                    units='Jy/beam',
+                    units=self.units,
                     use_obs=True,
                     aperture=self.aperture
                 )
@@ -367,7 +368,7 @@ class ChainedMultiComponentMaserModel(MultiComponentMaserModel):
                 source=self._sources,
                 continuum=Continuum(type='range', params=continuum_params),
                 size=self.source_size,
-                units='Jy/beam',
+                units=self.units,
                 use_obs=True,
                 aperture=self.aperture
             )
