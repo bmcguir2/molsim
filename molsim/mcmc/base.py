@@ -372,7 +372,7 @@ class EmceeHelper(object):
             initial = np.array(positions.mean(axis=0))
         else:
             # set up walker positions, and move them by a small percentage
-            if not scale:
+            if scale is None:
                 # use the more proper method of generating initial positions
                 positions = np.array([model.sample_prior() for _ in range(walkers)])
                 initial = np.array(positions.mean(axis=0))
