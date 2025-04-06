@@ -237,7 +237,11 @@ class MultiComponentMaserModel(AbstractModel):
         obs = self.observation.spectrum
         simulation = self.simulate_spectrum(parameters)
         # match the simulation with the spectrum
-        lnlike = - np.log(np.sqrt(2 * np.pi)) * simulation.size - np.sum( np.log(np.fabs(obs.noise)) ) - 0.5 * np.sum( ((obs.Iv - simulation) / obs.noise)**2.0 )
+        if self.units in ["K", "mK"]:
+            observed = obs.Tb
+        if self.units in ["Jy", "Jy/beam"]:
+            observed = obs.Iv
+        lnlike = - np.log(np.sqrt(2 * np.pi)) * simulation.size - np.sum( np.log(np.fabs(obs.noise)) ) - 0.5 * np.sum( ((observed - simulation) / obs.noise)**2.0 )
         return lnlike
 
     def nll(self, parameters: npt.NDArray[np.float_]) -> float:
