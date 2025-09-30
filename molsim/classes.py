@@ -14,7 +14,7 @@ import matplotlib
 from datetime import datetime
 from tabulate import tabulate
 tabulate.PRESERVE_WHITESPACE = True
-from IPython.core.display import display, HTML, Markdown
+from IPython.display import display, HTML, Markdown
 
 class Workspace(object):
 
@@ -1620,7 +1620,7 @@ class Simulation(object):
 								tablefmt='html')
 					))				
 
-		return
+		return print_freqs, print_skyfreqs, print_ints, print_qns, print_eups, print_gus, print_gls, print_aijs, print_sijmus
 	
 	def update(self):
 		self._set_arrays()
