@@ -96,7 +96,7 @@ def _read_spcat(filein):
 			qn9.append(x[71:73].strip())
 			qn10.append(x[73:75].strip())
 			qn11.append(x[75:77].strip())
-			qn12.append(x[77:].strip())
+			qn12.append(x[77:79].strip())
 		
 	#now go through and fix everything into the appropriate formats and make numpy arrays as needed
 	
